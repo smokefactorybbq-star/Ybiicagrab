@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import QRCode from "qrcode";
 import QuestionLink from "../../components/QuestionLink";
 
 type AccountProfile = {
@@ -102,7 +101,6 @@ export default function AccountPage() {
   const [pickupPoint, setPickupPoint] = useState(pickupPoints[0]);
   const [credentials, setCredentials] = useState<Credentials | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
-  const [qr, setQr] = useState("");
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState(paymentOptions[0].id);
   const [submittingPayment, setSubmittingPayment] = useState(false);
@@ -152,23 +150,19 @@ export default function AccountPage() {
     return () => window.clearInterval(timer);
   }, [credentials, subscription?.status, loadSubscription]);
 
-  useEffect(() => {
-    if (!subscription?.qrEnabled || !subscription.code || !credentials) {
-      setQr("");
-      return;
-    }
-
-    QRCode.toDataURL(`mealpoint:subscription:${subscription.code}:${credentials.accessToken}`, {
-      width: 260,
-      margin: 1,
-      errorCorrectionLevel: "H"
-    }).then(setQr).catch(() => setQr(""));
-  }, [subscription?.qrEnabled, subscription?.code, credentials]);
-
   const progress = useMemo(() => {
     if (!subscription?.selected_days) return 0;
     return Math.round((subscription.remaining_portions / subscription.selected_days) * 100);
   }, [subscription]);
+
+  const qrUrl = useMemo(() => {
+    if (!subscription?.qrEnabled || !subscription.code || !credentials) return "";
+    const params = new URLSearchParams({
+      id: credentials.id,
+      accessToken: credentials.accessToken
+    });
+    return `/api/subscriptions/qr?${params.toString()}`;
+  }, [subscription?.qrEnabled, subscription?.code, credentials]);
 
   function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -360,7 +354,7 @@ export default function AccountPage() {
                   <small>{subscription.pickup_point_name || "Пункт выдачи не выбран"}</small>
                   <strong className="visible-subscription-code">{subscription.code}</strong>
                 </div>
-                <div className="qr-box">{qr ? <img src={qr} alt="QR-код подписки" /> : <span>Создаём QR…</span>}</div>
+                <div className="qr-box">{qrUrl ? <img src={qrUrl} alt="QR-код подписки" /> : <span>QR временно недоступен. Используйте код подписки.</span>}</div>
               </article>
             </section>
           )}
