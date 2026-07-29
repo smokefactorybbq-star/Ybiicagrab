@@ -1,7 +1,7 @@
 import * as QRCode from "qrcode";
 import { query } from "../../../../lib/db";
 import { buildSubscriptionQrPayload } from "../../../../lib/qr";
-import { hashToken } from "../../../../lib/subscriptions";
+import { getBangkokTodayIso, hashToken } from "../../../../lib/subscriptions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +12,7 @@ type QrSubscriptionRow = {
   status: string;
   account_access_hash: string | null;
   qr_secret_hash: string;
+  qr_paused_today: boolean;
 };
 
 function textResponse(message: string, status: number) {
@@ -33,11 +34,19 @@ export async function GET(request: Request) {
     if (!id || !accessToken) return textResponse("Не указаны данные подписки", 400);
 
     const result = await query<QrSubscriptionRow>(
-      `SELECT id, code, status, account_access_hash, qr_secret_hash
-       FROM subscriptions
-       WHERE id = $1
+      `SELECT
+         s.id, s.code, s.status, s.account_access_hash, s.qr_secret_hash,
+         EXISTS (
+           SELECT 1
+           FROM subscription_days sd
+           WHERE sd.subscription_id = s.id
+             AND sd.service_date = $2::date
+             AND sd.status IN ('PAUSED', 'PAUSE_REQUESTED')
+         ) AS qr_paused_today
+       FROM subscriptions s
+       WHERE s.id = $1
        LIMIT 1`,
-      [id]
+      [id, getBangkokTodayIso()]
     );
 
     const subscription = result.rows[0];
@@ -49,6 +58,9 @@ export async function GET(request: Request) {
 
     if (subscription.status !== "ACTIVE") {
       return textResponse("Подписка ещё не активирована", 403);
+    }
+    if (subscription.qr_paused_today) {
+      return textResponse("Сегодня подписка поставлена на паузу", 403);
     }
 
     const payload = buildSubscriptionQrPayload(subscription.id, subscription.code);

@@ -17,7 +17,7 @@ export function normalizeDates(input: unknown) {
   )];
 }
 
-function bangkokTodayIso() {
+export function getBangkokTodayIso() {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: BANGKOK_TIME_ZONE,
     year: "numeric",
@@ -38,7 +38,7 @@ export function addDaysToIso(isoDate: string, amount: number) {
 }
 
 export function getTomorrowBangkokIso() {
-  return addDaysToIso(bangkokTodayIso(), 1);
+  return addDaysToIso(getBangkokTodayIso(), 1);
 }
 
 export function validateConsecutiveDates(dates: string[]) {
@@ -46,8 +46,8 @@ export function validateConsecutiveDates(dates: string[]) {
   if (dates.length > 30) return { valid: false, error: "Можно выбрать не более 30 дней" };
 
   const tomorrow = getTomorrowBangkokIso();
-  if (dates[0] !== tomorrow) {
-    return { valid: false, error: "Подписка должна начинаться завтра" };
+  if (dates[0] < tomorrow) {
+    return { valid: false, error: "Подписка должна начинаться не раньше завтрашнего дня" };
   }
 
   for (let index = 1; index < dates.length; index += 1) {

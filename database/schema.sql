@@ -221,3 +221,7 @@ CREATE INDEX IF NOT EXISTS subscription_days_service_date_idx ON subscription_da
 CREATE INDEX IF NOT EXISTS subscriptions_created_at_idx ON subscriptions(created_at DESC);
 CREATE INDEX IF NOT EXISTS orders_restaurant_status_idx ON orders(restaurant_id, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS manager_events_pending_idx ON manager_events(created_at) WHERE acknowledged_at IS NULL;
+
+-- Weekly kitchen dashboard indexes.
+CREATE INDEX IF NOT EXISTS subscriptions_status_idx ON subscriptions(status);
+CREATE INDEX IF NOT EXISTS subscription_days_subscription_date_idx ON subscription_days(subscription_id, service_date);

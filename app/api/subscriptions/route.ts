@@ -6,6 +6,7 @@ import {
   createAccessToken,
   createPendingCode,
   getPauseLimit,
+  getBangkokTodayIso,
   hashToken,
   normalizeDates,
   normalizePhone,
@@ -218,6 +219,13 @@ export async function GET(request: Request) {
       ...safeSubscription
     } = subscription;
 
+    const days = daysResult.rows.map((day) => ({
+      ...day,
+      service_date: toIsoDate(day.service_date)
+    }));
+    const todayStatus = days.find((day) => day.service_date === getBangkokTodayIso())?.status;
+    const qrPausedToday = ["PAUSED", "PAUSE_REQUESTED"].includes(todayStatus || "");
+
     return NextResponse.json({
       ok: true,
       subscription: {
@@ -225,11 +233,9 @@ export async function GET(request: Request) {
         starts_on: toIsoDate(subscription.starts_on),
         ends_on: toIsoDate(subscription.ends_on),
         code: subscription.status === "ACTIVE" ? subscription.code : null,
-        qrEnabled: subscription.status === "ACTIVE",
-        days: daysResult.rows.map((day) => ({
-          ...day,
-          service_date: toIsoDate(day.service_date)
-        }))
+        qrEnabled: subscription.status === "ACTIVE" && !qrPausedToday,
+        qrPausedToday,
+        days
       }
     });
   } catch (error) {

@@ -55,3 +55,17 @@ export const mealTemplates: MealTemplate[] = [
     tag: "Вкус Пхукета"
   }
 ];
+
+
+const MENU_ANCHOR_UTC = Date.UTC(2026, 0, 1);
+
+export function getMealTemplateForDate(isoDate: string) {
+  const match = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return mealTemplates[0];
+
+  const [, year, month, day] = match;
+  const value = Date.UTC(Number(year), Number(month) - 1, Number(day));
+  const dayIndex = Math.floor((value - MENU_ANCHOR_UTC) / 86_400_000);
+  const normalizedIndex = ((dayIndex % mealTemplates.length) + mealTemplates.length) % mealTemplates.length;
+  return mealTemplates[normalizedIndex];
+}

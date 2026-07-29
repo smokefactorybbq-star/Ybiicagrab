@@ -1,7 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+
+type ManagerDay = {
+  service_date: string;
+  status: string;
+};
 
 type ManagerSubscription = {
   id: string;
@@ -20,7 +25,7 @@ type ManagerSubscription = {
   paid_at: string | null;
   activated_at: string | null;
   created_at: string;
-  dates: string[];
+  dates: ManagerDay[];
 };
 
 const statusLabels: Record<string, string> = {
@@ -29,12 +34,20 @@ const statusLabels: Record<string, string> = {
   PENDING_PAYMENT: "Ожидает оплаты",
   PAUSED: "Приостановлена",
   COMPLETED: "Завершена",
-  CANCELLED: "Отменена"
+  CANCELLED: "Отменена",
+  AVAILABLE: "Доступен",
+  PLANNED: "Запланирован",
+  REDEEMED: "Получен",
+  PAUSE_REQUESTED: "Пауза",
+  MISSED: "Пропущен"
 };
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" })
-    .format(new Date(`${value}T12:00:00`));
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return value;
+  const [, year, month, day] = match;
+  return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })
+    .format(new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), 12)));
 }
 
 export default function ManagerPage() {
@@ -67,6 +80,13 @@ export default function ManagerPage() {
     }
   }
 
+  useEffect(() => {
+    if (!authorized) return;
+    const timer = window.setInterval(() => void loadSubscriptions(), 15_000);
+    return () => window.clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authorized, password]);
+
   async function activateSubscription(id: string) {
     setActivating(id);
     setError("");
@@ -92,7 +112,7 @@ export default function ManagerPage() {
   if (!authorized) {
     return (
       <main className="page-shell manager-page">
-        <form className="manager-login" onSubmit={loadSubscriptions}>
+        <form className="manager-login" onSubmit={(event) => void loadSubscriptions(event)}>
           <span className="eyebrow">MealPoint Manager</span>
           <h1>Вход менеджера</h1>
           <p>Пароль задаётся переменной <b>MANAGER_PASSWORD</b> в Railway.</p>
@@ -110,11 +130,12 @@ export default function ManagerPage() {
         <div>
           <span className="eyebrow">MealPoint Manager</span>
           <h1>Подписки</h1>
-          <p>Оплаченные подписки, ожидающие активации, показываются первыми.</p>
+          <p>Паузы отмечаются красным автоматически. Таблица обновляется каждые 15 секунд.</p>
         </div>
         <div className="manager-heading-actions">
+          <Link className="manager-scanner-link" href="/kitchen">Открыть кухню</Link>
           <Link className="manager-scanner-link" href="/scanner">Открыть сканер</Link>
-          <button type="button" onClick={() => loadSubscriptions()} disabled={loading}>{loading ? "Обновляем…" : "Обновить"}</button>
+          <button type="button" onClick={() => void loadSubscriptions()} disabled={loading}>{loading ? "Обновляем…" : "Обновить"}</button>
         </div>
       </section>
 
@@ -137,12 +158,26 @@ export default function ManagerPage() {
               <tr key={item.id} className={item.status === "AWAITING_ACTIVATION" ? "needs-activation" : ""}>
                 <td><strong>{item.full_name}</strong><small>{item.phone || "—"}</small>{item.status === "ACTIVE" && <small>Код: {item.code}</small>}</td>
                 <td><strong>{item.pickup_point_name || "—"}</strong><small>{item.payment_method || "—"}</small></td>
-                <td><details><summary>{item.selected_days} дней подряд</summary><div className="manager-dates">{item.dates.map((date) => <span key={date}>{formatDate(date)}</span>)}</div></details></td>
+                <td>
+                  <details>
+                    <summary>{item.selected_days} оплаченных дней</summary>
+                    <div className="manager-dates">
+                      {item.dates.map((day) => {
+                        const paused = ["PAUSED", "PAUSE_REQUESTED"].includes(day.status);
+                        return (
+                          <span key={`${item.id}:${day.service_date}`} className={paused ? "manager-date-paused" : ""} title={statusLabels[day.status] || day.status}>
+                            {formatDate(day.service_date)}{paused ? " · ПАУЗА" : ""}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </details>
+                </td>
                 <td><strong>{item.total_thb.toLocaleString("ru-RU")} ฿</strong><small>{item.rate_thb} ฿/день</small></td>
-                <td><span className={`status-pill status-${item.status.toLowerCase()}`}>{statusLabels[item.status] || item.status}</span><small>Пауз: {item.pauses_used}/{item.pause_limit}</small></td>
+                <td><span className={`status-pill status-${item.status.toLowerCase()}`}>{statusLabels[item.status] || item.status}</span><small>Пауз: {item.pauses_used}/{item.pause_limit}</small><small>Осталось: {item.remaining_portions}</small></td>
                 <td>
                   {item.status === "AWAITING_ACTIVATION" ? (
-                    <button className="activate-button" type="button" disabled={activating === item.id} onClick={() => activateSubscription(item.id)}>
+                    <button className="activate-button" type="button" disabled={activating === item.id} onClick={() => void activateSubscription(item.id)}>
                       {activating === item.id ? "Активируем…" : "Активировать"}
                     </button>
                   ) : <span className="manager-done">Готово</span>}

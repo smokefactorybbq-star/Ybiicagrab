@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "../../../../lib/db";
-import { hashToken } from "../../../../lib/subscriptions";
+import { getBangkokTodayIso, hashToken } from "../../../../lib/subscriptions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -115,13 +115,18 @@ export async function POST(request: Request) {
           ...safeSubscription
         } = subscription;
 
+        const days = daysBySubscription.get(subscription.id) || [];
+        const todayStatus = days.find((day) => day.service_date === getBangkokTodayIso())?.status;
+        const qrPausedToday = ["PAUSED", "PAUSE_REQUESTED"].includes(todayStatus || "");
+
         return {
           ...safeSubscription,
           starts_on: toIsoDate(subscription.starts_on),
           ends_on: toIsoDate(subscription.ends_on),
           code: subscription.status === "ACTIVE" ? subscription.code : null,
-          qrEnabled: subscription.status === "ACTIVE",
-          days: daysBySubscription.get(subscription.id) || []
+          qrEnabled: subscription.status === "ACTIVE" && !qrPausedToday,
+          qrPausedToday,
+          days
         };
       })
     });

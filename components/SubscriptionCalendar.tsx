@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { mealTemplates } from "../data/meals";
+import { getMealTemplateForDate, mealTemplates } from "../data/meals";
 import QuestionLink from "./QuestionLink";
 
 type CalendarDay = {
@@ -71,7 +71,7 @@ function makeDays(): CalendarDay[] {
       day,
       weekday: weekdayNames[date.getUTCDay()],
       monthLabel: monthNames[month - 1],
-      meal: mealTemplates[index % mealTemplates.length]
+      meal: getMealTemplateForDate(id)
     };
   });
 }

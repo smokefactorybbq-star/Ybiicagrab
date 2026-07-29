@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { withTransaction } from "../../../../lib/db";
-import { hashToken } from "../../../../lib/subscriptions";
+import {
+  addDaysToIso,
+  getBangkokTodayIso,
+  hashToken
+} from "../../../../lib/subscriptions";
 import { notifyManagerTelegram } from "../../../../lib/telegram";
 
 export const runtime = "nodejs";
@@ -19,8 +23,12 @@ export async function POST(request: Request) {
     const accessToken = typeof body.accessToken === "string" ? body.accessToken.trim() : "";
     const serviceDate = typeof body.serviceDate === "string" ? body.serviceDate.trim() : "";
 
-    if (!id || !accessToken || !serviceDate) {
+    if (!id || !accessToken || !/^\d{4}-\d{2}-\d{2}$/.test(serviceDate)) {
       return NextResponse.json({ ok: false, error: "Не хватает данных для паузы" }, { status: 400 });
+    }
+
+    if (serviceDate < getBangkokTodayIso()) {
+      return NextResponse.json({ ok: false, error: "Нельзя поставить на паузу прошедший день" }, { status: 400 });
     }
 
     const result = await withTransaction(async (client) => {
@@ -32,6 +40,7 @@ export async function POST(request: Request) {
         pauses_used: number;
         account_access_hash: string | null;
         qr_secret_hash: string;
+        pickup_point_name: string | null;
         full_name: string;
         phone: string | null;
       }>(
@@ -62,35 +71,62 @@ export async function POST(request: Request) {
       if (!day) throw new Error("DAY_NOT_FOUND");
       if (!["PLANNED", "AVAILABLE"].includes(day.status)) throw new Error("DAY_UNAVAILABLE");
 
+      const lastDateResult = await client.query<{ last_date: string }>(
+        `SELECT MAX(service_date)::text AS last_date
+         FROM subscription_days
+         WHERE subscription_id = $1`,
+        [id]
+      );
+      const lastDate = lastDateResult.rows[0]?.last_date;
+      if (!lastDate) throw new Error("DAY_NOT_FOUND");
+      const replacementDate = addDaysToIso(lastDate, 1);
+
       await client.query(
         `UPDATE subscription_days
-         SET status = 'PAUSE_REQUESTED', pause_requested_at = now()
+         SET status = 'PAUSED', pause_requested_at = now()
          WHERE id = $1`,
         [day.id]
       );
       await client.query(
-        `UPDATE subscriptions SET pauses_used = pauses_used + 1, updated_at = now() WHERE id = $1`,
-        [id]
+        `INSERT INTO subscription_days (subscription_id, service_date, status)
+         VALUES ($1, $2::date, 'AVAILABLE')`,
+        [id, replacementDate]
+      );
+      await client.query(
+        `UPDATE subscriptions
+         SET pauses_used = pauses_used + 1,
+             ends_on = $2::date,
+             updated_at = now()
+         WHERE id = $1`,
+        [id, replacementDate]
       );
       await client.query(
         `INSERT INTO manager_events (event_type, entity_id, payload)
-         VALUES ('SUBSCRIPTION_PAUSE_REQUESTED', $1, $2::jsonb)`,
-        [id, JSON.stringify({ serviceDate, fullName: subscription.full_name, phone: subscription.phone })]
+         VALUES ('SUBSCRIPTION_PAUSED', $1, $2::jsonb)`,
+        [id, JSON.stringify({
+          serviceDate,
+          replacementDate,
+          fullName: subscription.full_name,
+          phone: subscription.phone,
+          pickupPointName: subscription.pickup_point_name
+        })]
       );
 
-      return subscription;
+      return { ...subscription, replacementDate };
     });
 
     void notifyManagerTelegram({
       text: [
-        "<b>⏸ Запрос паузы MealPoint</b>",
-        `Клиент: ${result.full_name}`,
+        "<b>⏸ Клиент поставил паузу</b>",
+        `Имя: ${result.full_name}`,
         `Телефон: ${result.phone || "—"}`,
-        `Дата паузы: ${serviceDate}`
+        `Пункт получения: ${result.pickup_point_name || "—"}`,
+        `Дата паузы: ${serviceDate}`,
+        `Новый день подписки: ${result.replacementDate}`
       ].join("\n")
     });
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, replacementDate: result.replacementDate });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
     const messages: Record<string, string> = {
@@ -99,8 +135,8 @@ export async function POST(request: Request) {
       NO_PAUSES: "Для этой подписки паузы не предусмотрены",
       LIMIT_REACHED: "Лимит пауз уже использован",
       DAY_NOT_FOUND: "Эта дата не входит в подписку",
-      DAY_UNAVAILABLE: "Для этого дня уже нельзя запросить паузу"
+      DAY_UNAVAILABLE: "Для этого дня уже нельзя включить паузу"
     };
-    return NextResponse.json({ ok: false, error: messages[code] || "Не удалось запросить паузу" }, { status: 400 });
+    return NextResponse.json({ ok: false, error: messages[code] || "Не удалось поставить подписку на паузу" }, { status: 400 });
   }
 }

@@ -42,6 +42,7 @@ type Subscription = {
   full_name: string;
   phone: string | null;
   qrEnabled: boolean;
+  qrPausedToday?: boolean;
   days: SubscriptionDay[];
 };
 
@@ -328,10 +329,10 @@ export default function AccountPage() {
         })
       });
       const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.error || "Не удалось запросить паузу");
+      if (!response.ok || !data.ok) throw new Error(data.error || "Не удалось поставить подписку на паузу");
       await loadSubscriptions();
     } catch (pauseError) {
-      setError(pauseError instanceof Error ? pauseError.message : "Ошибка запроса паузы");
+      setError(pauseError instanceof Error ? pauseError.message : "Ошибка включения паузы");
     } finally {
       setPauseLoading("");
     }
@@ -515,7 +516,7 @@ export default function AccountPage() {
                         className="open-qr-button"
                         disabled={!isActive || !qrUrl}
                         onClick={() => setQrSubscriptionId(subscription.id)}
-                        title={isActive ? "Открыть QR этой подписки" : "QR появится после активации менеджером"}
+                        title={subscription.qrPausedToday ? "Сегодня подписка поставлена на паузу" : isActive ? "Открыть QR этой подписки" : "QR появится после активации менеджером"}
                       >
                         Открыть QR
                       </button>
@@ -555,9 +556,9 @@ export default function AccountPage() {
                             const canPause = subscription.pause_limit > subscription.pauses_used
                               && ["PLANNED", "AVAILABLE"].includes(day.status);
                             return (
-                              <button key={day.service_date} type="button" disabled={!canPause || pauseLoading === loadingKey} onClick={() => requestPause(subscription.id, day.service_date)}>
+                              <button key={day.service_date} className={["PAUSED", "PAUSE_REQUESTED"].includes(day.status) ? "paused-day-button" : ""} type="button" disabled={!canPause || pauseLoading === loadingKey} onClick={() => requestPause(subscription.id, day.service_date)}>
                                 {formatDate(day.service_date)}
-                                <span>{pauseLoading === loadingKey ? "Отправляем…" : statusLabels[day.status] || day.status}</span>
+                                <span>{pauseLoading === loadingKey ? "Ставим паузу…" : statusLabels[day.status] || day.status}</span>
                               </button>
                             );
                           })}

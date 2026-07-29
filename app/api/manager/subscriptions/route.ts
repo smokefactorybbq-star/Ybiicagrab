@@ -22,7 +22,7 @@ type ManagerSubscriptionRow = {
   paid_at: string | null;
   activated_at: string | null;
   created_at: string;
-  dates: string[];
+  dates: Array<{ service_date: string; status: string }>;
 };
 
 function authorize(request: Request) {
@@ -58,9 +58,13 @@ export async function GET(request: Request) {
          s.activated_at,
          s.created_at,
          COALESCE(
-           array_agg(sd.service_date::text ORDER BY sd.service_date)
-             FILTER (WHERE sd.id IS NOT NULL),
-           ARRAY[]::text[]
+           json_agg(
+             json_build_object(
+               'service_date', sd.service_date::text,
+               'status', sd.status::text
+             ) ORDER BY sd.service_date
+           ) FILTER (WHERE sd.id IS NOT NULL),
+           '[]'::json
          ) AS dates
        FROM subscriptions s
        JOIN users u ON u.id = s.user_id
@@ -70,7 +74,9 @@ export async function GET(request: Request) {
        LIMIT 200`
     );
 
-    return NextResponse.json({ ok: true, subscriptions: result.rows });
+    return NextResponse.json({ ok: true, subscriptions: result.rows }, {
+      headers: { "Cache-Control": "no-store, max-age=0" }
+    });
   } catch (error) {
     console.error("Manager subscriptions failed", error);
     return NextResponse.json({ ok: false, error: "Не удалось загрузить таблицу" }, { status: 500 });
