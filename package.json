@@ -1,6 +1,6 @@
 {
   "name": "mealpoint-railway-mvp",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "packageManager": "npm@10.9.2",
   "engines": {
@@ -23,6 +23,7 @@
     "react-dom": "19.2.0",
     "typescript": "5.8.3",
     "pg": "8.13.1",
-    "@types/pg": "8.11.10"
+    "@types/pg": "8.11.10",
+    "html5-qrcode": "2.3.8"
   }
 }

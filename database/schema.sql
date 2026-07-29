@@ -136,12 +136,19 @@ CREATE TABLE IF NOT EXISTS subscription_scans (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   subscription_id uuid NOT NULL REFERENCES subscriptions(id),
   subscription_day_id uuid NOT NULL REFERENCES subscription_days(id),
-  pickup_point_id uuid NOT NULL REFERENCES pickup_points(id),
+  pickup_point_id uuid REFERENCES pickup_points(id),
   device_id text NOT NULL,
   token_nonce text UNIQUE NOT NULL,
   result text NOT NULL,
+  pickup_point_name text,
+  portions_after integer,
   scanned_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE subscription_scans ALTER COLUMN pickup_point_id DROP NOT NULL;
+ALTER TABLE subscription_scans ADD COLUMN IF NOT EXISTS pickup_point_name text;
+ALTER TABLE subscription_scans ADD COLUMN IF NOT EXISTS portions_after integer;
+CREATE INDEX IF NOT EXISTS subscription_scans_subscription_idx ON subscription_scans(subscription_id, scanned_at DESC);
 
 CREATE TABLE IF NOT EXISTS menu_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

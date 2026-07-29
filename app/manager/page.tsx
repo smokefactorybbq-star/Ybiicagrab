@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useState } from "react";
 
 type ManagerSubscription = {
@@ -111,7 +112,10 @@ export default function ManagerPage() {
           <h1>Подписки</h1>
           <p>Оплаченные подписки, ожидающие активации, показываются первыми.</p>
         </div>
-        <button type="button" onClick={() => loadSubscriptions()} disabled={loading}>{loading ? "Обновляем…" : "Обновить"}</button>
+        <div className="manager-heading-actions">
+          <Link className="manager-scanner-link" href="/scanner">Открыть сканер</Link>
+          <button type="button" onClick={() => loadSubscriptions()} disabled={loading}>{loading ? "Обновляем…" : "Обновить"}</button>
+        </div>
       </section>
 
       {error && <p className="form-error">{error}</p>}

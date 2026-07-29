@@ -1,11 +1,13 @@
 import * as QRCode from "qrcode";
 import { query } from "../../../../lib/db";
+import { buildSubscriptionQrPayload } from "../../../../lib/qr";
 import { hashToken } from "../../../../lib/subscriptions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type QrSubscriptionRow = {
+  id: string;
   code: string;
   status: string;
   account_access_hash: string | null;
@@ -31,7 +33,7 @@ export async function GET(request: Request) {
     if (!id || !accessToken) return textResponse("Не указаны данные подписки", 400);
 
     const result = await query<QrSubscriptionRow>(
-      `SELECT code, status, account_access_hash, qr_secret_hash
+      `SELECT id, code, status, account_access_hash, qr_secret_hash
        FROM subscriptions
        WHERE id = $1
        LIMIT 1`,
@@ -49,7 +51,7 @@ export async function GET(request: Request) {
       return textResponse("Подписка ещё не активирована", 403);
     }
 
-    const payload = `mealpoint:subscription:${subscription.code}:${accessToken}`;
+    const payload = buildSubscriptionQrPayload(subscription.id, subscription.code);
     const svg = await QRCode.toString(payload, {
       type: "svg",
       width: 260,
@@ -68,6 +70,9 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error("Generate subscription QR failed", error);
-    return textResponse("Не удалось создать QR", 500);
+    const message = error instanceof Error && error.message.includes("QR_SIGNING_SECRET")
+      ? "QR_SIGNING_SECRET не настроен"
+      : "Не удалось создать QR";
+    return textResponse(message, 500);
   }
 }

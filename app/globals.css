@@ -411,3 +411,57 @@ img { display: block; max-width: 100%; }
   .payment-modal h2 { font-size: 31px; }
   .pause-days { grid-template-columns: 1fr; }
 }
+
+/* QR scanner */
+.manager-heading-actions { display: flex; align-items: center; gap: 10px; }
+.manager-scanner-link { padding: 13px 16px; border-radius: 13px; color: white; background: var(--ink); font-weight: 900; }
+.scanner-page { min-height: calc(100vh - 82px); }
+.scanner-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+.scanner-heading h1 { margin: 0; font-size: clamp(42px, 7vw, 72px); letter-spacing: -3px; }
+.scanner-heading p { max-width: 720px; color: #687671; line-height: 1.55; }
+.scanner-heading > a { padding: 13px 16px; border-radius: 13px; color: white; background: var(--ink); font-weight: 900; white-space: nowrap; }
+.scanner-settings { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; padding: 18px; border-radius: 20px; background: white; box-shadow: var(--shadow); }
+.scanner-settings label { display: grid; gap: 7px; color: #61706b; font-size: 12px; font-weight: 900; }
+.scanner-settings input { width: 100%; padding: 13px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+.scanner-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(320px, .95fr); gap: 18px; }
+.scanner-camera-card, .scanner-result-card { min-height: 490px; padding: 22px; border-radius: 26px; background: white; box-shadow: var(--shadow); }
+.scanner-reader { min-height: 340px; overflow: hidden; border: 2px dashed #cbd4d0; border-radius: 20px; background: #f3f4f1; }
+.scanner-reader video { border-radius: 18px; }
+.scanner-status { min-height: 24px; margin: 14px 0; color: #66746f; text-align: center; }
+.scanner-actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.scanner-actions button, .scanner-file-button, .scanner-result button, .scanner-debug button { border: 0; padding: 14px 18px; border-radius: 13px; color: white; background: var(--ink); cursor: pointer; font-weight: 900; }
+.scanner-actions button.secondary { color: var(--ink); background: var(--cream); }
+.scanner-file-button { display: inline-flex; align-items: center; }
+.scanner-file-button input { display: none; }
+.scanner-result-card { display: grid; place-items: center; }
+.scanner-placeholder { display: grid; gap: 10px; color: #78847f; text-align: center; }
+.scanner-placeholder strong { color: var(--ink); font-size: 25px; }
+.scanner-result { width: 100%; padding: 28px; border: 2px solid; border-radius: 22px; text-align: center; }
+.scanner-result-success { border-color: #4cac7c; background: #eaf8f0; }
+.scanner-result-warning { border-color: #dfad3e; background: #fff7df; }
+.scanner-result-error { border-color: #d66f63; background: #fff0ed; }
+.scanner-result-icon { display: grid; place-items: center; width: 74px; height: 74px; margin: 0 auto 15px; border-radius: 50%; color: white; background: var(--ink); font-size: 42px; font-weight: 900; }
+.scanner-result-success .scanner-result-icon { background: #2f9a68; }
+.scanner-result-warning .scanner-result-icon { background: #c88b18; }
+.scanner-result-error .scanner-result-icon { background: #c55246; }
+.scanner-result h2 { margin: 0 0 12px; font-size: 32px; }
+.scanner-result > strong, .scanner-result > small { display: block; margin: 7px 0; }
+.scanner-result p { font-size: 18px; }
+.scanner-result button { margin-top: 15px; }
+.scanner-debug { margin-top: 18px; padding: 18px; border-radius: 18px; background: white; box-shadow: var(--shadow); }
+.scanner-debug summary { cursor: pointer; font-weight: 900; }
+.scanner-debug form { display: grid; gap: 10px; margin-top: 14px; }
+.scanner-debug textarea { min-height: 90px; padding: 13px; border: 1px solid var(--line); border-radius: 12px; resize: vertical; }
+@media (max-width: 850px) {
+  .scanner-heading { flex-direction: column; }
+  .scanner-settings, .scanner-grid { grid-template-columns: 1fr; }
+  .scanner-camera-card, .scanner-result-card { min-height: auto; }
+  .scanner-reader { min-height: 300px; }
+  .manager-heading-actions { width: 100%; flex-wrap: wrap; }
+}
+.scanner-settings { grid-template-columns: repeat(4, 1fr); }
+.scanner-test-toggle span { display: flex; align-items: center; gap: 8px; min-height: 18px; }
+.scanner-test-toggle span input { width: auto; }
+.scanner-result button.reset-test-button { margin-right: 8px; color: var(--ink); background: #ffd79d; }
+@media (max-width: 1050px) { .scanner-settings { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 650px) { .scanner-settings { grid-template-columns: 1fr; } }
