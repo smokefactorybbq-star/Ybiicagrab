@@ -55,7 +55,7 @@ export async function GET(request: Request) {
         `SELECT sd.service_date::text AS service_date, COUNT(*)::int AS total
          FROM subscription_days sd
          JOIN subscriptions s ON s.id = sd.subscription_id
-         WHERE s.status = 'ACTIVE'
+         WHERE s.status IN ('ACTIVE', 'COMPLETED')
            AND sd.service_date BETWEEN $1::date AND $2::date
            AND sd.status NOT IN ('PAUSED', 'PAUSE_REQUESTED')
          GROUP BY sd.service_date
@@ -69,7 +69,7 @@ export async function GET(request: Request) {
            COUNT(*)::int AS total
          FROM subscription_days sd
          JOIN subscriptions s ON s.id = sd.subscription_id
-         WHERE s.status = 'ACTIVE'
+         WHERE s.status IN ('ACTIVE', 'COMPLETED')
            AND sd.service_date BETWEEN $1::date AND $2::date
            AND sd.status NOT IN ('PAUSED', 'PAUSE_REQUESTED')
          GROUP BY pickup_point_name, sd.service_date

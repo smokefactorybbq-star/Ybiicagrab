@@ -151,6 +151,10 @@ export async function POST(request: Request) {
         throw new ScanError("INVALID_SIGNATURE", "QR-код повреждён или подделан", 403);
       }
 
+      // Остатки ПВ считаются по пункту, выбранному в подписке, а не по тексту,
+      // который оператор ввёл на устройстве сканирования.
+      const assignedPickupPointName = subscription.pickup_point_name?.trim() || pickupPointName;
+
       if (subscription.status === "COMPLETED" || subscription.remaining_portions < 1) {
         throw new ScanError("NO_PORTIONS", "В подписке не осталось обедов", 409, {
           customerName: subscription.full_name,
@@ -191,7 +195,7 @@ export async function POST(request: Request) {
           subscriptionId: subscription.id,
           dayId: day.id,
           deviceId,
-          pickupPointName,
+          pickupPointName: assignedPickupPointName,
           result: "ALREADY_REDEEMED",
           portionsAfter: subscription.remaining_portions
         });
@@ -245,7 +249,7 @@ export async function POST(request: Request) {
         subscriptionId: subscription.id,
         dayId: day.id,
         deviceId,
-        pickupPointName,
+        pickupPointName: assignedPickupPointName,
         result: "REDEEMED",
         portionsAfter: remainingAfter
       });
@@ -258,7 +262,7 @@ export async function POST(request: Request) {
           customerName: subscription.full_name,
           serviceDate: today,
           deviceId,
-          pickupPointName,
+          pickupPointName: assignedPickupPointName,
           remainingPortions: remainingAfter,
           testMode
         })]
@@ -271,7 +275,7 @@ export async function POST(request: Request) {
         serviceDate: today,
         remainingPortions: remainingAfter,
         selectedDays: subscription.selected_days,
-        pickupPointName,
+        pickupPointName: assignedPickupPointName,
         subscriptionId: subscription.id,
         testMode
       };

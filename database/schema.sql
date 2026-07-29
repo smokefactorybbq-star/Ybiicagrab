@@ -225,3 +225,18 @@ CREATE INDEX IF NOT EXISTS manager_events_pending_idx ON manager_events(created_
 -- Weekly kitchen dashboard indexes.
 CREATE INDEX IF NOT EXISTS subscriptions_status_idx ON subscriptions(status);
 CREATE INDEX IF NOT EXISTS subscription_days_subscription_date_idx ON subscription_days(subscription_id, service_date);
+
+-- Daily pickup-point inventory — v0.5.1.
+-- If no manual value exists, the manager dashboard uses today's active subscription plan.
+CREATE TABLE IF NOT EXISTS pickup_point_daily_inventory (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  service_date date NOT NULL,
+  pickup_point_name text NOT NULL,
+  delivered_count integer NOT NULL DEFAULT 0 CHECK (delivered_count >= 0),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(service_date, pickup_point_name)
+);
+
+CREATE INDEX IF NOT EXISTS pickup_point_daily_inventory_date_idx
+  ON pickup_point_daily_inventory(service_date, pickup_point_name);

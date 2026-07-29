@@ -1,6 +1,6 @@
 {
   "name": "mealpoint-railway-mvp",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "packageManager": "npm@10.9.2",
   "engines": {
