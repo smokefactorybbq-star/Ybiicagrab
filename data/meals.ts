@@ -55,4 +55,3 @@ export const mealTemplates: MealTemplate[] = [
     tag: "Вкус Пхукета"
   }
 ];
-

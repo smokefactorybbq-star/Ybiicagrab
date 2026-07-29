@@ -1,15 +1,36 @@
--- MealPoint target PostgreSQL schema.
--- The visual MVP does not execute these tables yet; they define the next backend stage.
+-- MealPoint PostgreSQL schema.
+-- Idempotent: it can safely run on every Railway service start.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TYPE user_role AS ENUM ('CUSTOMER', 'ADMIN', 'MANAGER', 'PARTNER_OWNER', 'PARTNER_STAFF');
-CREATE TYPE subscription_status AS ENUM ('PENDING_PAYMENT', 'ACTIVE', 'PAUSED', 'COMPLETED', 'CANCELLED');
-CREATE TYPE subscription_day_status AS ENUM ('PLANNED', 'PAUSE_REQUESTED', 'PAUSED', 'AVAILABLE', 'REDEEMED', 'MISSED');
-CREATE TYPE order_kind AS ENUM ('DELIVERY', 'PARTNER_DELIVERY');
-CREATE TYPE order_status AS ENUM ('NEW', 'ACCEPTED', 'COOKING', 'READY', 'COURIER_ASSIGNED', 'ON_THE_WAY', 'DELIVERED', 'CANCELLED');
+DO $$ BEGIN
+  CREATE TYPE user_role AS ENUM ('CUSTOMER', 'ADMIN', 'MANAGER', 'PARTNER_OWNER', 'PARTNER_STAFF');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TABLE users (
+DO $$ BEGIN
+  CREATE TYPE subscription_status AS ENUM ('PENDING_PAYMENT', 'AWAITING_ACTIVATION', 'ACTIVE', 'PAUSED', 'COMPLETED', 'CANCELLED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+ALTER TYPE subscription_status ADD VALUE IF NOT EXISTS 'AWAITING_ACTIVATION';
+
+DO $$ BEGIN
+  CREATE TYPE subscription_day_status AS ENUM ('PLANNED', 'PAUSE_REQUESTED', 'PAUSED', 'AVAILABLE', 'REDEEMED', 'MISSED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE order_kind AS ENUM ('DELIVERY', 'PARTNER_DELIVERY');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE order_status AS ENUM ('NEW', 'ACCEPTED', 'COOKING', 'READY', 'COURIER_ASSIGNED', 'ON_THE_WAY', 'DELIVERED', 'CANCELLED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   telegram_id bigint UNIQUE,
   telegram_username text,
@@ -21,7 +42,7 @@ CREATE TABLE users (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE restaurants (
+CREATE TABLE IF NOT EXISTS restaurants (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
   slug text UNIQUE NOT NULL,
@@ -37,14 +58,14 @@ CREATE TABLE restaurants (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE restaurant_users (
+CREATE TABLE IF NOT EXISTS restaurant_users (
   restaurant_id uuid NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   role user_role NOT NULL DEFAULT 'PARTNER_STAFF',
   PRIMARY KEY (restaurant_id, user_id)
 );
 
-CREATE TABLE meals (
+CREATE TABLE IF NOT EXISTS meals (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   service_date date NOT NULL,
   title text NOT NULL,
@@ -56,7 +77,7 @@ CREATE TABLE meals (
   UNIQUE(service_date)
 );
 
-CREATE TABLE pickup_points (
+CREATE TABLE IF NOT EXISTS pickup_points (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
   address text NOT NULL,
@@ -70,7 +91,7 @@ CREATE TABLE pickup_points (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE subscriptions (
+CREATE TABLE IF NOT EXISTS subscriptions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   code text UNIQUE NOT NULL,
   user_id uuid NOT NULL REFERENCES users(id),
@@ -84,11 +105,22 @@ CREATE TABLE subscriptions (
   starts_on date NOT NULL,
   ends_on date NOT NULL,
   qr_secret_hash text NOT NULL,
+  account_access_hash text,
+  payment_method text,
+  paid_at timestamptz,
+  activated_at timestamptz,
+  pickup_point_name text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE subscription_days (
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS pickup_point_name text;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS account_access_hash text;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS payment_method text;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS paid_at timestamptz;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS activated_at timestamptz;
+
+CREATE TABLE IF NOT EXISTS subscription_days (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   subscription_id uuid NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
   meal_id uuid REFERENCES meals(id),
@@ -100,7 +132,7 @@ CREATE TABLE subscription_days (
   UNIQUE(subscription_id, service_date)
 );
 
-CREATE TABLE subscription_scans (
+CREATE TABLE IF NOT EXISTS subscription_scans (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   subscription_id uuid NOT NULL REFERENCES subscriptions(id),
   subscription_day_id uuid NOT NULL REFERENCES subscription_days(id),
@@ -111,7 +143,7 @@ CREATE TABLE subscription_scans (
   scanned_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE menu_items (
+CREATE TABLE IF NOT EXISTS menu_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   restaurant_id uuid REFERENCES restaurants(id) ON DELETE CASCADE,
   name text NOT NULL,
@@ -124,7 +156,7 @@ CREATE TABLE menu_items (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE orders (
+CREATE TABLE IF NOT EXISTS orders (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   public_number text UNIQUE NOT NULL,
   user_id uuid NOT NULL REFERENCES users(id),
@@ -148,7 +180,7 @@ CREATE TABLE orders (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE order_items (
+CREATE TABLE IF NOT EXISTS order_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   order_id uuid NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
   menu_item_id uuid REFERENCES menu_items(id),
@@ -158,7 +190,7 @@ CREATE TABLE order_items (
   line_total_thb integer NOT NULL
 );
 
-CREATE TABLE reviews (
+CREATE TABLE IF NOT EXISTS reviews (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   order_id uuid UNIQUE NOT NULL REFERENCES orders(id),
   user_id uuid NOT NULL REFERENCES users(id),
@@ -168,7 +200,7 @@ CREATE TABLE reviews (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE manager_events (
+CREATE TABLE IF NOT EXISTS manager_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   event_type text NOT NULL,
   entity_id uuid NOT NULL,
@@ -177,7 +209,8 @@ CREATE TABLE manager_events (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX subscription_days_service_date_idx ON subscription_days(service_date, status);
-CREATE INDEX orders_restaurant_status_idx ON orders(restaurant_id, status, created_at DESC);
-CREATE INDEX manager_events_pending_idx ON manager_events(created_at) WHERE acknowledged_at IS NULL;
-
+CREATE INDEX IF NOT EXISTS users_phone_idx ON users(phone);
+CREATE INDEX IF NOT EXISTS subscription_days_service_date_idx ON subscription_days(service_date, status);
+CREATE INDEX IF NOT EXISTS subscriptions_created_at_idx ON subscriptions(created_at DESC);
+CREATE INDEX IF NOT EXISTS orders_restaurant_status_idx ON orders(restaurant_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS manager_events_pending_idx ON manager_events(created_at) WHERE acknowledged_at IS NULL;

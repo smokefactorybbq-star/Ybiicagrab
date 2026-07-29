@@ -1,4 +1,4 @@
-root {
+:root {
   --ink: #172f28;
   --ink-2: #26463d;
   --cream: #f6f0e4;
@@ -214,4 +214,200 @@ img { display: block; max-width: 100%; }
   .dish-card { grid-template-columns: 105px 1fr; }
   .dish-card img { width: 105px; height: 105px; }
   .site-footer { flex-direction: column; gap: 12px; }
+}
+
+/* PostgreSQL subscription flow */
+.subscription-checkout, .subscription-created {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr 1fr;
+  gap: 16px;
+  align-items: end;
+  margin: 24px auto 0;
+  padding: 24px;
+  max-width: 1180px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: white;
+  box-shadow: var(--shadow);
+}
+.subscription-checkout h3, .subscription-created h3 { margin: 0 0 6px; font-size: 26px; }
+.subscription-checkout p, .subscription-created p { margin: 0; color: #6d7a75; line-height: 1.45; }
+.subscription-checkout label { color: #61706b; font-size: 12px; font-weight: 800; }
+.subscription-checkout input, .subscription-checkout select {
+  width: 100%;
+  margin-top: 7px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--paper);
+  outline: none;
+}
+.checkout-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
+.checkout-actions button[type="submit"], .subscription-created a, .empty-account a, .manager-login button, .manager-heading button {
+  border: 0;
+  padding: 14px 19px;
+  border-radius: 13px;
+  color: white;
+  background: var(--ink);
+  cursor: pointer;
+  font-weight: 900;
+}
+.checkout-actions button:disabled, .manager-login button:disabled, .manager-heading button:disabled { opacity: .5; cursor: not-allowed; }
+.form-error { grid-column: 1 / -1; margin: 0; padding: 11px 13px; border-radius: 11px; color: #932d25 !important; background: #fff0ec; font-size: 13px; font-weight: 800; }
+.subscription-created { grid-template-columns: 1fr auto; align-items: center; background: #edf7f1; border-color: #b6d8c9; }
+.subscription-created small { display: block; margin-top: 8px; color: #60736b; }
+.empty-account { max-width: 720px; margin: 8vh auto; padding: 45px; border-radius: 28px; background: white; box-shadow: var(--shadow); text-align: center; }
+.empty-account h1 { margin: 0 0 15px; font-size: clamp(38px, 5vw, 62px); }
+.empty-account p { margin-bottom: 26px; color: #687671; line-height: 1.55; }
+.empty-history { padding: 36px 4px 10px; color: #71807a; }
+.pause-days button:disabled { cursor: default; opacity: .82; }
+
+/* Manager MVP */
+.manager-page { min-height: calc(100vh - 82px); }
+.manager-login { max-width: 520px; margin: 8vh auto; padding: 40px; border-radius: 28px; background: white; box-shadow: var(--shadow); }
+.manager-login h1 { margin: 0 0 10px; font-size: 48px; letter-spacing: -2px; }
+.manager-login p { color: #687671; line-height: 1.5; }
+.manager-login input { width: 100%; margin: 15px 0; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+.manager-login button { width: 100%; }
+.manager-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
+.manager-heading h1 { margin: 0; font-size: 58px; letter-spacing: -2px; }
+.manager-heading p { margin: 8px 0 0; color: #687671; }
+.manager-table-wrap { overflow-x: auto; border-radius: 22px; background: white; box-shadow: var(--shadow); }
+.manager-table { width: 100%; border-collapse: collapse; min-width: 1000px; }
+.manager-table th { padding: 15px 18px; text-align: left; color: #71807a; background: #f4f1ea; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+.manager-table td { padding: 17px 18px; border-top: 1px solid var(--line); vertical-align: top; font-size: 13px; }
+.manager-table td strong { display: block; }
+.manager-table td small { display: block; margin-top: 5px; color: #75817d; }
+.manager-table summary { cursor: pointer; font-weight: 800; }
+.manager-dates { display: flex; flex-wrap: wrap; gap: 6px; max-width: 330px; margin-top: 10px; }
+.manager-dates span { padding: 5px 8px; border-radius: 8px; background: var(--cream); font-size: 11px; }
+.status-pill { display: inline-block; padding: 7px 9px; border-radius: 999px; background: #fff0d8; color: #8d5d18; font-size: 10px; font-weight: 900; }
+.empty-table { padding: 50px !important; text-align: center; color: #71807a; }
+
+@media (max-width: 1050px) {
+  .subscription-checkout { grid-template-columns: 1fr 1fr; }
+  .subscription-checkout > div:first-child { grid-column: 1 / -1; }
+}
+
+@media (max-width: 720px) {
+  .subscription-checkout, .subscription-created { grid-template-columns: 1fr; padding: 20px; }
+  .subscription-checkout > div:first-child, .checkout-actions { grid-column: 1; }
+  .checkout-actions { justify-content: stretch; }
+  .checkout-actions button { flex: 1; }
+  .subscription-created a { text-align: center; }
+  .manager-login { margin: 20px auto; padding: 25px; }
+  .manager-login h1 { font-size: 40px; }
+  .manager-heading { align-items: flex-start; flex-direction: column; }
+  .manager-heading h1 { font-size: 46px; }
+}
+
+/* Consecutive subscription, payment and manual activation flow */
+.question-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 10px 15px;
+  border: 1px solid rgba(23, 47, 40, .18);
+  border-radius: 999px;
+  color: var(--ink);
+  background: rgba(255,255,255,.82);
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+.question-link:hover { border-color: var(--orange); color: var(--orange-dark); }
+.question-link-light { color: white; border-color: rgba(255,255,255,.3); background: rgba(255,255,255,.08); }
+.question-link-light:hover { color: white; border-color: rgba(255,255,255,.7); }
+.section-actions, .account-top-actions, .partner-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.page-intro-with-action { display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; }
+.page-intro-with-action > div { max-width: 880px; }
+.partner-actions { justify-content: flex-end; }
+
+.consecutive-actions .pricing-hint { flex: 1 1 320px; text-align: right; }
+.meal-day:disabled { cursor: not-allowed; opacity: .42; filter: grayscale(.35); }
+.meal-day:disabled:hover { transform: none; }
+.meal-day.next-available:not(.selected) { border-color: rgba(44,112,92,.35); box-shadow: 0 15px 42px rgba(44,112,92,.12); }
+.next-day-hint { display: inline-block; margin: 12px 3px 0; padding: 6px 8px; border-radius: 8px; color: var(--green); background: #eaf5ef; font-size: 10px; font-weight: 900; }
+
+.account-login-shell { min-height: 65vh; display: grid; place-items: center; }
+.account-login-card { width: min(560px, 100%); padding: 40px; border-radius: 30px; background: white; box-shadow: var(--shadow); }
+.account-login-card h1 { margin: 0 0 15px; font-size: clamp(38px, 5vw, 58px); line-height: 1; letter-spacing: -2px; }
+.account-login-card p { color: #687671; line-height: 1.55; }
+.account-login-card label { display: block; margin-top: 14px; color: #61706b; font-size: 12px; font-weight: 900; }
+.account-login-card input, .purchase-card select { width: 100%; margin-top: 7px; padding: 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); outline: none; }
+.account-login-card > button { width: 100%; margin-top: 15px; border: 0; padding: 14px 18px; border-radius: 13px; color: white; background: var(--ink); cursor: pointer; font-weight: 900; }
+.account-login-card > button.telegram-stub { margin-top: 9px; color: var(--ink); background: #dcecff; }
+.account-login-card .question-link { width: 100%; margin-top: 9px; }
+
+.account-error { margin: 22px 0 0; }
+.purchase-card { display: grid; grid-template-columns: 1fr minmax(240px, .45fr) auto; align-items: end; gap: 22px; margin-top: 32px; padding: 30px; border-radius: 28px; background: white; box-shadow: var(--shadow); }
+.purchase-card h2 { margin: 0; font-size: 38px; letter-spacing: -1px; }
+.purchase-card p { color: #687671; }
+.purchase-card label { color: #61706b; font-size: 12px; font-weight: 900; }
+.purchase-card > button { border: 0; padding: 16px 24px; border-radius: 14px; color: var(--ink); background: #ff9670; cursor: pointer; font-weight: 900; }
+.purchase-numbers { display: flex; align-items: baseline; gap: 13px; margin-top: 15px; }
+.purchase-numbers strong { font-size: 28px; }
+.purchase-numbers span { color: #6e7b76; font-size: 13px; }
+
+.modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; background: rgba(9,26,22,.68); backdrop-filter: blur(8px); }
+.payment-modal { position: relative; width: min(620px, 100%); max-height: calc(100vh - 40px); overflow-y: auto; padding: 34px; border-radius: 28px; background: white; box-shadow: 0 30px 100px rgba(0,0,0,.3); }
+.payment-modal h2 { margin: 0 0 10px; font-size: 38px; letter-spacing: -1px; }
+.payment-modal > p { color: #687671; line-height: 1.5; }
+.modal-close { position: absolute; top: 16px; right: 16px; width: 38px; height: 38px; border: 0; border-radius: 50%; background: var(--cream); cursor: pointer; font-size: 24px; }
+.payment-options { display: grid; gap: 10px; margin-top: 22px; }
+.payment-options label { display: flex; align-items: flex-start; gap: 12px; padding: 15px; border: 1px solid var(--line); border-radius: 15px; cursor: pointer; }
+.payment-options label.selected { border-color: var(--orange); background: #fff5ef; }
+.payment-options input { margin-top: 4px; }
+.payment-options span, .payment-options strong, .payment-options small { display: block; }
+.payment-options small { margin-top: 4px; color: #75817d; }
+.payment-placeholder { margin: 16px 0; padding: 22px; border: 1px dashed #c9c4b9; border-radius: 15px; color: #6f7b77; background: var(--cream); text-align: center; }
+.payment-modal > button:last-child { width: 100%; border: 0; padding: 15px 20px; border-radius: 14px; color: white; background: var(--ink); cursor: pointer; font-weight: 900; }
+.payment-modal > button:last-child:disabled { opacity: .55; cursor: wait; }
+
+.active-subscription-card { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 25px; margin-top: 30px; padding: 34px 32px 30px; overflow: hidden; border: 1px solid var(--line); border-radius: 28px; background: white; box-shadow: var(--shadow); }
+.subscription-status-line { position: absolute; inset: 0 0 auto; height: 8px; background: #aab0ae; }
+.active-subscription-card.is-active { border-color: #96c6ae; background: #f2fbf6; }
+.active-subscription-card.is-active .subscription-status-line { background: #30a56d; }
+.active-subscription-card h2 { margin: 0 0 8px; font-size: 36px; letter-spacing: -1px; }
+.active-subscription-card p { margin: 0 0 8px; color: #60706a; font-size: 17px; }
+.active-subscription-card small { color: #687671; }
+.status-badge { padding: 10px 13px; border-radius: 999px; background: #eceeed; color: #5f6865; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+.is-active .status-badge { color: #176640; background: #d8f2e3; }
+.visible-subscription-code { display: block; margin-top: 16px; padding: 10px 12px; border-radius: 10px; background: var(--cream); letter-spacing: 1px; }
+
+.pause-disabled { opacity: .66; }
+.pause-enabled { border: 1px solid #b7d9c9; }
+.pause-days { max-height: 320px; overflow-y: auto; padding-right: 4px; }
+.pause-days button:disabled { cursor: not-allowed; opacity: .55; }
+.pause-days button:not(:disabled):hover { border-color: var(--orange); }
+
+.manager-table tr.needs-activation td { background: #fff8eb; }
+.activate-button { border: 0; padding: 11px 13px; border-radius: 11px; color: white; background: #2f9a68; cursor: pointer; font-weight: 900; }
+.activate-button:disabled { opacity: .55; cursor: wait; }
+.manager-done { color: #6e7b76; font-size: 12px; }
+.status-awaiting_activation { color: #8d5d18; background: #fff0d8; }
+.status-active { color: #176640; background: #d8f2e3; }
+
+@media (max-width: 900px) {
+  .purchase-card { grid-template-columns: 1fr 1fr; }
+  .purchase-card > div { grid-column: 1 / -1; }
+  .purchase-card > button { height: 47px; }
+  .page-intro-with-action { align-items: flex-start; flex-direction: column; }
+}
+
+@media (max-width: 720px) {
+  .section-actions, .account-top-actions, .partner-actions { align-items: stretch; width: 100%; }
+  .section-actions > *, .account-top-actions > *, .partner-actions > * { flex: 1; }
+  .consecutive-actions .pricing-hint { text-align: left; }
+  .account-login-card { padding: 25px; }
+  .purchase-card { grid-template-columns: 1fr; padding: 22px; }
+  .purchase-card > div { grid-column: 1; }
+  .purchase-card h2 { font-size: 31px; }
+  .active-subscription-card { grid-template-columns: 1fr; padding: 30px 22px 23px; }
+  .active-subscription-card h2 { font-size: 30px; }
+  .status-badge { justify-self: start; }
+  .payment-modal { padding: 27px 20px 20px; }
+  .payment-modal h2 { font-size: 31px; }
+  .pause-days { grid-template-columns: 1fr; }
 }

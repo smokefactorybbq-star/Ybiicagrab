@@ -1,6 +1,7 @@
 import Link from "next/link";
-import SubscriptionCalendar from "@/components/SubscriptionCalendar";
-import PhuketMap from "@/components/PhuketMap";
+import SubscriptionCalendar from "../components/SubscriptionCalendar";
+import PhuketMap from "../components/PhuketMap";
+import QuestionLink from "../components/QuestionLink";
 
 export default function HomePage() {
   return (
@@ -13,6 +14,7 @@ export default function HomePage() {
           <div className="hero-actions">
             <Link className="primary-link" href="#subscription">Выбрать дни</Link>
             <Link className="secondary-link" href="/delivery">Заказать доставку</Link>
+            <QuestionLink className="question-link question-link-light" />
           </div>
           <div className="hero-facts">
             <div><strong>от 250 ฿</strong><span>за полноценный обед</span></div>
@@ -34,9 +36,9 @@ export default function HomePage() {
       </section>
 
       <section className="benefits-strip">
-        <div><b>01</b><span><strong>Выбираете даты</strong>Любые удобные дни в календаре</span></div>
-        <div><b>02</b><span><strong>Получаете QR</strong>Он хранится в личном кабинете</span></div>
-        <div><b>03</b><span><strong>Забираете обед</strong>Сканируете QR в ближайшей точке</span></div>
+        <div><b>01</b><span><strong>Выбираете период</strong>Последовательные дни, начиная с завтра</span></div>
+        <div><b>02</b><span><strong>Оплачиваете</strong>Менеджер проверяет и активирует подписку</span></div>
+        <div><b>03</b><span><strong>Получаете QR</strong>После активации он появляется в личном кабинете</span></div>
       </section>
 
       <SubscriptionCalendar />
@@ -48,7 +50,7 @@ export default function HomePage() {
           <h2>Ваше меню — в единой системе MealPoint</h2>
           <p>Партнёр получает заказ со звуком, выставляет время приготовления, а клиент видит расчётное время готовности и доставки.</p>
         </div>
-        <button type="button">Стать партнёром</button>
+        <div className="partner-actions"><button type="button">Стать партнёром</button><QuestionLink className="question-link question-link-light" /></div>
       </section>
     </main>
   );

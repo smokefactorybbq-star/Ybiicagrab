@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import QuestionLink from "../../components/QuestionLink";
 
 const dishes = [
   { id: 1, name: "Борщ", description: "300 г · сметана отдельно", price: 130, image: "/meal-2.svg" },
@@ -23,10 +24,11 @@ export default function DeliveryPage() {
 
   return (
     <main className="page-shell delivery-page">
-      <section className="page-intro">
-        <span className="eyebrow">Доставка</span>
+      <section className="page-intro page-intro-with-action">
+        <div><span className="eyebrow">Доставка</span>
         <h1>Закажите любимые блюда домой</h1>
-        <p>Структура повторяет ваше Telegram Mini App: меню, корзина, адрес, район, время и способ оплаты.</p>
+        <p>Структура повторяет ваше Telegram Mini App: меню, корзина, адрес, район, время и способ оплаты.</p></div>
+        <QuestionLink />
       </section>
 
       <div className="delivery-layout">
@@ -63,4 +65,3 @@ export default function DeliveryPage() {
     </main>
   );
 }
-

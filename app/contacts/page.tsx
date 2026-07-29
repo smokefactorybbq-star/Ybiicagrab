@@ -1,7 +1,9 @@
+import QuestionLink from "../../components/QuestionLink";
+
 export default function ContactsPage() {
   return (
     <main className="page-shell contacts-page">
-      <section className="page-intro"><span className="eyebrow">Контакты</span><h1>Мы рядом и отвечаем быстро</h1><p>Перед запуском замените демонстрационные данные на официальный телефон, LINE, WhatsApp и Telegram менеджера.</p></section>
+      <section className="page-intro page-intro-with-action"><div><span className="eyebrow">Контакты</span><h1>Мы рядом и отвечаем быстро</h1><p>Перед запуском замените демонстрационные данные на официальный телефон, LINE, WhatsApp и Telegram менеджера.</p></div><QuestionLink /></section>
       <div className="contact-grid">
         <article><span>Компания</span><strong>MealPoint by Smoke Factory BBQ</strong><p>Phuket, Thailand</p></article>
         <article><span>Телефон</span><strong>+66 XX XXX XXXX</strong><p>Ежедневно 10:00–22:00</p></article>
@@ -11,4 +13,3 @@ export default function ContactsPage() {
     </main>
   );
 }
-

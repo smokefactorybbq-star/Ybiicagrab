@@ -1,3 +1,5 @@
+import QuestionLink from "./QuestionLink";
+
 const points = [
   { name: "Meal Point · Chalong", top: "66%", left: "55%" },
   { name: "Meal Point · Rawai", top: "82%", left: "51%" },
@@ -15,7 +17,7 @@ export default function PhuketMap() {
           <h2>Найдите ближайший Meal Point</h2>
           <p>Красные точки показывают доступные места получения подписки на Пхукете.</p>
         </div>
-        <span className="map-status"><i /> 5 точек открыто</span>
+        <div className="section-actions"><span className="map-status"><i /> 5 точек открыто</span><QuestionLink /></div>
       </div>
 
       <div className="map-shell">
@@ -48,4 +50,3 @@ export default function PhuketMap() {
     </section>
   );
 }
-
