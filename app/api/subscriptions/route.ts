@@ -55,6 +55,15 @@ function badRequest(message: string) {
   return NextResponse.json({ ok: false, error: message }, { status: 400 });
 }
 
+function toIsoDate(value: unknown) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  const match = String(value || "").match(/^(\d{4}-\d{2}-\d{2})/);
+  return match?.[1] || "";
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json() as CreateSubscriptionBody;
@@ -213,9 +222,14 @@ export async function GET(request: Request) {
       ok: true,
       subscription: {
         ...safeSubscription,
+        starts_on: toIsoDate(subscription.starts_on),
+        ends_on: toIsoDate(subscription.ends_on),
         code: subscription.status === "ACTIVE" ? subscription.code : null,
         qrEnabled: subscription.status === "ACTIVE",
-        days: daysResult.rows
+        days: daysResult.rows.map((day) => ({
+          ...day,
+          service_date: toIsoDate(day.service_date)
+        }))
       }
     });
   } catch (error) {
