@@ -15,6 +15,7 @@ type SubscriptionDraft = {
   rate: number;
   total: number;
   createdAt: string;
+  duplicateConfirmed?: boolean;
 };
 
 type SubscriptionDay = {
@@ -78,6 +79,9 @@ const statusLabels: Record<string, string> = {
   MISSED: "Пропущено"
 };
 
+const CREDENTIALS_KEY = "mealpoint_subscription_credentials_v2";
+const LEGACY_CREDENTIALS_KEY = "mealpoint_subscription_credentials";
+
 function formatDate(value: string) {
   const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!match) return "Дата не указана";
@@ -102,6 +106,40 @@ function readJson<T>(key: string): T | null {
   }
 }
 
+function normalizePhone(value: string | null | undefined) {
+  return String(value || "").replace(/[^\d+]/g, "");
+}
+
+function sameDates(left: string[], right: string[]) {
+  return left.length === right.length && left.every((date, index) => date === right[index]);
+}
+
+function draftMatchesActiveSubscription(draft: SubscriptionDraft, subscriptions: Subscription[]) {
+  return subscriptions.some((subscription) => {
+    if (subscription.status !== "ACTIVE") return false;
+    return sameDates(subscription.days.map((day) => day.service_date), draft.dates);
+  });
+}
+
+function uniqueCredentials(items: Credentials[]) {
+  const map = new Map<string, Credentials>();
+  for (const item of items) {
+    if (item?.id && item?.accessToken) map.set(item.id, item);
+  }
+  return [...map.values()];
+}
+
+function getSavedCredentials() {
+  const current = readJson<Credentials[]>(CREDENTIALS_KEY);
+  const legacy = readJson<Credentials>(LEGACY_CREDENTIALS_KEY);
+  const merged = uniqueCredentials([
+    ...(Array.isArray(current) ? current : []),
+    ...(legacy?.id && legacy.accessToken ? [legacy] : [])
+  ]);
+  if (merged.length) localStorage.setItem(CREDENTIALS_KEY, JSON.stringify(merged));
+  return merged;
+}
+
 export default function AccountPage() {
   const [ready, setReady] = useState(false);
   const [profile, setProfile] = useState<AccountProfile | null>(null);
@@ -109,22 +147,25 @@ export default function AccountPage() {
   const [loginPhone, setLoginPhone] = useState("+66");
   const [draft, setDraft] = useState<SubscriptionDraft | null>(null);
   const [pickupPoint, setPickupPoint] = useState(pickupPoints[0]);
-  const [credentials, setCredentials] = useState<Credentials | null>(null);
-  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [credentials, setCredentials] = useState<Credentials[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [subscriptionsLoaded, setSubscriptionsLoaded] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [duplicatePaymentOpen, setDuplicatePaymentOpen] = useState(false);
+  const [duplicateConfirmed, setDuplicateConfirmed] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState(paymentOptions[0].id);
   const [submittingPayment, setSubmittingPayment] = useState(false);
   const [pauseLoading, setPauseLoading] = useState("");
   const [error, setError] = useState("");
-  const [activeHistory, setActiveHistory] = useState<"subscription" | "delivery">("subscription");
+  const [qrSubscriptionId, setQrSubscriptionId] = useState<string | null>(null);
 
   useEffect(() => {
     const savedProfile = readJson<AccountProfile>("mealpoint_account_profile");
     const savedDraft = readJson<SubscriptionDraft>("mealpoint_subscription_draft");
-    const savedCredentials = readJson<Credentials>("mealpoint_subscription_credentials");
     setProfile(savedProfile);
     setDraft(savedDraft);
-    setCredentials(savedCredentials);
+    setDuplicateConfirmed(Boolean(savedDraft?.duplicateConfirmed));
+    setCredentials(getSavedCredentials());
     if (savedProfile) {
       setLoginName(savedProfile.fullName);
       setLoginPhone(savedProfile.phone);
@@ -132,47 +173,63 @@ export default function AccountPage() {
     setReady(true);
   }, []);
 
-  const loadSubscription = useCallback(async (silent = false) => {
-    if (!credentials) return;
-    if (!silent) setError("");
+  const loadSubscriptions = useCallback(async (silent = false): Promise<Subscription[] | null> => {
+    if (!profile || !credentials.length) {
+      setSubscriptions([]);
+      setSubscriptionsLoaded(true);
+      return [];
+    }
+    if (!silent) {
+      setError("");
+      setSubscriptionsLoaded(false);
+    }
 
     try {
-      const response = await fetch(
-        `/api/subscriptions?id=${encodeURIComponent(credentials.id)}&accessToken=${encodeURIComponent(credentials.accessToken)}`,
-        { cache: "no-store" }
-      );
+      const response = await fetch("/api/subscriptions/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credentials }),
+        cache: "no-store"
+      });
       const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.error || "Не удалось загрузить подписку");
-      setSubscription(data.subscription as Subscription);
+      if (!response.ok || !data.ok) throw new Error(data.error || "Не удалось загрузить подписки");
+
+      const profilePhone = normalizePhone(profile.phone);
+      const ownSubscriptions = (data.subscriptions as Subscription[]).filter(
+        (subscription) => normalizePhone(subscription.phone) === profilePhone
+      );
+      setSubscriptions(ownSubscriptions);
+      setSubscriptionsLoaded(true);
+      return ownSubscriptions;
     } catch (loadError) {
       if (!silent) setError(loadError instanceof Error ? loadError.message : "Ошибка загрузки");
+      setSubscriptionsLoaded(true);
+      return null;
     }
-  }, [credentials]);
+  }, [credentials, profile]);
 
   useEffect(() => {
-    if (!credentials) return;
-    void loadSubscription();
-  }, [credentials, loadSubscription]);
+    if (!ready || !profile) return;
+    void loadSubscriptions();
+  }, [ready, profile, loadSubscriptions]);
 
   useEffect(() => {
-    if (!credentials || subscription?.status !== "AWAITING_ACTIVATION") return;
-    const timer = window.setInterval(() => void loadSubscription(true), 5000);
+    if (!profile || !subscriptions.some((subscription) => subscription.status === "AWAITING_ACTIVATION")) return;
+    const timer = window.setInterval(() => void loadSubscriptions(true), 5000);
     return () => window.clearInterval(timer);
-  }, [credentials, subscription?.status, loadSubscription]);
+  }, [profile, subscriptions, loadSubscriptions]);
 
-  const progress = useMemo(() => {
-    if (!subscription?.selected_days) return 0;
-    return Math.round((subscription.remaining_portions / subscription.selected_days) * 100);
-  }, [subscription]);
+  const hasExactActiveDuplicate = useMemo(() => {
+    if (!draft) return false;
+    return draftMatchesActiveSubscription(draft, subscriptions);
+  }, [draft, subscriptions]);
 
-  const qrUrl = useMemo(() => {
-    if (!subscription?.qrEnabled || !subscription.code || !credentials) return "";
-    const params = new URLSearchParams({
-      id: credentials.id,
-      accessToken: credentials.accessToken
-    });
-    return `/api/subscriptions/qr?${params.toString()}`;
-  }, [subscription?.qrEnabled, subscription?.code, credentials]);
+  const qrSubscription = useMemo(
+    () => subscriptions.find((subscription) => subscription.id === qrSubscriptionId) || null,
+    [qrSubscriptionId, subscriptions]
+  );
+
+  const qrModalUrl = qrSubscription ? getQrUrl(qrSubscription) : "";
 
   function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -185,6 +242,31 @@ export default function AccountPage() {
   function logout() {
     localStorage.removeItem("mealpoint_account_profile");
     setProfile(null);
+    setSubscriptions([]);
+    setQrSubscriptionId(null);
+  }
+
+  async function openPayment() {
+    let duplicate = hasExactActiveDuplicate;
+
+    if (draft && credentials.length && !subscriptionsLoaded) {
+      const loadedSubscriptions = await loadSubscriptions();
+      if (loadedSubscriptions === null) return;
+      duplicate = draftMatchesActiveSubscription(draft, loadedSubscriptions);
+    }
+
+    if (duplicate && !duplicateConfirmed) {
+      setDuplicatePaymentOpen(true);
+      return;
+    }
+    setPaymentOpen(true);
+  }
+
+  function chooseOtherDates() {
+    localStorage.removeItem("mealpoint_subscription_draft");
+    setDraft(null);
+    setDuplicatePaymentOpen(false);
+    window.location.href = "/#subscription";
   }
 
   async function confirmPayment() {
@@ -211,11 +293,15 @@ export default function AccountPage() {
         id: data.subscription.id as string,
         accessToken: data.subscription.accessToken as string
       };
-      localStorage.setItem("mealpoint_subscription_credentials", JSON.stringify(nextCredentials));
+      const updatedCredentials = uniqueCredentials([nextCredentials, ...credentials]);
+      localStorage.setItem(CREDENTIALS_KEY, JSON.stringify(updatedCredentials));
+      localStorage.setItem(LEGACY_CREDENTIALS_KEY, JSON.stringify(nextCredentials));
       localStorage.removeItem("mealpoint_subscription_draft");
-      setCredentials(nextCredentials);
+      setCredentials(updatedCredentials);
       setDraft(null);
       setPaymentOpen(false);
+      setDuplicatePaymentOpen(false);
+      setDuplicateConfirmed(false);
     } catch (paymentError) {
       setError(paymentError instanceof Error ? paymentError.message : "Ошибка оплаты");
     } finally {
@@ -223,9 +309,12 @@ export default function AccountPage() {
     }
   }
 
-  async function requestPause(serviceDate: string) {
-    if (!credentials) return;
-    setPauseLoading(serviceDate);
+  async function requestPause(subscriptionId: string, serviceDate: string) {
+    const subscriptionCredentials = credentials.find((item) => item.id === subscriptionId);
+    if (!subscriptionCredentials) return;
+
+    const loadingKey = `${subscriptionId}:${serviceDate}`;
+    setPauseLoading(loadingKey);
     setError("");
 
     try {
@@ -233,19 +322,29 @@ export default function AccountPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: credentials.id,
-          accessToken: credentials.accessToken,
+          id: subscriptionCredentials.id,
+          accessToken: subscriptionCredentials.accessToken,
           serviceDate
         })
       });
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || "Не удалось запросить паузу");
-      await loadSubscription();
+      await loadSubscriptions();
     } catch (pauseError) {
       setError(pauseError instanceof Error ? pauseError.message : "Ошибка запроса паузы");
     } finally {
       setPauseLoading("");
     }
+  }
+
+  function getQrUrl(subscription: Subscription) {
+    const subscriptionCredentials = credentials.find((item) => item.id === subscription.id);
+    if (!subscription.qrEnabled || !subscription.code || !subscriptionCredentials) return "";
+    const params = new URLSearchParams({
+      id: subscriptionCredentials.id,
+      accessToken: subscriptionCredentials.accessToken
+    });
+    return `/api/subscriptions/qr?${params.toString()}`;
   }
 
   if (!ready) {
@@ -279,7 +378,11 @@ export default function AccountPage() {
           <h1>Здравствуйте, {profile.fullName}</h1>
           <p>{profile.phone}</p>
         </div>
-        <div className="account-top-actions"><QuestionLink /><button type="button" className="text-button muted" onClick={logout}>Выйти</button></div>
+        <div className="account-top-actions">
+          <Link className="new-subscription-link" href="/#subscription">Оформить ещё одну подписку</Link>
+          <QuestionLink />
+          <button type="button" className="text-button muted" onClick={logout}>Выйти</button>
+        </div>
       </section>
 
       {error && <p className="form-error account-error">{error}</p>}
@@ -287,7 +390,7 @@ export default function AccountPage() {
       {draft && (
         <section className="purchase-card">
           <div>
-            <span className="eyebrow">Выбранная подписка</span>
+            <span className="eyebrow">Новая подписка</span>
             <h2>{draft.selectedDays} {draft.selectedDays === 1 ? "день" : "дней"} подряд</h2>
             <p>{formatDate(draft.dates[0])} — {formatDate(draft.dates[draft.dates.length - 1])}</p>
             <div className="purchase-numbers"><strong>{draft.total.toLocaleString("ru-RU")} ฿</strong><span>{draft.rate} ฿ за обед</span></div>
@@ -297,8 +400,22 @@ export default function AccountPage() {
               {pickupPoints.map((point) => <option key={point}>{point}</option>)}
             </select>
           </label>
-          <button type="button" onClick={() => setPaymentOpen(true)}>Оплатить</button>
+          <button type="button" disabled={Boolean(credentials.length) && !subscriptionsLoaded} onClick={() => void openPayment()}>{Boolean(credentials.length) && !subscriptionsLoaded ? "Проверяем подписки…" : "Оплатить"}</button>
         </section>
+      )}
+
+      {duplicatePaymentOpen && draft && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Подтверждение повторной подписки">
+          <div className="payment-modal duplicate-confirm-modal">
+            <span className="eyebrow">Повторная подписка</span>
+            <h2>Оформить ещё одну?</h2>
+            <p>У вас уже есть активная подписка на те же даты. Вы уверены, что хотите оформить ещё одну подписку на этот период?</p>
+            <div className="duplicate-confirm-actions">
+              <button type="button" className="confirm-yes" onClick={() => { setDuplicateConfirmed(true); setDuplicatePaymentOpen(false); setPaymentOpen(true); }}>Да, перейти к оплате</button>
+              <button type="button" className="confirm-no" onClick={chooseOtherDates}>Нет, выбрать другие даты</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {paymentOpen && draft && (
@@ -324,101 +441,161 @@ export default function AccountPage() {
         </div>
       )}
 
-      {subscription && (
-        <>
-          <section className={`active-subscription-card ${subscription.status === "ACTIVE" ? "is-active" : "is-waiting"}`}>
-            <div className="subscription-status-line" />
-            <div>
-              <span className="eyebrow">Активная подписка</span>
-              {subscription.status === "ACTIVE" ? (
-                <>
-                  <h2>Подписка активирована</h2>
-                  <p>В подписке осталось <strong>{subscription.remaining_portions}</strong> обедов из {subscription.selected_days}.</p>
-                  <small>Код подписки: <b>{subscription.code}</b></small>
-                </>
+      {qrSubscription && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={`QR-код подписки ${qrSubscription.code || ""}`}>
+          <div className="payment-modal qr-display-modal">
+            <button className="modal-close" type="button" onClick={() => setQrSubscriptionId(null)} aria-label="Закрыть QR">×</button>
+            <span className="eyebrow">QR этой подписки</span>
+            <h2>{qrSubscription.code || "Подписка"}</h2>
+            <p>{formatDate(qrSubscription.starts_on)} — {formatDate(qrSubscription.ends_on)}</p>
+            <div className="qr-display-box">
+              {qrModalUrl ? (
+                <img src={qrModalUrl} alt={`QR-код подписки ${qrSubscription.code || ""}`} />
               ) : (
-                <>
-                  <h2>Спасибо за оплату</h2>
-                  <p>В течение 15 минут ваша подписка будет активирована.</p>
-                  <small>Менеджер уже получил информацию о покупке. Страница проверяет статус автоматически.</small>
-                </>
+                <span>QR-код временно недоступен.</span>
               )}
             </div>
-            <div className="status-badge">{statusLabels[subscription.status] || subscription.status}</div>
-          </section>
-
-          {subscription.status === "ACTIVE" && (
-            <section className="account-grid">
-              <article className="profile-card dark-card">
-                <span className="card-label">Остаток подписки</span>
-                <strong className="large-number">{subscription.remaining_portions}</strong>
-                <span>обедов осталось из {subscription.selected_days}</span>
-                <div className="progress"><i style={{ width: `${progress}%` }} /></div>
-                <small>Действует до {formatDate(subscription.ends_on)}</small>
-              </article>
-
-              <article className="profile-card qr-card">
-                <div>
-                  <span className="card-label">QR для получения еды</span>
-                  <p>Покажите QR на специальном устройстве в пункте выдачи. После сканирования будет списан один обед.</p>
-                  <small>{subscription.pickup_point_name || "Пункт выдачи не выбран"}</small>
-                  <strong className="visible-subscription-code">{subscription.code}</strong>
-                </div>
-                <div className="qr-box">{qrUrl ? <img src={qrUrl} alt="QR-код подписки" /> : <span>QR временно недоступен. Используйте код подписки.</span>}</div>
-              </article>
-            </section>
-          )}
-
-          <section className={`pause-card ${subscription.status === "ACTIVE" && subscription.pause_limit > 0 ? "pause-enabled" : "pause-disabled"}`}>
-            <div>
-              <span className="eyebrow">Пауза подписки</span>
-              <h2>{subscription.pause_limit > 0 ? `Доступно пауз: ${Math.max(0, subscription.pause_limit - subscription.pauses_used)}` : "Пауза недоступна"}</h2>
-              <p>Пауза включается от 7 дней: 7 дней — 1 пауза, 14 дней — 2, 30 дней — 3.</p>
-            </div>
-            <div className="pause-days">
-              {subscription.days.map((day) => {
-                const canPause = subscription.status === "ACTIVE"
-                  && subscription.pause_limit > subscription.pauses_used
-                  && ["PLANNED", "AVAILABLE"].includes(day.status);
-                return (
-                  <button key={day.service_date} type="button" disabled={!canPause || pauseLoading === day.service_date} onClick={() => requestPause(day.service_date)}>
-                    {formatDate(day.service_date)}
-                    <span>{pauseLoading === day.service_date ? "Отправляем…" : statusLabels[day.status] || day.status}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <small>Использовано пауз: {subscription.pauses_used} из {subscription.pause_limit}</small>
-          </section>
-
-          <section className="history-card">
-            <div className="history-tabs">
-              <button type="button" className={activeHistory === "subscription" ? "active" : ""} onClick={() => setActiveHistory("subscription")}>Еда по подписке</button>
-              <button type="button" className={activeHistory === "delivery" ? "active" : ""} onClick={() => setActiveHistory("delivery")}>Доставка</button>
-            </div>
-
-            {activeHistory === "subscription" ? (
-              <div className="history-list">
-                {subscription.days.map((day) => (
-                  <div key={day.service_date}>
-                    <time>{formatDate(day.service_date)}</time>
-                    <strong>Обед MealPoint</strong>
-                    <span>{statusLabels[day.status] || day.status}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="empty-history">Заказов доставки пока нет.</div>
-            )}
-          </section>
-        </>
+            <p className="qr-display-note">Покажите этот QR на пункте выдачи. Списание произойдёт только с подписки <strong>{qrSubscription.code}</strong>.</p>
+            <button className="close-qr-button" type="button" onClick={() => setQrSubscriptionId(null)}>Закрыть QR</button>
+          </div>
+        </div>
       )}
 
-      {!draft && !subscription && (
+      {subscriptions.length > 0 && (
+        <section className="subscriptions-list-section">
+          <div className="subscriptions-list-heading">
+            <div>
+              <span className="eyebrow">Мои подписки</span>
+              <h2>{subscriptions.length} {subscriptions.length === 1 ? "подписка" : "подписки"}</h2>
+            </div>
+            <p>Количество подписок не ограничено. Каждая подписка имеет собственный остаток, код и QR.</p>
+          </div>
+
+          <div className="subscriptions-list">
+            {subscriptions.map((subscription, index) => {
+              const progress = subscription.selected_days
+                ? Math.round((subscription.remaining_portions / subscription.selected_days) * 100)
+                : 0;
+              const qrUrl = getQrUrl(subscription);
+              const isActive = subscription.status === "ACTIVE";
+              const isWaiting = subscription.status === "AWAITING_ACTIVATION";
+
+              return (
+                <article className="subscription-instance" key={subscription.id}>
+                  <section className={`active-subscription-card ${isActive ? "is-active" : "is-waiting"}`}>
+                    <div className="subscription-status-line" />
+                    <div>
+                      <span className="eyebrow">Подписка №{subscriptions.length - index}</span>
+                      {isActive ? (
+                        <>
+                          <h2>Подписка активирована</h2>
+                          <p>{formatDate(subscription.starts_on)} — {formatDate(subscription.ends_on)}</p>
+                          <p>Осталось <strong>{subscription.remaining_portions}</strong> обедов из {subscription.selected_days}.</p>
+                          <small>Код подписки: <b>{subscription.code}</b></small>
+                        </>
+                      ) : isWaiting ? (
+                        <>
+                          <h2>Спасибо за оплату</h2>
+                          <p>{formatDate(subscription.starts_on)} — {formatDate(subscription.ends_on)}</p>
+                          <p>В течение 15 минут ваша подписка будет активирована.</p>
+                          <small>Менеджер уже получил информацию о покупке. Страница проверяет статус автоматически.</small>
+                        </>
+                      ) : (
+                        <>
+                          <h2>{statusLabels[subscription.status] || subscription.status}</h2>
+                          <p>{formatDate(subscription.starts_on)} — {formatDate(subscription.ends_on)}</p>
+                          <small>{subscription.selected_days} обедов · {subscription.total_thb.toLocaleString("ru-RU")} ฿</small>
+                        </>
+                      )}
+                    </div>
+                    <div className="subscription-card-actions">
+                      <div className="status-badge">{statusLabels[subscription.status] || subscription.status}</div>
+                      <button
+                        type="button"
+                        className="open-qr-button"
+                        disabled={!isActive || !qrUrl}
+                        onClick={() => setQrSubscriptionId(subscription.id)}
+                        title={isActive ? "Открыть QR этой подписки" : "QR появится после активации менеджером"}
+                      >
+                        Открыть QR
+                      </button>
+                    </div>
+                  </section>
+
+                  {isActive && (
+                    <details className="subscription-details" open={index === 0}>
+                      <summary>Остаток, паузы и дни подписки</summary>
+
+                      <section className="account-grid">
+                        <article className="profile-card dark-card">
+                          <span className="card-label">Остаток подписки</span>
+                          <strong className="large-number">{subscription.remaining_portions}</strong>
+                          <span>обедов осталось из {subscription.selected_days}</span>
+                          <div className="progress"><i style={{ width: `${progress}%` }} /></div>
+                          <small>Действует до {formatDate(subscription.ends_on)}</small>
+                        </article>
+
+                        <article className="profile-card subscription-info-card">
+                          <span className="card-label">Данные подписки</span>
+                          <strong>{subscription.code}</strong>
+                          <p>{subscription.pickup_point_name || "Пункт выдачи не выбран"}</p>
+                          <small>QR этой подписки открывается отдельной кнопкой в зелёном блоке выше.</small>
+                        </article>
+                      </section>
+
+                      <section className={`pause-card ${subscription.pause_limit > 0 ? "pause-enabled" : "pause-disabled"}`}>
+                        <div>
+                          <span className="eyebrow">Пауза этой подписки</span>
+                          <h2>{subscription.pause_limit > 0 ? `Доступно пауз: ${Math.max(0, subscription.pause_limit - subscription.pauses_used)}` : "Пауза недоступна"}</h2>
+                          <p>7 дней — 1 пауза, 14 дней — 2, 30 дней — 3.</p>
+                        </div>
+                        <div className="pause-days">
+                          {subscription.days.map((day) => {
+                            const loadingKey = `${subscription.id}:${day.service_date}`;
+                            const canPause = subscription.pause_limit > subscription.pauses_used
+                              && ["PLANNED", "AVAILABLE"].includes(day.status);
+                            return (
+                              <button key={day.service_date} type="button" disabled={!canPause || pauseLoading === loadingKey} onClick={() => requestPause(subscription.id, day.service_date)}>
+                                {formatDate(day.service_date)}
+                                <span>{pauseLoading === loadingKey ? "Отправляем…" : statusLabels[day.status] || day.status}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <small>Использовано пауз: {subscription.pauses_used} из {subscription.pause_limit}</small>
+                      </section>
+
+                      <section className="history-card">
+                        <div className="history-tabs"><strong>Еда по этой подписке</strong></div>
+                        <div className="history-list">
+                          {subscription.days.map((day) => (
+                            <div key={day.service_date}>
+                              <time>{formatDate(day.service_date)}</time>
+                              <strong>Обед MealPoint</strong>
+                              <span>{statusLabels[day.status] || day.status}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    </details>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      <section className="history-card delivery-history-card">
+        <div className="history-tabs"><strong>История доставки</strong></div>
+        <div className="empty-history">Заказов доставки пока нет.</div>
+      </section>
+
+      {!draft && !subscriptions.length && (
         <section className="empty-account">
           <span className="eyebrow">Подписка</span>
           <h1>Вы ещё не выбрали дни</h1>
-          <p>Откройте календарь и выберите последовательность, начиная с завтрашнего дня.</p>
+          <p>Откройте календарь и выберите последовательность или пакет с нужной датой начала.</p>
           <Link href="/#subscription">Выбрать дни</Link>
         </section>
       )}

@@ -465,3 +465,62 @@ img { display: block; max-width: 100%; }
 .scanner-result button.reset-test-button { margin-right: 8px; color: var(--ink); background: #ffd79d; }
 @media (max-width: 1050px) { .scanner-settings { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 650px) { .scanner-settings { grid-template-columns: 1fr; } }
+
+/* Multiple subscriptions and flexible package start date */
+.calendar-checkout-error { max-width: 920px; margin: 10px auto 0; }
+.package-date-modal label.package-date-field { display: grid; gap: 8px; margin-top: 22px; color: #61706b; font-size: 12px; font-weight: 900; }
+.package-date-modal input[type="date"] { width: 100%; padding: 15px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); color: var(--ink); font: inherit; }
+.package-preview { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; margin: 18px 0; padding: 18px; border-radius: 16px; background: var(--cream); text-align: center; }
+.package-preview span { font-weight: 900; }
+.package-preview strong { grid-column: 1 / -1; color: var(--orange-dark); font-size: 27px; }
+.package-date-modal > button:last-child { width: 100%; border: 0; padding: 15px 20px; border-radius: 14px; color: white; background: var(--ink); cursor: pointer; font-weight: 900; }
+.duplicate-confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 24px; }
+.duplicate-confirm-actions button { border: 0; padding: 15px 18px; border-radius: 14px; cursor: pointer; font-weight: 900; }
+.duplicate-confirm-actions .confirm-yes { color: white; background: var(--ink); }
+.duplicate-confirm-actions .confirm-no { color: var(--ink); background: var(--cream); }
+.new-subscription-link { padding: 12px 15px; border-radius: 13px; color: white; background: var(--ink); font-size: 13px; font-weight: 900; }
+.subscriptions-list-section { margin-top: 38px; }
+.subscriptions-list-heading { display: flex; justify-content: space-between; align-items: end; gap: 30px; margin-bottom: 18px; }
+.subscriptions-list-heading h2 { margin: 2px 0 0; font-size: clamp(35px, 5vw, 54px); letter-spacing: -2px; }
+.subscriptions-list-heading p { max-width: 520px; margin: 0; color: #687671; line-height: 1.5; }
+.subscriptions-list { display: grid; gap: 26px; }
+.subscription-instance { padding-bottom: 6px; border-radius: 30px; }
+.subscription-instance .active-subscription-card { margin-top: 0; }
+.subscription-details { margin-top: 10px; padding: 0 18px 18px; border: 1px solid var(--line); border-radius: 24px; background: rgba(255,255,255,.58); }
+.subscription-details > summary { padding: 17px 8px; cursor: pointer; color: var(--ink); font-weight: 900; }
+.subscription-details[open] > summary { border-bottom: 1px solid var(--line); }
+.subscription-details .account-grid { margin-top: 18px; }
+.subscription-details .pause-card, .subscription-details .history-card { box-shadow: none; border: 1px solid var(--line); }
+.delivery-history-card { margin-top: 30px; }
+
+@media (max-width: 720px) {
+  .duplicate-confirm-actions { grid-template-columns: 1fr; }
+  .package-preview { grid-template-columns: 1fr auto 1fr; font-size: 12px; }
+  .subscriptions-list-heading { align-items: flex-start; flex-direction: column; }
+  .subscription-details { padding: 0 10px 10px; }
+  .new-subscription-link { width: 100%; text-align: center; }
+}
+
+/* QR modal per subscription — v0.4.2 */
+.subscription-card-actions { display: grid; justify-items: end; gap: 10px; }
+.open-qr-button { min-width: 138px; border: 0; padding: 12px 16px; border-radius: 13px; color: white; background: var(--ink); cursor: pointer; font-weight: 900; transition: transform .18s ease, opacity .18s ease, background .18s ease; }
+.open-qr-button:not(:disabled):hover { transform: translateY(-1px); background: #183c33; }
+.open-qr-button:disabled { color: #777f7c; background: #d9dddb; cursor: not-allowed; opacity: 1; }
+.is-active .open-qr-button:not(:disabled) { background: #23875a; }
+.is-active .open-qr-button:not(:disabled):hover { background: #176b46; }
+.subscription-info-card { display: grid; align-content: start; gap: 10px; }
+.subscription-info-card > strong { font-size: 23px; letter-spacing: 1px; }
+.subscription-info-card p { margin: 0; color: #687671; }
+.qr-display-modal { width: min(520px, 100%); text-align: center; }
+.qr-display-modal h2 { padding: 0 42px; overflow-wrap: anywhere; }
+.qr-display-box { display: grid; place-items: center; width: min(330px, 100%); aspect-ratio: 1; margin: 22px auto; padding: 18px; border: 1px solid var(--line); border-radius: 24px; background: white; box-shadow: 0 16px 50px rgba(14,45,37,.12); }
+.qr-display-box img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.qr-display-box span { color: #687671; }
+.qr-display-note { margin: 0 auto 18px; max-width: 420px; color: #687671; line-height: 1.5; }
+.close-qr-button { width: 100%; border: 0; padding: 15px 20px; border-radius: 14px; color: white; background: var(--ink); cursor: pointer; font-weight: 900; }
+@media (max-width: 720px) {
+  .subscription-card-actions { justify-items: stretch; width: 100%; }
+  .subscription-card-actions .status-badge { justify-self: start; }
+  .open-qr-button { width: 100%; }
+  .qr-display-modal { padding: 27px 20px 20px; }
+}
