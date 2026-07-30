@@ -51,6 +51,7 @@ export default function ScannerPage() {
   const [processing, setProcessing] = useState(false);
   const [statusText, setStatusText] = useState("Введите ключ устройства и запустите камеру.");
   const [result, setResult] = useState<ScanResponse | null>(null);
+  const [globalTestClock, setGlobalTestClock] = useState<{ isTestMode: boolean; date: string; hour: number; minute: number } | null>(null);
   const scannerRef = useRef<ScannerInstance | null>(null);
   const processingRef = useRef(false);
 
@@ -59,6 +60,7 @@ export default function ScannerPage() {
     setDeviceId(localStorage.getItem("mealpoint_scanner_device") || "MealPoint scanner 1");
     setPickupPointName(localStorage.getItem("mealpoint_scanner_point") || "MealPoint");
     setTestDate(localStorage.getItem("mealpoint_scanner_test_date") || new Date(Date.now() + 86_400_000).toISOString().slice(0, 10));
+    void fetch("/api/app-time", { cache: "no-store" }).then((response) => response.json()).then((data) => { if (data?.ok) setGlobalTestClock(data.clock); }).catch(() => undefined);
 
     return () => {
       const scanner = scannerRef.current;
@@ -225,6 +227,8 @@ export default function ScannerPage() {
         </div>
         <Link href="/manager">К подпискам</Link>
       </section>
+
+      {globalTestClock?.isTestMode && <p className="test-mode-banner">Глобальный тестовый режим: QR будет списываться за {globalTestClock.date}, время {String(globalTestClock.hour).padStart(2,"0")}:{String(globalTestClock.minute).padStart(2,"0")}.</p>}
 
       <section className="scanner-settings">
         <label>

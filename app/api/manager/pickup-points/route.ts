@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "../../../../lib/db";
-import { getBangkokTodayIso } from "../../../../lib/subscriptions";
+import { getAppClock } from "../../../../lib/app-time";
+import { authorizeManager } from "../../../../lib/manager-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,35 +21,18 @@ type UncollectedRow = {
   subscription_codes: string[];
 };
 
-function authorize(request: Request) {
-  const configuredPassword = process.env.MANAGER_PASSWORD;
-  const suppliedPassword = request.headers.get("x-manager-password");
-
-  if (!configuredPassword) return { ok: false, error: "MANAGER_PASSWORD не задан", status: 503 };
-  if (suppliedPassword !== configuredPassword) return { ok: false, error: "Неверный пароль", status: 401 };
-  return { ok: true, error: "", status: 200 };
-}
-
-function getBangkokHour() {
-  const value = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Bangkok",
-    hour: "2-digit",
-    hourCycle: "h23"
-  }).format(new Date());
-  return Number(value);
-}
-
 function getDayEndHour() {
   const parsed = Number(process.env.PICKUP_POINT_DAY_END_HOUR || "20");
   return Number.isInteger(parsed) && parsed >= 0 && parsed <= 23 ? parsed : 20;
 }
 
 export async function GET(request: Request) {
-  const auth = authorize(request);
+  const auth = authorizeManager(request);
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
 
   try {
-    const serviceDate = getBangkokTodayIso();
+    const clock = await getAppClock();
+    const serviceDate = clock.date;
     const dayEndHour = getDayEndHour();
 
     const [summaryResult, uncollectedResult] = await Promise.all([
@@ -139,7 +123,8 @@ export async function GET(request: Request) {
       ok: true,
       serviceDate,
       dayEndHour,
-      isEndOfDay: getBangkokHour() >= dayEndHour,
+      isEndOfDay: clock.hour >= dayEndHour,
+      testMode: clock.isTestMode,
       points
     }, {
       headers: { "Cache-Control": "no-store, max-age=0" }
@@ -151,7 +136,7 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const auth = authorize(request);
+  const auth = authorizeManager(request);
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
 
   try {
@@ -163,7 +148,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ ok: false, error: "Некорректное количество доставленных обедов" }, { status: 400 });
     }
 
-    const serviceDate = getBangkokTodayIso();
+    const serviceDate = (await getAppClock()).date;
     await query(
       `INSERT INTO pickup_point_daily_inventory (service_date, pickup_point_name, delivered_count)
        VALUES ($1::date, $2, $3)

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { query, withTransaction } from "../../../../lib/db";
+import { authorizeManager } from "../../../../lib/manager-auth";
 import { createSubscriptionCode } from "../../../../lib/subscriptions";
 
 export const runtime = "nodejs";
@@ -7,6 +8,7 @@ export const dynamic = "force-dynamic";
 
 type ManagerSubscriptionRow = {
   id: string;
+  user_id: string;
   code: string;
   status: string;
   full_name: string;
@@ -22,26 +24,19 @@ type ManagerSubscriptionRow = {
   paid_at: string | null;
   activated_at: string | null;
   created_at: string;
+  manager_unread_count: number;
   dates: Array<{ service_date: string; status: string }>;
 };
 
-function authorize(request: Request) {
-  const configuredPassword = process.env.MANAGER_PASSWORD;
-  const suppliedPassword = request.headers.get("x-manager-password");
-
-  if (!configuredPassword) return { ok: false, error: "MANAGER_PASSWORD не задан", status: 503 };
-  if (suppliedPassword !== configuredPassword) return { ok: false, error: "Неверный пароль", status: 401 };
-  return { ok: true, error: "", status: 200 };
-}
-
 export async function GET(request: Request) {
-  const auth = authorize(request);
+  const auth = authorizeManager(request);
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
 
   try {
     const result = await query<ManagerSubscriptionRow>(
       `SELECT
          s.id,
+         u.id AS user_id,
          s.code,
          s.status,
          u.full_name,
@@ -57,6 +52,14 @@ export async function GET(request: Request) {
          s.paid_at,
          s.activated_at,
          s.created_at,
+         COALESCE((
+           SELECT COUNT(*)::int
+           FROM customer_conversations cc
+           JOIN customer_messages cm ON cm.conversation_id = cc.id
+           WHERE cc.user_id = u.id
+             AND cm.sender_role = 'CUSTOMER'
+             AND cm.read_by_manager_at IS NULL
+         ), 0)::int AS manager_unread_count,
          COALESCE(
            json_agg(
              json_build_object(
@@ -71,7 +74,7 @@ export async function GET(request: Request) {
        LEFT JOIN subscription_days sd ON sd.subscription_id = s.id
        GROUP BY s.id, u.id
        ORDER BY CASE WHEN s.status = 'AWAITING_ACTIVATION' THEN 0 ELSE 1 END, s.created_at DESC
-       LIMIT 200`
+       LIMIT 300`
     );
 
     return NextResponse.json({ ok: true, subscriptions: result.rows }, {
@@ -84,7 +87,7 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const auth = authorize(request);
+  const auth = authorizeManager(request);
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
 
   try {
@@ -98,8 +101,7 @@ export async function PATCH(request: Request) {
 
     const activated = await withTransaction(async (client) => {
       const current = await client.query<{ id: string; status: string }>(
-        `SELECT id, status FROM subscriptions WHERE id = $1 FOR UPDATE`,
-        [id]
+        `SELECT id, status FROM subscriptions WHERE id = $1 FOR UPDATE`, [id]
       );
       const subscription = current.rows[0];
       if (!subscription) throw new Error("NOT_FOUND");
@@ -110,19 +112,15 @@ export async function PATCH(request: Request) {
       await client.query(
         `UPDATE subscriptions
          SET status = 'ACTIVE', code = $1, activated_at = now(), updated_at = now()
-         WHERE id = $2`,
-        [code, id]
+         WHERE id = $2`, [code, id]
       );
       await client.query(
-        `UPDATE subscription_days
-         SET status = 'AVAILABLE'
-         WHERE subscription_id = $1 AND status = 'PLANNED'`,
-        [id]
+        `UPDATE subscription_days SET status = 'AVAILABLE'
+         WHERE subscription_id = $1 AND status = 'PLANNED'`, [id]
       );
       await client.query(
         `INSERT INTO manager_events (event_type, entity_id, payload)
-         VALUES ('SUBSCRIPTION_ACTIVATED', $1, $2::jsonb)`,
-        [id, JSON.stringify({ code })]
+         VALUES ('SUBSCRIPTION_ACTIVATED', $1, $2::jsonb)`, [id, JSON.stringify({ code })]
       );
       return code;
     });
@@ -130,11 +128,9 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ ok: true, code: activated });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
-    const message = code === "NOT_FOUND"
-      ? "Подписка не найдена"
-      : code === "WRONG_STATUS"
-        ? "Эту подписку нельзя активировать"
-        : "Не удалось активировать подписку";
+    const message = code === "NOT_FOUND" ? "Подписка не найдена"
+      : code === "WRONG_STATUS" ? "Эту подписку нельзя активировать"
+      : "Не удалось активировать подписку";
     return NextResponse.json({ ok: false, error: message }, { status: 400 });
   }
 }

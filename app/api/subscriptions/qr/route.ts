@@ -2,8 +2,8 @@ import * as QRCode from "qrcode";
 import { NextRequest } from "next/server";
 import { getAuthenticatedAccount } from "../../../../lib/auth";
 import { query } from "../../../../lib/db";
+import { getAppClock } from "../../../../lib/app-time";
 import { buildSubscriptionQrPayload } from "../../../../lib/qr";
-import { getBangkokTodayIso } from "../../../../lib/subscriptions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
     const id = request.nextUrl.searchParams.get("id")?.trim() || "";
     if (!id) return textResponse("Не указана подписка", 400);
 
+    const clock = await getAppClock();
     const result = await query<{ id: string; code: string; status: string; qr_paused_today: boolean }>(
       `SELECT s.id, s.code, s.status,
          EXISTS (
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
        FROM subscriptions s
        WHERE s.id = $1 AND s.user_id = $2
        LIMIT 1`,
-      [id, account.userId, getBangkokTodayIso()]
+      [id, account.userId, clock.date]
     );
     const subscription = result.rows[0];
     if (!subscription) return textResponse("Подписка не найдена", 404);

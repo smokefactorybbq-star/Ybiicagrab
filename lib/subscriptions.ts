@@ -41,11 +41,11 @@ export function getTomorrowBangkokIso() {
   return addDaysToIso(getBangkokTodayIso(), 1);
 }
 
-export function validateConsecutiveDates(dates: string[]) {
+export function validateConsecutiveDates(dates: string[], todayIso = getBangkokTodayIso()) {
   if (!dates.length) return { valid: false, error: "Выберите хотя бы один день" };
   if (dates.length > 30) return { valid: false, error: "Можно выбрать не более 30 дней" };
 
-  const tomorrow = getTomorrowBangkokIso();
+  const tomorrow = addDaysToIso(todayIso, 1);
   if (dates[0] < tomorrow) {
     return { valid: false, error: "Подписка должна начинаться не раньше завтрашнего дня" };
   }

@@ -695,3 +695,90 @@ img { display: block; max-width: 100%; }
   .meal-day-actions { grid-column: 1; }
   .pickup-delivery-button { width: 100%; }
 }
+
+/* Test clock and permanent customer-manager chat — v0.7.0 */
+.test-clock-card {
+  margin: 22px 0;
+  padding: 22px;
+  border: 1px solid rgba(231, 79, 50, .25);
+  border-radius: 24px;
+  background: #fff8f4;
+  display: grid;
+  gap: 16px;
+}
+.test-clock-card.is-enabled { border-color: #e74f32; box-shadow: 0 12px 32px rgba(231,79,50,.12); }
+.test-clock-heading { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; }
+.test-clock-heading h2 { margin: 4px 0; }
+.test-clock-controls { display: grid; grid-template-columns: minmax(180px, .6fr) minmax(240px, 1fr) auto; gap: 12px; align-items: end; }
+.test-clock-controls label { display: grid; gap: 7px; font-weight: 700; }
+.test-clock-controls input[type="datetime-local"] { width: 100%; }
+.test-clock-switch { display: flex !important; grid-template-columns: auto 1fr; align-items: center; padding: 13px 14px; border: 1px solid #eadbd3; border-radius: 14px; background: white; }
+.test-clock-switch input { width: 20px; height: 20px; }
+.test-clock-badge { display: inline-flex; align-items: center; padding: 8px 12px; border-radius: 999px; background: #e74f32; color: white; font-weight: 800; }
+.test-clock-current { margin: 0; font-weight: 700; }
+.test-mode-banner { margin: 0 0 16px; padding: 12px 16px; border-radius: 14px; background: #fff0ea; color: #9d2f1d; font-weight: 800; border: 1px solid #ffcbbb; }
+.account-message-button, .manager-message-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.account-message-button {
+  min-width: 46px;
+  height: 44px;
+  border-radius: 14px;
+  font-size: 23px;
+  background: #fff;
+  border: 1px solid #eadbd3;
+}
+.message-alert {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: #e33131;
+  border: 2px solid white;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+}
+.manager-message-button { min-width: 96px; }
+.chat-backdrop { z-index: 10050; }
+.chat-window {
+  width: min(680px, calc(100vw - 24px));
+  height: min(760px, calc(100vh - 34px));
+  border-radius: 26px;
+  background: #fff;
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  overflow: hidden;
+  box-shadow: 0 30px 90px rgba(34,20,15,.3);
+}
+.chat-header { display: flex; justify-content: space-between; gap: 20px; align-items: center; padding: 20px 22px; border-bottom: 1px solid #eee2dc; }
+.chat-header h2 { margin: 3px 0 0; }
+.chat-close { width: 42px; height: 42px; border-radius: 50%; font-size: 27px; padding: 0; }
+.chat-messages { padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; background: #faf7f5; }
+.chat-bubble { max-width: 82%; padding: 12px 14px; border-radius: 18px; box-shadow: 0 5px 14px rgba(54,31,22,.06); }
+.chat-bubble strong { display: block; font-size: 12px; opacity: .65; margin-bottom: 4px; }
+.chat-bubble p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-bubble time { display: block; margin-top: 7px; font-size: 11px; opacity: .55; text-align: right; }
+.chat-own { align-self: flex-end; background: #dff6e7; border-bottom-right-radius: 5px; }
+.chat-other { align-self: flex-start; background: white; border-bottom-left-radius: 5px; }
+.chat-empty { margin: auto; text-align: center; color: #80726c; }
+.chat-error { margin: 0; padding: 8px 20px; }
+.chat-composer { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 14px; border-top: 1px solid #eee2dc; background: white; }
+.chat-composer textarea { min-height: 54px; max-height: 130px; resize: vertical; }
+.chat-composer button { align-self: stretch; }
+@media (max-width: 720px) {
+  .test-clock-controls { grid-template-columns: 1fr; }
+  .test-clock-heading { display: grid; }
+  .chat-window { width: 100vw; height: 100dvh; max-height: none; border-radius: 0; }
+  .chat-bubble { max-width: 90%; }
+  .chat-composer { grid-template-columns: 1fr; }
+}

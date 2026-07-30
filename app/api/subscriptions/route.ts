@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedAccount } from "../../../lib/auth";
+import { getAppClock } from "../../../lib/app-time";
 import { withTransaction } from "../../../lib/db";
 import { notifyManagerTelegram } from "../../../lib/telegram";
 import {
@@ -38,7 +39,8 @@ export async function POST(request: NextRequest) {
 
     if (!pickupPoint) return badRequest("Выберите пункт выдачи");
     if (!paymentMethod) return badRequest("Выберите способ оплаты");
-    const dateValidation = validateConsecutiveDates(dates);
+    const clock = await getAppClock();
+    const dateValidation = validateConsecutiveDates(dates, clock.date);
     if (!dateValidation.valid) return badRequest(dateValidation.error);
 
     const { rate, total } = calculateSubscriptionPrice(dates);

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getMealTemplateForDate } from "../../../../data/meals";
 import { query } from "../../../../lib/db";
-import { addDaysToIso, getBangkokTodayIso } from "../../../../lib/subscriptions";
+import { getAppClock } from "../../../../lib/app-time";
+import { addDaysToIso } from "../../../../lib/subscriptions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,7 +47,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const startDate = getBangkokTodayIso();
+    const clock = await getAppClock();
+    const startDate = clock.date;
     const endDate = addDaysToIso(startDate, 6);
     const dates = Array.from({ length: 7 }, (_, index) => addDaysToIso(startDate, index));
 
@@ -116,7 +118,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      generatedAt: new Date().toISOString(),
+      generatedAt: clock.iso,
+      testMode: clock.isTestMode,
       startDate,
       endDate,
       days,

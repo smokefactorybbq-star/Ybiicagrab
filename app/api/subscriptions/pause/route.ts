@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedAccount } from "../../../../lib/auth";
 import { withTransaction } from "../../../../lib/db";
-import { addDaysToIso, getBangkokTodayIso } from "../../../../lib/subscriptions";
+import { getAppClock } from "../../../../lib/app-time";
+import { addDaysToIso } from "../../../../lib/subscriptions";
 import { notifyManagerTelegram } from "../../../../lib/telegram";
 
 export const runtime = "nodejs";
@@ -18,7 +19,8 @@ export async function POST(request: NextRequest) {
     if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(serviceDate)) {
       return NextResponse.json({ ok: false, error: "Не хватает данных для паузы" }, { status: 400 });
     }
-    if (serviceDate < getBangkokTodayIso()) {
+    const clock = await getAppClock();
+    if (serviceDate < clock.date) {
       return NextResponse.json({ ok: false, error: "Нельзя поставить на паузу прошедший день" }, { status: 400 });
     }
 

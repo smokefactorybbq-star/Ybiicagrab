@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
+import ChatWindow from "../../components/ChatWindow";
 
 type ManagerDay = {
   service_date: string;
@@ -10,6 +11,7 @@ type ManagerDay = {
 
 type ManagerSubscription = {
   id: string;
+  user_id: string;
   code: string;
   status: string;
   full_name: string;
@@ -25,6 +27,7 @@ type ManagerSubscription = {
   paid_at: string | null;
   activated_at: string | null;
   created_at: string;
+  manager_unread_count: number;
   dates: ManagerDay[];
 };
 
@@ -46,10 +49,22 @@ type PickupPointToday = {
 
 type PickupDashboard = {
   serviceDate: string;
+  testMode?: boolean;
   dayEndHour: number;
   isEndOfDay: boolean;
   points: PickupPointToday[];
 };
+
+
+type AppClock = {
+  isTestMode: boolean;
+  date: string;
+  hour: number;
+  minute: number;
+  localDateTime: string;
+};
+
+type ChatClient = { userId: string; fullName: string; phone: string | null };
 
 const statusLabels: Record<string, string> = {
   AWAITING_ACTIVATION: "Оплачено — активировать",
@@ -84,6 +99,12 @@ export default function ManagerPage() {
   const [savingPoint, setSavingPoint] = useState("");
   const [error, setError] = useState("");
   const [authorized, setAuthorized] = useState(false);
+  const [testClock, setTestClock] = useState<AppClock | null>(null);
+  const [testEnabled, setTestEnabled] = useState(false);
+  const [testDateTime, setTestDateTime] = useState("");
+  const [savingClock, setSavingClock] = useState(false);
+  const [testDirty, setTestDirty] = useState(false);
+  const [chatClient, setChatClient] = useState<ChatClient | null>(null);
 
   async function loadManagerData(event?: FormEvent) {
     event?.preventDefault();
@@ -92,13 +113,13 @@ export default function ManagerPage() {
 
     try {
       const headers = { "x-manager-password": password };
-      const [subscriptionsResponse, pickupResponse] = await Promise.all([
+      const [subscriptionsResponse, pickupResponse, clockResponse] = await Promise.all([
         fetch("/api/manager/subscriptions", { headers, cache: "no-store" }),
-        fetch("/api/manager/pickup-points", { headers, cache: "no-store" })
+        fetch("/api/manager/pickup-points", { headers, cache: "no-store" }),
+        fetch("/api/manager/test-clock", { headers, cache: "no-store" })
       ]);
-      const [subscriptionsData, pickupData] = await Promise.all([
-        subscriptionsResponse.json(),
-        pickupResponse.json()
+      const [subscriptionsData, pickupData, clockData] = await Promise.all([
+        subscriptionsResponse.json(), pickupResponse.json(), clockResponse.json()
       ]);
 
       if (!subscriptionsResponse.ok || !subscriptionsData.ok) {
@@ -107,9 +128,17 @@ export default function ManagerPage() {
       if (!pickupResponse.ok || !pickupData.ok) {
         throw new Error(pickupData.error || "Ошибка загрузки пунктов выдачи");
       }
+      if (!clockResponse.ok || !clockData.ok) {
+        throw new Error(clockData.error || "Ошибка загрузки тестового времени");
+      }
 
       setSubscriptions(subscriptionsData.subscriptions);
       setPickupDashboard(pickupData as PickupDashboard);
+      setTestClock(clockData.clock as AppClock);
+      if (!testDirty) {
+        setTestEnabled(Boolean(clockData.clock.isTestMode));
+        setTestDateTime(String(clockData.clock.localDateTime || ""));
+      }
       setDeliveredDrafts(Object.fromEntries(
         (pickupData.points as PickupPointToday[]).map((point) => [point.pickupPointName, String(point.deliveredCount)])
       ));
@@ -127,7 +156,7 @@ export default function ManagerPage() {
     const timer = window.setInterval(() => void loadManagerData(), 15_000);
     return () => window.clearInterval(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authorized, password]);
+  }, [authorized, password, testDirty]);
 
   async function activateSubscription(id: string) {
     setActivating(id);
@@ -149,6 +178,26 @@ export default function ManagerPage() {
     } finally {
       setActivating("");
     }
+  }
+
+  async function saveTestClock() {
+    if (testEnabled && !testDateTime) { setError("Выберите тестовые дату и время"); return; }
+    setSavingClock(true);
+    setError("");
+    try {
+      const response = await fetch("/api/manager/test-clock", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-manager-password": password },
+        body: JSON.stringify({ enabled: testEnabled, localDateTime: testDateTime })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || "Не удалось сохранить тестовое время");
+      setTestClock(data.clock as AppClock);
+      setTestDirty(false);
+      await loadManagerData();
+    } catch (clockError) {
+      setError(clockError instanceof Error ? clockError.message : "Не удалось сохранить тестовое время");
+    } finally { setSavingClock(false); }
   }
 
   async function saveDeliveredCount(point: PickupPointToday) {
@@ -213,6 +262,16 @@ export default function ManagerPage() {
       </section>
 
       {error && <p className="form-error">{error}</p>}
+
+      <section className={`test-clock-card ${testEnabled ? "is-enabled" : ""}`}>
+        <div className="test-clock-heading"><div><span className="eyebrow">Тестовый режим</span><h2>Подменить дату и время сайта</h2><p>Влияет на ЛК, QR, паузы, ПВ и кухню.</p></div>{testClock?.isTestMode && <span className="test-clock-badge">TEST</span>}</div>
+        <div className="test-clock-controls">
+          <label className="test-clock-switch"><input type="checkbox" checked={testEnabled} onChange={(event) => { setTestEnabled(event.target.checked); setTestDirty(true); }} /><span>Включить тестовое время</span></label>
+          <label>Дата и время Пхукета<input type="datetime-local" value={testDateTime} onChange={(event) => { setTestDateTime(event.target.value); setTestDirty(true); }} disabled={!testEnabled} /></label>
+          <button type="button" onClick={() => void saveTestClock()} disabled={savingClock}>{savingClock ? "Сохраняем…" : "Применить"}</button>
+        </div>
+        <p className="test-clock-current">Сейчас сайт считает: {testClock ? `${formatDate(testClock.date)}, ${String(testClock.hour).padStart(2,"0")}:${String(testClock.minute).padStart(2,"0")}` : "—"}</p>
+      </section>
 
       <section className="pickup-today-card">
         <div className="pickup-today-heading">
@@ -306,6 +365,7 @@ export default function ManagerPage() {
                 <th>Цена</th>
                 <th>Статус</th>
                 <th>Действие</th>
+                <th>Сообщения</th>
               </tr>
             </thead>
             <tbody>
@@ -337,10 +397,11 @@ export default function ManagerPage() {
                       </button>
                     ) : <span className="manager-done">Готово</span>}
                   </td>
+                  <td><button type="button" className="manager-message-button" onClick={() => setChatClient({ userId: item.user_id, fullName: item.full_name, phone: item.phone })}>Написать{item.manager_unread_count > 0 && <span className="message-alert">!</span>}</button></td>
                 </tr>
               ))}
               {!subscriptions.length && (
-                <tr><td colSpan={6} className="empty-table">Подписок пока нет.</td></tr>
+                <tr><td colSpan={7} className="empty-table">Подписок пока нет.</td></tr>
               )}
             </tbody>
           </table>
@@ -379,6 +440,18 @@ export default function ManagerPage() {
           </section>
         </div>
       )}
+      <ChatWindow
+        open={Boolean(chatClient)}
+        onClose={() => setChatClient(null)}
+        mode="MANAGER"
+        title={chatClient ? `${chatClient.fullName}${chatClient.phone ? ` · ${chatClient.phone}` : ""}` : "Чат с клиентом"}
+        userId={chatClient?.userId}
+        managerPassword={password}
+        onRead={() => {
+          if (!chatClient) return;
+          setSubscriptions((current) => current.map((item) => item.user_id === chatClient.userId ? { ...item, manager_unread_count: 0 } : item));
+        }}
+      />
     </main>
   );
 }

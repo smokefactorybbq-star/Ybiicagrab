@@ -20,6 +20,7 @@ type DeliveryRow = {
 
 type KitchenPlan = {
   generatedAt: string;
+  testMode?: boolean;
   startDate: string;
   endDate: string;
   days: KitchenDay[];
@@ -142,6 +143,7 @@ export default function KitchenPage() {
       </section>
 
       {error && <p className="form-error">{error}</p>}
+      {plan.testMode && <p className="test-mode-banner">Тестовый режим включён. План построен от даты {formatDay(plan.startDate)}.</p>}
 
       <section className="kitchen-section-card">
         <div className="kitchen-section-title">

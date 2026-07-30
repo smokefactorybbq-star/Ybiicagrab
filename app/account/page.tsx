@@ -6,6 +6,7 @@ import QuestionLink from "../../components/QuestionLink";
 import PickupRouteButton from "../../components/PickupRouteButton";
 import { pickupPoints } from "../../data/pickupPoints";
 import { getMealTemplateForDate } from "../../data/meals";
+import ChatWindow from "../../components/ChatWindow";
 
 type Account = {
   userId: string;
@@ -90,12 +91,13 @@ function formatDate(value: string) {
     .format(new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), 12)));
 }
 
-function bangkokNowParts() {
+function fallbackBangkokNowParts() {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23"
   }).formatToParts(new Date());
   const get = (type: string) => parts.find((part) => part.type === type)?.value || "";
-  return { date: `${get("year")}-${get("month")}-${get("day")}`, hour: Number(get("hour")) };
+  const date = `${get("year")}-${get("month")}-${get("day")}`;
+  return { date, hour: Number(get("hour")), minute: 0, localDateTime: `${date}T${get("hour")}:00`, isTestMode: false };
 }
 
 function sameDates(left: string[], right: string[]) {
@@ -142,7 +144,9 @@ export default function AccountPage() {
   const [deliveryTime, setDeliveryTime] = useState("13:00");
   const [deliveryLoading, setDeliveryLoading] = useState(false);
 
-  const [clock, setClock] = useState(bangkokNowParts());
+  const [clock, setClock] = useState(fallbackBangkokNowParts());
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatUnread, setChatUnread] = useState(0);
   const [error, setError] = useState("");
 
   const loadAccount = useCallback(async () => {
@@ -195,24 +199,49 @@ export default function AccountPage() {
     }
   }, [account]);
 
+  const loadClock = useCallback(async () => {
+    try {
+      const response = await fetch("/api/app-time", { cache: "no-store" });
+      const data = await response.json();
+      if (response.ok && data.ok) setClock(data.clock);
+    } catch { /* реальное время остаётся запасным */ }
+  }, []);
+
+  const loadChatUnread = useCallback(async () => {
+    if (!account) return;
+    try {
+      const response = await fetch("/api/chat", { cache: "no-store" });
+      const data = await response.json();
+      if (response.ok && data.ok) setChatUnread(Number(data.unreadCount || 0));
+    } catch { /* чат не должен ломать ЛК */ }
+  }, [account]);
+
   useEffect(() => {
     const rawDraft = localStorage.getItem("mealpoint_subscription_draft");
     if (rawDraft) {
       try { setDraft(JSON.parse(rawDraft) as SubscriptionDraft); } catch { localStorage.removeItem("mealpoint_subscription_draft"); }
     }
     void loadAccount();
+    void loadClock();
   }, [loadAccount]);
 
   useEffect(() => {
     if (!account) return;
     void loadSubscriptions();
     void loadDeliveries();
-  }, [account, loadSubscriptions, loadDeliveries]);
+    void loadChatUnread();
+  }, [account, loadSubscriptions, loadDeliveries, loadChatUnread]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setClock(bangkokNowParts()), 60_000);
+    const timer = window.setInterval(() => void loadClock(), 30_000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [loadClock]);
+
+  useEffect(() => {
+    if (!account) return;
+    const timer = window.setInterval(() => void loadChatUnread(), 10_000);
+    return () => window.clearInterval(timer);
+  }, [account, loadChatUnread]);
 
   useEffect(() => {
     if (!account || !subscriptions.some((subscription) => subscription.status === "AWAITING_ACTIVATION")) return;
@@ -301,6 +330,8 @@ export default function AccountPage() {
     setAccount(null);
     setSubscriptions([]);
     setQrSubscriptionId(null);
+    setChatUnread(0);
+    setChatOpen(false);
   }
 
   function openPayment() {
@@ -425,8 +456,10 @@ export default function AccountPage() {
     <main className="page-shell account-page">
       <section className="account-top">
         <div><span className="eyebrow">Личный кабинет</span><h1>Здравствуйте, {profileName || "клиент MealPoint"}</h1><p>{account.phone}</p></div>
-        <div className="account-top-actions"><Link className="new-subscription-link" href="/#subscription">Оформить ещё одну подписку</Link><QuestionLink /><button type="button" className="text-button muted" onClick={logout}>Выйти</button></div>
+        <div className="account-top-actions"><button type="button" className="account-message-button" aria-label="Сообщения" onClick={() => setChatOpen(true)}>✉{chatUnread > 0 && <span className="message-alert">!</span>}</button><Link className="new-subscription-link" href="/#subscription">Оформить ещё одну подписку</Link><QuestionLink /><button type="button" className="text-button muted" onClick={logout}>Выйти</button></div>
       </section>
+
+      {clock.isTestMode && <p className="test-mode-banner">Тестовый режим: сайт считает текущим временем {formatDate(clock.date)}, {String(clock.hour).padStart(2,"0")}:{String(clock.minute || 0).padStart(2,"0")}</p>}
 
       {error && <p className="form-error account-error">{error}</p>}
 
@@ -545,6 +578,7 @@ export default function AccountPage() {
       {qrSubscription && <div className="modal-backdrop"><div className="payment-modal qr-display-modal"><button className="modal-close" type="button" onClick={() => setQrSubscriptionId(null)}>×</button><span className="eyebrow">QR этой подписки</span><h2>{qrSubscription.code}</h2><p>{formatDate(qrSubscription.starts_on)} — {formatDate(qrSubscription.ends_on)}</p><div className="qr-display-box"><img src={qrModalUrl} alt={`QR-код ${qrSubscription.code}`} /></div><button className="close-qr-button" type="button" onClick={() => setQrSubscriptionId(null)}>Закрыть QR</button></div></div>}
 
       {deliverySubscription && <div className="modal-backdrop"><div className="payment-modal pickup-delivery-modal"><button className="modal-close" type="button" onClick={() => setDeliverySubscription(null)}>×</button><span className="eyebrow">Доставка из ПВ</span><h2>{deliverySubscription.pickup_point_name}</h2><p>Обед за {formatDate(deliveryDate)}. Доставка оплачивается клиентом по тарифу Grab Taxi.</p><label>Имя<input value={deliveryName} onChange={(event) => setDeliveryName(event.target.value)} /></label><label>Телефон<input value={deliveryPhone} onChange={(event) => setDeliveryPhone(event.target.value)} /></label><label>Адрес доставки<textarea value={deliveryAddress} onChange={(event) => setDeliveryAddress(event.target.value)} /></label><label>Время<select value={deliveryType} onChange={(event) => setDeliveryType(event.target.value as "ASAP" | "SCHEDULED")}><option value="ASAP">Ближайшее</option><option value="SCHEDULED">Определённое время</option></select></label>{deliveryType === "SCHEDULED" && <label>Время доставки<input type="time" value={deliveryTime} onChange={(event) => setDeliveryTime(event.target.value)} /></label>}<button type="button" disabled={deliveryLoading} onClick={submitPickupDelivery}>{deliveryLoading ? "Оформляем…" : "Заказать и открыть Telegram"}</button></div></div>}
+      <ChatWindow open={chatOpen} onClose={() => setChatOpen(false)} mode="CUSTOMER" title="Чат с администратором" onRead={() => setChatUnread(0)} />
     </main>
   );
 }

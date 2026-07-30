@@ -3,20 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedAccount } from "../../../lib/auth";
 import { query, withTransaction } from "../../../lib/db";
 import { notifyManagerTelegram } from "../../../lib/telegram";
-import { getBangkokTodayIso, normalizePhone } from "../../../lib/subscriptions";
+import { getAppClock } from "../../../lib/app-time";
+import { normalizePhone } from "../../../lib/subscriptions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-
-function getBangkokHour() {
-  const hour = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Bangkok",
-    hour: "2-digit",
-    hourCycle: "h23"
-  }).formatToParts(new Date()).find((part) => part.type === "hour")?.value;
-  return Number(hour || "0");
-}
 
 function botUrl(token: string) {
   const username = (process.env.TELEGRAM_BOT_USERNAME || "").replace(/^@/, "").trim();
@@ -59,8 +51,9 @@ export async function POST(request: NextRequest) {
 
     if (!subscriptionId || !/^\d{4}-\d{2}-\d{2}$/.test(serviceDate)) return NextResponse.json({ ok: false, error: "Не выбрана подписка или дата" }, { status: 400 });
     if (customerName.length < 2 || phone.length < 8 || address.length < 5) return NextResponse.json({ ok: false, error: "Заполните имя, телефон и адрес" }, { status: 400 });
-    if (serviceDate !== getBangkokTodayIso()) return NextResponse.json({ ok: false, error: "Доставку из ПВ можно заказать только на сегодняшний обед" }, { status: 400 });
-    if (getBangkokHour() < 12) return NextResponse.json({ ok: false, error: "Заказать доставку из ПВ можно после 12:00 по времени Пхукета" }, { status: 400 });
+    const clock = await getAppClock();
+    if (serviceDate !== clock.date) return NextResponse.json({ ok: false, error: "Доставку из ПВ можно заказать только на сегодняшний обед" }, { status: 400 });
+    if (clock.hour < 12) return NextResponse.json({ ok: false, error: "Заказать доставку из ПВ можно после 12:00 по времени Пхукета" }, { status: 400 });
     if (deliveryType === "SCHEDULED" && !/^\d{2}:\d{2}$/.test(requestedTime || "")) return NextResponse.json({ ok: false, error: "Выберите время доставки" }, { status: 400 });
 
     const token = randomBytes(18).toString("base64url");

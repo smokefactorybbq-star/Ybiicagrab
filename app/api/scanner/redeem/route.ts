@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import type { PoolClient } from "pg";
 import { withTransaction } from "../../../../lib/db";
+import { getAppClock } from "../../../../lib/app-time";
 import { parseSubscriptionQrPayload, verifySubscriptionQrSignature } from "../../../../lib/qr";
 
 export const runtime = "nodejs";
@@ -44,20 +45,6 @@ class ScanError extends Error {
   ) {
     super(message);
   }
-}
-
-function getBangkokTodayIso() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Bangkok",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(new Date());
-
-  const year = parts.find((part) => part.type === "year")?.value;
-  const month = parts.find((part) => part.type === "month")?.value;
-  const day = parts.find((part) => part.type === "day")?.value;
-  return `${year}-${month}-${day}`;
 }
 
 function authorizeScanner(request: Request) {
@@ -120,7 +107,7 @@ export async function POST(request: Request) {
     const parsed = parseSubscriptionQrPayload(payload);
     if (!parsed) throw new ScanError("INVALID_QR", "Это не QR-код MealPoint");
 
-    let today = getBangkokTodayIso();
+    let today = (await getAppClock()).date;
     if (testMode) {
       if (process.env.SCANNER_TEST_MODE !== "true") {
         throw new ScanError("TEST_MODE_DISABLED", "Тестовый режим отключён в Railway", 403);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getMealTemplateForDate, mealTemplates } from "../data/meals";
 import QuestionLink from "./QuestionLink";
@@ -40,8 +40,7 @@ function addDays(isoDate: string, amount: number) {
   return new Date(Date.UTC(year, month - 1, day + amount)).toISOString().slice(0, 10);
 }
 
-function makeDays(): CalendarDay[] {
-  const today = bangkokTodayIso();
+function makeDays(today: string): CalendarDay[] {
   return Array.from({ length: 180 }, (_, index) => {
     const id = addDays(today, index + 1);
     const [year, month, day] = id.split("-").map(Number);
@@ -63,10 +62,12 @@ function sameDates(left: string[], right: string[]) {
 
 export default function SubscriptionCalendar() {
   const router = useRouter();
-  const days = useMemo(() => makeDays(), []);
+  const [todayIso, setTodayIso] = useState(bangkokTodayIso());
+  const [testMode, setTestMode] = useState(false);
+  const days = useMemo(() => makeDays(todayIso), [todayIso]);
   const [selected, setSelected] = useState<string[]>([]);
   const [packageDays, setPackageDays] = useState<7 | 14 | 30 | null>(null);
-  const [packageStart, setPackageStart] = useState(days[0].id);
+  const [packageStart, setPackageStart] = useState(addDays(todayIso, 1));
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [checkingDuplicate, setCheckingDuplicate] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
@@ -76,6 +77,20 @@ export default function SubscriptionCalendar() {
   const selectedSet = useMemo(() => new Set(selected), [selected]);
   const selectedStartIndex = selected.length ? days.findIndex((day) => day.id === selected[0]) : -1;
   const selectedEndIndex = selected.length ? selectedStartIndex + selected.length - 1 : -1;
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/app-time", { cache: "no-store" }).then((response) => response.json()).then((data) => {
+      if (cancelled || !data?.ok) return;
+      const nextToday = String(data.clock.date || todayIso);
+      setTodayIso(nextToday);
+      setTestMode(Boolean(data.clock.isTestMode));
+      setPackageStart(addDays(nextToday, 1));
+      setSelected([]);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function toggleDay(index: number) {
     setSelected((current) => {
@@ -152,6 +167,8 @@ export default function SubscriptionCalendar() {
         </div>
         <QuestionLink />
       </div>
+
+      {testMode && <p className="test-mode-banner">Тестовый режим включён: календарь построен относительно {todayIso}.</p>}
 
       <div className="calendar-actions consecutive-actions">
         <button type="button" className="text-button" onClick={() => openPackagePicker(7)}>Выбрать 7 дней</button>

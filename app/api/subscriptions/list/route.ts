@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedAccount } from "../../../../lib/auth";
 import { query } from "../../../../lib/db";
-import { getBangkokTodayIso } from "../../../../lib/subscriptions";
+import { getAppClock } from "../../../../lib/app-time";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
       daysBySubscription.set(day.subscription_id, current);
     }
 
-    const today = getBangkokTodayIso();
+    const today = (await getAppClock()).date;
     return NextResponse.json({
       ok: true,
       subscriptions: subscriptionsResult.rows.map((subscription) => {

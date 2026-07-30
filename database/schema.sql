@@ -287,3 +287,39 @@ CREATE INDEX IF NOT EXISTS pickup_delivery_requests_user_idx
   ON pickup_delivery_requests(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS pickup_delivery_requests_status_idx
   ON pickup_delivery_requests(status, created_at DESC);
+
+-- Global test clock and permanent customer-manager chat — v0.7.0.
+CREATE TABLE IF NOT EXISTS app_runtime_settings (
+  id smallint PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  test_mode boolean NOT NULL DEFAULT false,
+  test_datetime_local varchar(16),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+INSERT INTO app_runtime_settings (id, test_mode, test_datetime_local)
+VALUES (1, false, NULL)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS customer_conversations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS customer_messages (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id uuid NOT NULL REFERENCES customer_conversations(id) ON DELETE CASCADE,
+  sender_role text NOT NULL CHECK (sender_role IN ('CUSTOMER', 'MANAGER')),
+  body text NOT NULL CHECK (char_length(body) BETWEEN 1 AND 4000),
+  read_by_customer_at timestamptz,
+  read_by_manager_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS customer_messages_conversation_idx
+  ON customer_messages(conversation_id, created_at ASC);
+CREATE INDEX IF NOT EXISTS customer_messages_manager_unread_idx
+  ON customer_messages(conversation_id, created_at)
+  WHERE sender_role = 'CUSTOMER' AND read_by_manager_at IS NULL;
+CREATE INDEX IF NOT EXISTS customer_messages_customer_unread_idx
+  ON customer_messages(conversation_id, created_at)
+  WHERE sender_role = 'MANAGER' AND read_by_customer_at IS NULL;
