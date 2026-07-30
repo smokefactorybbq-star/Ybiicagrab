@@ -133,6 +133,7 @@ export default function AccountPage() {
   const [paymentMethod, setPaymentMethod] = useState(paymentOptions[0].id);
   const [submittingPayment, setSubmittingPayment] = useState(false);
   const [pauseLoading, setPauseLoading] = useState("");
+  const [pauseConfirm, setPauseConfirm] = useState<{ subscriptionId: string; serviceDate: string } | null>(null);
   const [qrSubscriptionId, setQrSubscriptionId] = useState<string | null>(null);
 
   const [deliverySubscription, setDeliverySubscription] = useState<Subscription | null>(null);
@@ -379,6 +380,7 @@ export default function AccountPage() {
       });
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || "Не удалось поставить подписку на паузу");
+      setPauseConfirm(null);
       await loadSubscriptions();
     } catch (pauseError) {
       setError(pauseError instanceof Error ? pauseError.message : "Ошибка включения паузы");
@@ -510,12 +512,6 @@ export default function AccountPage() {
                         <article className="profile-card subscription-info-card"><span className="card-label">Данные подписки</span><strong>{subscription.code}</strong><p>{subscription.pickup_point_name || "Пункт выдачи не выбран"}</p>{subscription.pickup_point_name && <PickupRouteButton pickupPointName={subscription.pickup_point_name} label="Маршрут до ПВ" />}</article>
                       </section>
 
-                      <section className={`pause-card ${subscription.pause_limit > 0 ? "pause-enabled" : "pause-disabled"}`}>
-                        <div><span className="eyebrow">Пауза этой подписки</span><h2>{subscription.pause_limit > 0 ? `Доступно пауз: ${Math.max(0, subscription.pause_limit - subscription.pauses_used)}` : "Пауза недоступна"}</h2><p>7 дней — 1 пауза, 14 дней — 2, 30 дней — 3.</p></div>
-                        <div className="pause-days">{subscription.days.map((day) => { const loadingKey = `${subscription.id}:${day.service_date}`; const canPause = subscription.pause_limit > subscription.pauses_used && ["PLANNED", "AVAILABLE"].includes(day.status); return <button key={day.service_date} className={["PAUSED", "PAUSE_REQUESTED"].includes(day.status) ? "paused-day-button" : ""} type="button" disabled={!canPause || pauseLoading === loadingKey} onClick={() => requestPause(subscription.id, day.service_date)}>{formatDate(day.service_date)}<span>{pauseLoading === loadingKey ? "Ставим паузу…" : statusLabels[day.status] || day.status}</span></button>; })}</div>
-                        <small>Использовано пауз: {subscription.pauses_used} из {subscription.pause_limit}</small>
-                      </section>
-
                       <section className="history-card">
                         <div className="history-tabs"><strong>Еда по этой подписке</strong></div>
                         <div className="history-list subscription-meal-history">
@@ -536,6 +532,12 @@ export default function AccountPage() {
                             );
                           })}
                         </div>
+                      </section>
+
+                      <section className={`pause-card ${subscription.pause_limit > 0 ? "pause-enabled" : "pause-disabled"}`}>
+                        <div><span className="eyebrow">Пауза этой подписки</span><h2>{subscription.pause_limit > 0 ? `Доступно пауз: ${Math.max(0, subscription.pause_limit - subscription.pauses_used)}` : "Пауза недоступна"}</h2><p>7 дней — 1 пауза, 14 дней — 2, 30 дней — 3.</p></div>
+                        <div className="pause-days">{subscription.days.map((day) => { const loadingKey = `${subscription.id}:${day.service_date}`; const canPause = subscription.pause_limit > subscription.pauses_used && ["PLANNED", "AVAILABLE"].includes(day.status); return <button key={day.service_date} className={["PAUSED", "PAUSE_REQUESTED"].includes(day.status) ? "paused-day-button" : ""} type="button" disabled={!canPause || pauseLoading === loadingKey} onClick={() => setPauseConfirm({ subscriptionId: subscription.id, serviceDate: day.service_date })}>{formatDate(day.service_date)}<span>{pauseLoading === loadingKey ? "Ставим паузу…" : statusLabels[day.status] || day.status}</span></button>; })}</div>
+                        <small>Использовано пауз: {subscription.pauses_used} из {subscription.pause_limit}</small>
                       </section>
                     </details>
                   )}
@@ -568,6 +570,25 @@ export default function AccountPage() {
             <label className="terms-checkbox"><input type="checkbox" checked={termsChecked} onChange={(event) => setTermsChecked(event.target.checked)} /><span>Я ознакомился с правилами и условиями</span></label>
             <button type="button" disabled={!termsChecked || termsLoading} onClick={acceptTerms}>{termsLoading ? "Сохраняем…" : "Продолжить"}</button>
           </div>
+        </div>
+      )}
+
+      {pauseConfirm && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.currentTarget === event.target && !pauseLoading) setPauseConfirm(null);
+        }}>
+          <section className="payment-modal pause-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="pause-confirm-title">
+            <button className="modal-close" type="button" aria-label="Закрыть" disabled={Boolean(pauseLoading)} onClick={() => setPauseConfirm(null)}>×</button>
+            <span className="eyebrow">Пауза подписки</span>
+            <h2 id="pause-confirm-title">Подтвердите паузу</h2>
+            <p>Вы уверены, что хотите поставить на паузу вашу подписку на <b>{formatDate(pauseConfirm.serviceDate)}</b>?</p>
+            <div className="pause-confirm-actions">
+              <button type="button" className="confirm-no" disabled={Boolean(pauseLoading)} onClick={() => setPauseConfirm(null)}>Нет</button>
+              <button type="button" className="confirm-yes" disabled={Boolean(pauseLoading)} onClick={() => void requestPause(pauseConfirm.subscriptionId, pauseConfirm.serviceDate)}>
+                {pauseLoading ? "Ставим на паузу…" : "Да, поставить на паузу"}
+              </button>
+            </div>
+          </section>
         </div>
       )}
 

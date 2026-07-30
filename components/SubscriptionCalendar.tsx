@@ -161,7 +161,7 @@ export default function SubscriptionCalendar() {
     <section id="subscription" className="subscription-section">
       <div className="section-heading split-heading">
         <div>
-          <span className="eyebrow">Съедобная подписка</span>
+          <span className="eyebrow">Меню подписки</span>
           <h2>Целый месяц <em>неодинаковой</em> еды</h2>
           <p>Оформи подписку — и уже завтра твой первый обед тебя удивит. Для пакетов на 7, 14 или 30 дней можно выбрать удобную дату начала.</p>
         </div>

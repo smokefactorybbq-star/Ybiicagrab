@@ -13,7 +13,7 @@ export default function HomePage() {
           <p>Разные сытные обеды на каждый выбранный день. Без закупок, готовки и одинаковой еды всю неделю.</p>
           <div className="hero-actions">
             <Link className="primary-link" href="#subscription">Выбрать дни</Link>
-            <Link className="secondary-link" href="/delivery">Заказать доставку</Link>
+            <Link className="secondary-link" href="/delivery">Меню кафе</Link>
             <QuestionLink className="question-link question-link-light" />
           </div>
           <div className="hero-facts">

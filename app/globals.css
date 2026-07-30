@@ -822,3 +822,84 @@ img { display: block; max-width: 100%; }
   opacity: .55;
   cursor: wait;
 }
+
+/* Cafe catalog, protected deletion and pause confirmation — v0.7.3 */
+.cafe-catalog-page { padding-bottom: 72px; }
+.cafe-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
+  margin-top: 34px;
+}
+.cafe-catalog-card {
+  display: grid;
+  gap: 20px;
+  min-height: 340px;
+  padding: 22px;
+  border: 1px solid rgba(35, 74, 61, .09);
+  border-radius: 28px;
+  color: var(--ink);
+  background: white;
+  box-shadow: var(--shadow);
+  text-decoration: none;
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.cafe-catalog-card:hover { transform: translateY(-5px); box-shadow: 0 24px 60px rgba(34, 56, 47, .14); }
+.cafe-logo-tile {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1.35;
+  border-radius: 22px;
+  color: white;
+  font-size: clamp(48px, 7vw, 84px);
+  font-weight: 1000;
+  letter-spacing: -5px;
+  text-shadow: 0 7px 20px rgba(0,0,0,.18);
+}
+.cafe-logo-smoke { background: linear-gradient(145deg, #1d201f, #5b2a1d 68%, #e36b3f); }
+.cafe-logo-senya { background: linear-gradient(145deg, #f0a13b, #d54e2e 72%, #7c251c); }
+.cafe-logo-kvas { background: linear-gradient(145deg, #1f6d5d, #28513d 62%, #c49b45); }
+.cafe-catalog-card h2 { margin: 0 0 7px; font-size: 27px; letter-spacing: -1px; }
+.cafe-catalog-card p { min-height: 46px; margin: 0 0 20px; color: #687671; line-height: 1.5; }
+.cafe-catalog-card span { color: var(--green); font-weight: 900; }
+.cafe-menu-intro { align-items: center; justify-content: flex-start; }
+.cafe-menu-intro > div:nth-child(2) { flex: 1; }
+.cafe-menu-intro > .question-link { margin-left: auto; }
+.cafe-logo-large {
+  display: grid;
+  place-items: center;
+  flex: 0 0 112px;
+  width: 112px;
+  height: 112px;
+  border-radius: 28px;
+  color: white;
+  font-size: 42px;
+  font-weight: 1000;
+  letter-spacing: -3px;
+  box-shadow: var(--shadow);
+}
+.cafe-back-link { display: inline-block; margin-top: 8px; color: var(--green); font-weight: 900; }
+.checkout-cafe-name { display: block; margin: -8px 0 13px; color: #74817c; font-weight: 800; }
+.delete-confirm-modal, .pause-confirm-modal { width: min(560px, 100%); text-align: left; }
+.delete-confirm-modal label { display: grid; gap: 8px; margin-top: 18px; color: #5f6c67; font-weight: 900; }
+.delete-confirm-modal input { width: 100%; border: 1px solid var(--line); padding: 13px; border-radius: 12px; background: var(--paper); font: inherit; }
+.delete-warning { padding: 13px 14px; border-radius: 13px; color: #8d2520; background: #fff0ed; line-height: 1.45; }
+.delete-confirm-actions, .pause-confirm-actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 11px; margin-top: 20px; }
+.delete-confirm-cancel { color: var(--ink) !important; background: #eeeae2 !important; }
+.delete-confirm-submit { color: white !important; background: #b92d27 !important; }
+.pause-confirm-modal p { color: #56645f; line-height: 1.55; }
+.pause-confirm-actions .confirm-no { color: var(--ink); background: #eeeae2; }
+.pause-confirm-actions .confirm-yes { color: white; background: var(--green); }
+
+@media (max-width: 900px) {
+  .cafe-catalog-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 680px) {
+  .cafe-catalog-grid { grid-template-columns: 1fr; }
+  .cafe-catalog-card { min-height: auto; }
+  .cafe-menu-intro { display: grid; grid-template-columns: auto 1fr; }
+  .cafe-menu-intro > .question-link { grid-column: 1 / -1; margin-left: 0; }
+  .cafe-logo-large { width: 82px; height: 82px; flex-basis: 82px; border-radius: 21px; font-size: 31px; }
+  .delete-confirm-actions, .pause-confirm-actions { grid-template-columns: 1fr; }
+}

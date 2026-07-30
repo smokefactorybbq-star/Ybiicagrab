@@ -96,6 +96,9 @@ export default function ManagerPage() {
   const [contactPoint, setContactPoint] = useState<PickupPointToday | null>(null);
   const [loading, setLoading] = useState(false);
   const [activating, setActivating] = useState("");
+  const [deleting, setDeleting] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<ManagerSubscription | null>(null);
+  const [deletePassword, setDeletePassword] = useState("");
   const [savingPoint, setSavingPoint] = useState("");
   const [error, setError] = useState("");
   const [authorized, setAuthorized] = useState(false);
@@ -177,6 +180,40 @@ export default function ManagerPage() {
       setError(activateError instanceof Error ? activateError.message : "Ошибка активации");
     } finally {
       setActivating("");
+    }
+  }
+
+
+  async function deleteSubscription() {
+    if (!deleteTarget) return;
+    if (!deletePassword) {
+      setError("Введите пароль менеджера для удаления подписки");
+      return;
+    }
+
+    setDeleting(deleteTarget.id);
+    setError("");
+    try {
+      const response = await fetch("/api/manager/subscriptions", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "x-manager-password": deletePassword
+        },
+        body: JSON.stringify({ id: deleteTarget.id })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || "Не удалось удалить подписку");
+      }
+      setSubscriptions((current) => current.filter((subscription) => subscription.id !== deleteTarget.id));
+      setDeleteTarget(null);
+      setDeletePassword("");
+      await loadManagerData();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Не удалось удалить подписку");
+    } finally {
+      setDeleting("");
     }
   }
 
@@ -391,11 +428,25 @@ export default function ManagerPage() {
                   <td><strong>{item.total_thb.toLocaleString("ru-RU")} ฿</strong><small>{item.rate_thb} ฿/день</small></td>
                   <td><span className={`status-pill status-${item.status.toLowerCase()}`}>{statusLabels[item.status] || item.status}</span><small>Пауз: {item.pauses_used}/{item.pause_limit}</small><small>Осталось: {item.remaining_portions}</small></td>
                   <td>
-                    {item.status === "AWAITING_ACTIVATION" ? (
-                      <button className="activate-button" type="button" disabled={activating === item.id} onClick={() => void activateSubscription(item.id)}>
-                        {activating === item.id ? "Активируем…" : "Активировать"}
+                    <div className="manager-action-stack">
+                      {item.status === "AWAITING_ACTIVATION" ? (
+                        <button className="activate-button" type="button" disabled={activating === item.id} onClick={() => void activateSubscription(item.id)}>
+                          {activating === item.id ? "Активируем…" : "Активировать"}
+                        </button>
+                      ) : item.status === "PENDING_PAYMENT" ? (
+                        <span className="manager-payment-waiting">Не оплачено</span>
+                      ) : (
+                        <span className="manager-done">Готово</span>
+                      )}
+                      <button
+                        className="delete-subscription-button"
+                        type="button"
+                        disabled={deleting === item.id}
+                        onClick={() => { setDeleteTarget(item); setDeletePassword(""); setError(""); }}
+                      >
+                        {deleting === item.id ? "Удаляем…" : "Удалить"}
                       </button>
-                    ) : <span className="manager-done">Готово</span>}
+                    </div>
                   </td>
                   <td><button type="button" className="manager-message-button" onClick={() => setChatClient({ userId: item.user_id, fullName: item.full_name, phone: item.phone })}>Написать{item.manager_unread_count > 0 && <span className="message-alert">!</span>}</button></td>
                 </tr>
@@ -407,6 +458,36 @@ export default function ManagerPage() {
           </table>
         </div>
       </section>
+
+      {deleteTarget && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.currentTarget === event.target && !deleting) { setDeleteTarget(null); setDeletePassword(""); }
+        }}>
+          <section className="payment-modal delete-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="delete-subscription-title">
+            <button className="modal-close" type="button" aria-label="Закрыть" disabled={Boolean(deleting)} onClick={() => { setDeleteTarget(null); setDeletePassword(""); }}>×</button>
+            <span className="eyebrow">Удаление подписки</span>
+            <h2 id="delete-subscription-title">Подтвердите удаление</h2>
+            <p><b>{deleteTarget.full_name}</b> · {deleteTarget.code || "код ещё не присвоен"}</p>
+            <p className="delete-warning">Подписка, её даты, QR-сканирования и заявки доставки будут удалены без возможности восстановления.</p>
+            <label>Пароль менеджера
+              <input
+                type="password"
+                value={deletePassword}
+                onChange={(event) => setDeletePassword(event.target.value)}
+                placeholder="Введите пароль"
+                autoFocus
+                onKeyDown={(event) => { if (event.key === "Enter") void deleteSubscription(); }}
+              />
+            </label>
+            <div className="delete-confirm-actions">
+              <button type="button" className="delete-confirm-cancel" disabled={Boolean(deleting)} onClick={() => { setDeleteTarget(null); setDeletePassword(""); }}>Отмена</button>
+              <button type="button" className="delete-confirm-submit" disabled={Boolean(deleting) || !deletePassword} onClick={() => void deleteSubscription()}>
+                {deleting ? "Удаляем…" : "Удалить подписку"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {contactPoint && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {

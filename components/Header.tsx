@@ -21,8 +21,8 @@ export default function Header() {
       </Link>
 
       <nav className="desktop-nav" aria-label="Основная навигация">
-        <Link href="/#subscription">Съедобная подписка</Link>
-        <Link href="/delivery">Заказать доставку</Link>
+        <Link href="/#subscription">Меню подписки</Link>
+        <Link href="/delivery">Меню кафе</Link>
         <Link href="/rules">Правила и условия</Link>
         <Link href="/contacts">Контакты</Link>
       </nav>

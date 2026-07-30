@@ -134,3 +134,48 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ ok: false, error: message }, { status: 400 });
   }
 }
+
+export async function DELETE(request: Request) {
+  const auth = authorizeManager(request);
+  if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
+
+  try {
+    const body = await request.json() as { id?: unknown };
+    const id = typeof body.id === "string" ? body.id.trim() : "";
+
+    if (!id) {
+      return NextResponse.json({ ok: false, error: "Не указана подписка" }, { status: 400 });
+    }
+
+    const deleted = await withTransaction(async (client) => {
+      const current = await client.query<{ id: string; status: string; code: string }>(
+        `SELECT id, status, code
+         FROM subscriptions
+         WHERE id = $1
+         FOR UPDATE`,
+        [id]
+      );
+
+      const subscription = current.rows[0];
+      if (!subscription) throw new Error("NOT_FOUND");
+
+      // У subscription_scans нет ON DELETE CASCADE, поэтому журнал сканирований
+      // удаляется первым. Остальные связанные записи очищаются явно.
+      await client.query(`DELETE FROM subscription_scans WHERE subscription_id = $1`, [id]);
+      await client.query(`DELETE FROM pickup_delivery_requests WHERE subscription_id = $1`, [id]);
+      await client.query(`DELETE FROM manager_events WHERE entity_id = $1`, [id]);
+      await client.query(`DELETE FROM subscriptions WHERE id = $1`, [id]);
+
+      return { id: subscription.id, code: subscription.code };
+    });
+
+    return NextResponse.json({ ok: true, deleted });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "";
+    const message = code === "NOT_FOUND"
+      ? "Подписка не найдена"
+      : "Не удалось удалить подписку";
+    const status = code === "NOT_FOUND" ? 404 : 400;
+    return NextResponse.json({ ok: false, error: message }, { status });
+  }
+}
