@@ -1,14 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getAuthenticatedAccount } from "../../../../lib/auth";
 import { query } from "../../../../lib/db";
-import { getBangkokTodayIso, hashToken } from "../../../../lib/subscriptions";
+import { getBangkokTodayIso } from "../../../../lib/subscriptions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-type CredentialInput = {
-  id?: unknown;
-  accessToken?: unknown;
-};
 
 type SubscriptionRow = {
   id: string;
@@ -29,8 +25,6 @@ type SubscriptionRow = {
   full_name: string;
   phone: string | null;
   created_at: string;
-  account_access_hash: string | null;
-  qr_secret_hash: string;
 };
 
 type SubscriptionDayRow = {
@@ -39,65 +33,36 @@ type SubscriptionDayRow = {
   status: string;
 };
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 function toIsoDate(value: unknown) {
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return value.toISOString().slice(0, 10);
-  }
-
-  const match = String(value || "").match(/^(\d{4}-\d{2}-\d{2})/);
-  return match?.[1] || "";
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  return String(value || "").match(/^(\d{4}-\d{2}-\d{2})/)?.[1] || "";
 }
 
-export async function POST(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const body = await request.json() as { credentials?: unknown };
-    const rawCredentials = Array.isArray(body.credentials) ? body.credentials : [];
-
-    const credentials = rawCredentials
-      .slice(0, 200)
-      .map((item) => item as CredentialInput)
-      .map((item) => ({
-        id: typeof item.id === "string" ? item.id.trim() : "",
-        accessToken: typeof item.accessToken === "string" ? item.accessToken.trim() : ""
-      }))
-      .filter((item) => UUID_PATTERN.test(item.id) && item.accessToken.length >= 20);
-
-    if (!credentials.length) {
-      return NextResponse.json({ ok: true, subscriptions: [] });
-    }
-
-    const tokenById = new Map(credentials.map((item) => [item.id, item.accessToken]));
-    const ids = [...tokenById.keys()];
+    const account = await getAuthenticatedAccount(request);
+    if (!account) return NextResponse.json({ ok: false, error: "Требуется вход" }, { status: 401 });
 
     const subscriptionsResult = await query<SubscriptionRow>(
       `SELECT s.*, u.full_name, u.phone
        FROM subscriptions s
        JOIN users u ON u.id = s.user_id
-       WHERE s.id = ANY($1::uuid[])
-       ORDER BY s.created_at DESC`,
-      [ids]
+       WHERE s.user_id = $1
+       ORDER BY s.created_at DESC
+       LIMIT 300`,
+      [account.userId]
     );
 
-    const authorized = subscriptionsResult.rows.filter((subscription) => {
-      const token = tokenById.get(subscription.id);
-      const expectedHash = subscription.account_access_hash || subscription.qr_secret_hash;
-      return Boolean(token && expectedHash && hashToken(token) === expectedHash);
-    });
-
-    if (!authorized.length) {
-      return NextResponse.json({ ok: true, subscriptions: [] });
-    }
-
-    const authorizedIds = authorized.map((item) => item.id);
-    const daysResult = await query<SubscriptionDayRow>(
-      `SELECT subscription_id, service_date::text, status
-       FROM subscription_days
-       WHERE subscription_id = ANY($1::uuid[])
-       ORDER BY service_date ASC`,
-      [authorizedIds]
-    );
+    const ids = subscriptionsResult.rows.map((item) => item.id);
+    const daysResult = ids.length
+      ? await query<SubscriptionDayRow>(
+          `SELECT subscription_id, service_date::text, status
+           FROM subscription_days
+           WHERE subscription_id = ANY($1::uuid[])
+           ORDER BY service_date ASC`,
+          [ids]
+        )
+      : { rows: [] as SubscriptionDayRow[] };
 
     const daysBySubscription = new Map<string, Array<{ service_date: string; status: string }>>();
     for (const day of daysResult.rows) {
@@ -106,30 +71,24 @@ export async function POST(request: Request) {
       daysBySubscription.set(day.subscription_id, current);
     }
 
+    const today = getBangkokTodayIso();
     return NextResponse.json({
       ok: true,
-      subscriptions: authorized.map((subscription) => {
-        const {
-          account_access_hash: _accountHash,
-          qr_secret_hash: _qrHash,
-          ...safeSubscription
-        } = subscription;
-
+      subscriptions: subscriptionsResult.rows.map((subscription) => {
         const days = daysBySubscription.get(subscription.id) || [];
-        const todayStatus = days.find((day) => day.service_date === getBangkokTodayIso())?.status;
+        const todayStatus = days.find((day) => day.service_date === today)?.status;
         const qrPausedToday = ["PAUSED", "PAUSE_REQUESTED"].includes(todayStatus || "");
-
         return {
-          ...safeSubscription,
+          ...subscription,
           starts_on: toIsoDate(subscription.starts_on),
           ends_on: toIsoDate(subscription.ends_on),
-          code: subscription.status === "ACTIVE" ? subscription.code : null,
+          code: subscription.status === "ACTIVE" || subscription.status === "COMPLETED" ? subscription.code : null,
           qrEnabled: subscription.status === "ACTIVE" && !qrPausedToday,
           qrPausedToday,
           days
         };
       })
-    });
+    }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("List subscriptions failed", error);
     return NextResponse.json({ ok: false, error: "Не удалось загрузить список подписок" }, { status: 500 });

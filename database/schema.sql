@@ -240,3 +240,50 @@ CREATE TABLE IF NOT EXISTS pickup_point_daily_inventory (
 
 CREATE INDEX IF NOT EXISTS pickup_point_daily_inventory_date_idx
   ON pickup_point_daily_inventory(service_date, pickup_point_name);
+
+-- Customer accounts, cross-device login and pickup delivery requests — v0.6.0.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS address text;
+
+CREATE TABLE IF NOT EXISTS customer_accounts (
+  user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  phone text UNIQUE NOT NULL,
+  password_hash text NOT NULL,
+  terms_version text NOT NULL DEFAULT '2026-07-30',
+  terms_accepted_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS customer_sessions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash text UNIQUE NOT NULL,
+  expires_at timestamptz NOT NULL,
+  last_used_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS customer_sessions_user_idx ON customer_sessions(user_id, expires_at DESC);
+CREATE INDEX IF NOT EXISTS customer_sessions_expiry_idx ON customer_sessions(expires_at);
+
+CREATE TABLE IF NOT EXISTS pickup_delivery_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  public_token text UNIQUE NOT NULL,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  subscription_id uuid NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+  service_date date NOT NULL,
+  pickup_point_name text NOT NULL,
+  customer_name text NOT NULL,
+  customer_phone text NOT NULL,
+  delivery_address text NOT NULL,
+  delivery_type text NOT NULL CHECK (delivery_type IN ('ASAP', 'SCHEDULED')),
+  requested_time text,
+  status text NOT NULL DEFAULT 'NEW',
+  telegram_started_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(subscription_id, service_date)
+);
+CREATE INDEX IF NOT EXISTS pickup_delivery_requests_user_idx
+  ON pickup_delivery_requests(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS pickup_delivery_requests_status_idx
+  ON pickup_delivery_requests(status, created_at DESC);
