@@ -14,22 +14,31 @@ declare global {
 type Location = { latitude: number; longitude: number };
 
 function loadGoogleMaps(apiKey: string) {
-  if (window.google?.maps) return Promise.resolve();
+  if (typeof window.google?.maps?.importLibrary === "function") return Promise.resolve();
   if (window.__mealPointMapsPromise) return window.__mealPointMapsPromise;
 
   window.__mealPointMapsPromise = new Promise<void>((resolve, reject) => {
-    const existing = document.getElementById("mealpoint-google-maps") as HTMLScriptElement | null;
-    if (existing) {
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => reject(new Error("Google Maps не загрузилась")), { once: true });
-      return;
-    }
+    const callbackName = "__mealPointGoogleMapsReady";
+    const existing = document.getElementById("mealpoint-google-maps");
+
+    // Удаляем незавершённый/старый загрузчик, например после hot reload.
+    if (existing) existing.remove();
+
+    (window as any)[callbackName] = () => {
+      if (typeof window.google?.maps?.importLibrary === "function") {
+        resolve();
+      } else {
+        reject(new Error("Google Maps загрузилась не полностью"));
+      }
+    };
 
     const script = document.createElement("script");
     script.id = "mealpoint-google-maps";
     script.async = true;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&loading=async`;
-    script.onload = () => resolve();
+    script.defer = true;
+    script.src =
+      `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}` +
+      `&v=weekly&loading=async&callback=${callbackName}`;
     script.onerror = () => reject(new Error("Google Maps не загрузилась"));
     document.head.appendChild(script);
   });
@@ -72,24 +81,40 @@ export default function PhuketMap() {
     let cancelled = false;
 
     void loadGoogleMaps(apiKey)
-      .then(() => {
+      .then(async () => {
         if (cancelled || !mapNode.current || !window.google?.maps) return;
-        const map = new window.google.maps.Map(mapNode.current, {
+
+        const [mapsLibrary, markerLibrary] = await Promise.all([
+          window.google.maps.importLibrary("maps"),
+          window.google.maps.importLibrary("marker")
+        ]);
+
+        if (cancelled || !mapNode.current) return;
+
+        const MapConstructor = mapsLibrary.Map;
+        const AdvancedMarkerElement = markerLibrary.AdvancedMarkerElement;
+
+        if (typeof MapConstructor !== "function") {
+          throw new Error("Конструктор Google Maps не загрузился");
+        }
+
+        const map = new MapConstructor(mapNode.current, {
           center: { lat: 7.89, lng: 98.34 },
           zoom: 11,
+          mapId: "DEMO_MAP_ID",
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: true
         });
 
         pickupPoints.forEach((point) => {
-          const marker = new window.google.maps.Marker({
+          const marker = new AdvancedMarkerElement({
             map,
             position: { lat: point.latitude, lng: point.longitude },
             title: point.name,
-            label: "M"
+            gmpClickable: true
           });
-          marker.addListener("click", () => {
+          marker.addEventListener("gmp-click", () => {
             setSelected(point);
             map.panTo({ lat: point.latitude, lng: point.longitude });
             map.setZoom(14);
@@ -97,18 +122,20 @@ export default function PhuketMap() {
         });
 
         if (location) {
-          new window.google.maps.Marker({
+          const dot = document.createElement("div");
+          dot.setAttribute("aria-label", "Ваше местоположение");
+          dot.style.width = "18px";
+          dot.style.height = "18px";
+          dot.style.borderRadius = "50%";
+          dot.style.background = "#2367d1";
+          dot.style.border = "3px solid #ffffff";
+          dot.style.boxShadow = "0 1px 5px rgba(0,0,0,.35)";
+
+          new AdvancedMarkerElement({
             map,
             position: { lat: location.latitude, lng: location.longitude },
             title: "Ваше местоположение",
-            icon: {
-              path: window.google.maps.SymbolPath.CIRCLE,
-              scale: 8,
-              fillColor: "#2367d1",
-              fillOpacity: 1,
-              strokeColor: "#ffffff",
-              strokeWeight: 3
-            }
+            content: dot
           });
         }
       })
