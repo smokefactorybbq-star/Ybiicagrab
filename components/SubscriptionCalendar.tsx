@@ -231,14 +231,12 @@ export default function SubscriptionCalendar() {
               </span>
               <span className="meal-tag">{item.id === days[0].id ? "Можно начать завтра" : item.meal.tag}</span>
               <span className="meal-title">{visibleCourse.title}</span>
-              <span className="meal-description">Первое + второе · фото меняется каждые 5 секунд</span>
               {isNext && selected.length > 0 && <span className="next-day-hint">Добавить следующий день</span>}
             </button>
           );
         })}
       </div>
       <div className="calendar-drag-control">
-        <span>Тяните ползунок, чтобы двигать календарь в стороны</span>
         <input
           type="range"
           min="0"
