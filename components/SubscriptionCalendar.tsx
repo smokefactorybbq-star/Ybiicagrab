@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getMealTemplateForDate, mealTemplates } from "../data/meals";
+import { getMealTemplateForDate, type MealTemplate } from "../data/meals";
 import QuestionLink from "./QuestionLink";
 
 type CalendarDay = {
@@ -10,7 +10,7 @@ type CalendarDay = {
   day: number;
   weekday: string;
   monthLabel: string;
-  meal: (typeof mealTemplates)[number];
+  meal: MealTemplate;
 };
 
 type SubscriptionDraft = {
@@ -71,6 +71,8 @@ export default function SubscriptionCalendar() {
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [checkingDuplicate, setCheckingDuplicate] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
+  const [showFirstCourse, setShowFirstCourse] = useState(true);
+  const [scrollPosition, setScrollPosition] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const rate = getRate(selected.length);
   const total = selected.length * rate;
@@ -90,6 +92,11 @@ export default function SubscriptionCalendar() {
     }).catch(() => undefined);
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const rotation = window.setInterval(() => setShowFirstCourse((current) => !current), 5000);
+    return () => window.clearInterval(rotation);
   }, []);
 
   function toggleDay(index: number) {
@@ -119,6 +126,21 @@ export default function SubscriptionCalendar() {
     setSelected(days.slice(startIndex, startIndex + packageDays).map((day) => day.id));
     setPackageDays(null);
     requestAnimationFrame(() => document.getElementById(`meal-day-${packageStart}`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" }));
+  }
+
+  function moveCalendar(value: number) {
+    setScrollPosition(value);
+    const calendar = scrollRef.current;
+    if (!calendar) return;
+    const maximum = calendar.scrollWidth - calendar.clientWidth;
+    calendar.scrollLeft = maximum * (value / 1000);
+  }
+
+  function syncCalendarSlider() {
+    const calendar = scrollRef.current;
+    if (!calendar) return;
+    const maximum = calendar.scrollWidth - calendar.clientWidth;
+    setScrollPosition(maximum > 0 ? Math.round((calendar.scrollLeft / maximum) * 1000) : 0);
   }
 
   function saveDraftAndOpenAccount(duplicateConfirmed = false) {
@@ -194,22 +216,37 @@ export default function SubscriptionCalendar() {
         </div>
       </div>
 
-      <div className="calendar-scroll" ref={scrollRef}>
+      <div className="calendar-scroll" ref={scrollRef} onScroll={syncCalendarSlider}>
         {days.map((item, index) => {
           const isSelected = selectedSet.has(item.id);
           const isNext = selected.length ? selected.length < 30 && index === selectedEndIndex + 1 : index === 0;
           const isDisabled = !isSelected && !isNext;
+          const visibleCourse = showFirstCourse ? item.meal.firstCourse : item.meal.secondCourse;
           return (
             <button id={`meal-day-${item.id}`} type="button" key={item.id} className={`meal-day ${isSelected ? "selected" : ""} ${isNext ? "next-available" : ""}`} onClick={() => toggleDay(index)} aria-pressed={isSelected} disabled={isDisabled}>
               <span className="date-row"><strong>{item.day}</strong><span>{item.monthLabel} · {item.weekday}</span>{isSelected && <b>✓</b>}</span>
-              <img src={item.meal.image} alt="" />
+              <span className="meal-image-frame">
+                <img key={`${item.id}-${showFirstCourse ? "first" : "second"}`} src={visibleCourse.image} alt={visibleCourse.title} loading="lazy" />
+                <span className="meal-course-badge">{showFirstCourse ? "Первое блюдо" : "Второе блюдо"}</span>
+              </span>
               <span className="meal-tag">{item.id === days[0].id ? "Можно начать завтра" : item.meal.tag}</span>
-              <span className="meal-title">{item.meal.title}</span>
-              <span className="meal-description">{item.meal.description}</span>
+              <span className="meal-title">{visibleCourse.title}</span>
+              <span className="meal-description">Первое + второе · фото меняется каждые 5 секунд</span>
               {isNext && selected.length > 0 && <span className="next-day-hint">Добавить следующий день</span>}
             </button>
           );
         })}
+      </div>
+      <div className="calendar-drag-control">
+        <span>Тяните ползунок, чтобы двигать календарь в стороны</span>
+        <input
+          type="range"
+          min="0"
+          max="1000"
+          value={scrollPosition}
+          onChange={(event) => moveCalendar(Number(event.target.value))}
+          aria-label="Горизонтальная прокрутка календаря"
+        />
       </div>
 
       {checkoutError && <p className="form-error calendar-checkout-error">{checkoutError}</p>}
