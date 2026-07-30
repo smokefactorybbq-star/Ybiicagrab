@@ -16,13 +16,12 @@ export default function Header() {
         <span className="brand-mark">M</span>
         <span>
           <strong>MealPoint</strong>
-          <small>еда рядом, время — ваше</small>
+          <small>Еда близко.</small>
         </span>
       </Link>
 
       <nav className="desktop-nav" aria-label="Основная навигация">
         <Link href="/#subscription">Меню подписки</Link>
-        <Link href="/delivery">Меню кафе</Link>
         <Link href="/rules">Правила и условия</Link>
         <Link href="/contacts">Контакты</Link>
       </nav>

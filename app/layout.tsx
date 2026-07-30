@@ -3,8 +3,8 @@ import "./globals.css";
 import Header from "../components/Header";
 
 export const metadata: Metadata = {
-  title: "MealPoint — съедобная подписка и доставка на Пхукете",
-  description: "Выбирайте дни, получайте разные обеды в ближайшем Meal Point и заказывайте доставку."
+  title: "MealPoint — подписка на разные обеды на Пхукете",
+  description: "Выбирайте дни подписки и забирайте разные сытные обеды в ближайшем Meal Point."
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

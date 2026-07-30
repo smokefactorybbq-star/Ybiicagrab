@@ -32,15 +32,11 @@ img { display: block; max-width: 100%; }
 .hero h1 { max-width: 760px; margin: 0; font-size: clamp(43px, 5.4vw, 76px); line-height: .98; letter-spacing: -3px; }
 .hero h1 em, .section-heading h2 em { color: #ff9871; font-style: normal; }
 .hero-copy > p { max-width: 650px; margin: 25px 0 0; color: rgba(255,255,255,.76); font-size: 20px; line-height: 1.55; }
-.hero-actions { display: flex; gap: 12px; margin-top: 32px; }
-.primary-link, .secondary-link { padding: 15px 23px; border-radius: 14px; font-weight: 900; }
-.primary-link { color: var(--ink); background: #ff976f; }
-.secondary-link { border: 1px solid rgba(255,255,255,.24); background: rgba(255,255,255,.07); }
 .hero-facts { display: flex; gap: 35px; margin-top: 43px; }
 .hero-facts div { display: flex; flex-direction: column; }
 .hero-facts strong { font-size: 20px; }
 .hero-facts span { margin-top: 4px; color: rgba(255,255,255,.58); font-size: 12px; }
-.hero-visual { position: relative; height: 510px; }
+.hero-visual { position: relative; height: 620px; }
 .hero-card { position: absolute; width: min(360px, 70%); padding: 14px; border-radius: 30px; background: #fff; box-shadow: 0 30px 80px rgba(0,0,0,.3); }
 .hero-card img { width: 100%; border-radius: 22px; }
 .card-back { top: 20px; right: -20px; transform: rotate(12deg); opacity: .7; }
@@ -50,12 +46,13 @@ img { display: block; max-width: 100%; }
 .card-front strong, .card-front small { display: block; }
 .card-front strong { padding: 16px 7px 6px; font-size: 19px; }
 .card-front small { padding: 0 7px 9px; color: #71807a; }
+.promo-card { top: 4px; width: min(430px, 82%); padding: 8px; }
+.promo-card img { aspect-ratio: 1120 / 1408; object-fit: cover; }
 .floating-note { position: absolute; right: 0; bottom: 34px; padding: 16px 19px; border-radius: 20px; color: var(--ink); background: #fff4c7; transform: rotate(-4deg); box-shadow: var(--shadow); font-size: 14px; line-height: 1.35; }
 .benefits-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border-bottom: 1px solid var(--line); }
 .benefits-strip > div { display: flex; align-items: center; gap: 19px; padding: 25px 5vw; background: var(--paper); }
-.benefits-strip b { color: var(--orange); font-size: 26px; }
-.benefits-strip span { color: #71807a; font-size: 13px; line-height: 1.4; }
-.benefits-strip strong { display: block; margin-bottom: 3px; color: var(--ink); font-size: 15px; }
+.benefits-strip b { width: 19px; height: 19px; flex: 0 0 19px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 6px rgba(236,116,70,.12); }
+.benefits-strip span { color: #53625d; font-size: 14px; line-height: 1.55; }
 
 .referral-promo { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 28px; margin: 34px 5vw 0; padding: 30px 34px; border: 1px solid rgba(236,116,70,.28); border-radius: 28px; background: linear-gradient(135deg, #fff4c7 0%, #ffe4d6 100%); box-shadow: 0 18px 55px rgba(216,88,47,.12); }
 .referral-badge { min-width: 105px; height: 105px; display: grid; place-items: center; padding: 15px; border-radius: 50%; color: white; background: var(--orange); box-shadow: 0 14px 35px rgba(216,88,47,.28); font-size: 21px; font-weight: 900; text-align: center; transform: rotate(-5deg); }
@@ -76,25 +73,25 @@ img { display: block; max-width: 100%; }
 .text-button { border: 0; padding: 9px 13px; border-radius: 10px; color: white; background: var(--green); cursor: pointer; font-weight: 800; }
 .text-button.muted { color: var(--ink); background: rgba(255,255,255,.7); }
 .pricing-hint { margin-left: auto; color: #64716d; font-size: 12px; }
-.calendar-scroll { display: flex; gap: 14px; overflow-x: auto; padding: 3px 2px 18px; scroll-snap-type: x mandatory; scrollbar-width: thin; }
-.meal-day { position: relative; flex: 0 0 245px; min-height: 390px; overflow: hidden; padding: 12px; border: 2px solid transparent; border-radius: 24px; text-align: left; color: var(--ink); background: white; box-shadow: 0 10px 36px rgba(43,50,45,.07); cursor: pointer; scroll-snap-align: start; transition: .2s ease; }
+.calendar-scroll { display: flex; gap: 18px; overflow-x: auto; padding: 3px 2px 22px; scroll-snap-type: x mandatory; scrollbar-width: thin; }
+.meal-day { position: relative; flex: 0 0 min(430px, 72vw); min-height: 680px; overflow: hidden; padding: 18px; border: 2px solid transparent; border-radius: 28px; text-align: left; color: var(--ink); background: white; box-shadow: 0 10px 36px rgba(43,50,45,.07); cursor: pointer; scroll-snap-align: start; transition: .2s ease; }
 .meal-day:hover { transform: translateY(-4px); }
 .meal-day.selected { border-color: var(--orange); box-shadow: 0 18px 45px rgba(216,88,47,.2); }
-.date-row { display: flex; align-items: center; height: 38px; gap: 8px; padding: 0 3px; }
-.date-row strong { font-size: 24px; }
-.date-row span { color: #7b8783; text-transform: uppercase; font-size: 11px; font-weight: 800; }
+.date-row { display: flex; align-items: center; height: 48px; gap: 10px; padding: 0 3px; }
+.date-row strong { font-size: 30px; }
+.date-row span { color: #7b8783; text-transform: uppercase; font-size: 12px; font-weight: 800; }
 .date-row b { margin-left: auto; width: 25px; height: 25px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--orange); }
-.meal-day img { width: 100%; height: 165px; object-fit: cover; border-radius: 17px; }
-.meal-tag { display: inline-block; margin: 14px 3px 7px; color: var(--orange-dark); font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; }
+.meal-day img { width: 100%; height: 330px; object-fit: cover; border-radius: 21px; }
+.meal-tag { display: inline-block; margin: 20px 3px 9px; color: var(--orange-dark); font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; }
 .meal-title, .meal-description { display: block; padding: 0 3px; }
-.meal-title { font-size: 18px; line-height: 1.16; font-weight: 900; }
-.meal-description { margin-top: 8px; color: #6a7772; font-size: 12px; line-height: 1.45; }
+.meal-title { font-size: 24px; line-height: 1.16; font-weight: 900; }
+.meal-description { margin-top: 12px; color: #6a7772; font-size: 15px; line-height: 1.5; }
 .subscription-summary { position: sticky; bottom: 14px; z-index: 20; display: grid; grid-template-columns: 120px 150px 1fr auto; align-items: center; gap: 22px; max-width: 920px; margin: 25px auto 0; padding: 15px 16px 15px 25px; border: 1px solid rgba(255,255,255,.2); border-radius: 24px; color: white; background: rgba(23,47,40,.96); box-shadow: 0 24px 80px rgba(23,47,40,.3); backdrop-filter: blur(18px); }
 .subscription-summary div { display: flex; flex-direction: column; }
 .subscription-summary small { color: rgba(255,255,255,.58); }
 .subscription-summary strong { margin-top: 3px; font-size: 20px; }
 .subscription-summary .summary-total strong { color: #ffab85; font-size: 28px; }
-.subscription-summary button, .checkout-card > button, .partner-callout button, .telegram-login { border: 0; padding: 15px 20px; border-radius: 14px; color: var(--ink); background: #ff9670; cursor: pointer; font-weight: 900; }
+.subscription-summary button, .checkout-card > button, .telegram-login { border: 0; padding: 15px 20px; border-radius: 14px; color: var(--ink); background: #ff9670; cursor: pointer; font-weight: 900; }
 .subscription-summary button:disabled, .checkout-card > button:disabled { opacity: .45; cursor: not-allowed; }
 .map-section { background: var(--paper); }
 .map-status { display: flex; align-items: center; gap: 8px; padding: 10px 13px; border-radius: 999px; background: #eef6f1; color: var(--green); font-size: 12px; font-weight: 900; }
@@ -109,10 +106,16 @@ img { display: block; max-width: 100%; }
 .point-list b { grid-row: 1 / span 2; width: 25px; height: 25px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--red); font-size: 11px; }
 .point-list span { font-size: 12px; font-weight: 800; }
 .point-list small { margin-top: 4px; color: #77837f; font-size: 10px; }
-.partner-callout { display: flex; justify-content: space-between; align-items: center; gap: 30px; margin: 0 5vw 90px; padding: 50px; border-radius: 32px; color: white; background: var(--ink); }
-.partner-callout h2 { margin: 0; font-size: 38px; }
-.partner-callout p { max-width: 760px; color: rgba(255,255,255,.66); line-height: 1.55; }
-.partner-callout button { white-space: nowrap; }
+.reviews-section { margin: 0 5vw 90px; padding: 58px; border-radius: 32px; color: white; background: var(--ink); }
+.reviews-heading { display: flex; justify-content: space-between; align-items: end; gap: 40px; }
+.reviews-heading h2 { max-width: 700px; margin: 0; font-size: clamp(34px, 4vw, 54px); line-height: 1.03; letter-spacing: -2px; }
+.reviews-heading > p { max-width: 470px; margin: 0; color: rgba(255,255,255,.65); font-size: 16px; line-height: 1.55; }
+.reviews-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 38px; }
+.reviews-grid article { display: flex; flex-direction: column; min-height: 260px; padding: 28px; border: 1px solid rgba(255,255,255,.1); border-radius: 24px; background: rgba(255,255,255,.06); }
+.review-stars { color: #ffad75; letter-spacing: 4px; }
+.reviews-grid blockquote { margin: 22px 0 28px; color: rgba(255,255,255,.86); font-size: 17px; line-height: 1.6; }
+.reviews-grid footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: auto; }
+.reviews-grid footer span { color: rgba(255,255,255,.5); font-size: 13px; }
 .site-footer { display: flex; justify-content: space-between; padding: 30px 5vw; border-top: 1px solid var(--line); color: #78837f; font-size: 12px; }
 .site-footer div { display: flex; gap: 18px; }
 .site-footer strong { color: var(--ink); }
@@ -181,7 +184,7 @@ img { display: block; max-width: 100%; }
 @media (max-width: 1050px) {
   .desktop-nav { display: none; }
   .hero { grid-template-columns: 1fr; padding-top: 60px; }
-  .hero-visual { height: 470px; }
+  .hero-visual { height: 610px; }
   .point-list { grid-template-columns: repeat(2,1fr); }
   .delivery-layout { grid-template-columns: 1fr; }
   .checkout-card { position: static; }
@@ -194,12 +197,12 @@ img { display: block; max-width: 100%; }
   .hero { min-height: unset; padding: 50px 20px 58px; }
   .hero h1 { font-size: 43px; letter-spacing: -2px; }
   .hero-copy > p { font-size: 16px; }
-  .hero-actions { flex-direction: column; align-items: stretch; text-align: center; }
   .hero-facts { gap: 17px; flex-wrap: wrap; }
-  .hero-visual { height: 370px; }
-  .hero-card { width: 76%; }
-  .card-front { top: 82px; }
-  .floating-note { bottom: 6px; }
+  .hero-visual { height: 520px; }
+  .hero-card { width: 72%; }
+  .card-front { top: 30px; }
+  .promo-card { width: min(360px, 86%); }
+  .floating-note { bottom: 8px; }
   .benefits-strip { grid-template-columns: 1fr; }
   .referral-promo { grid-template-columns: 1fr; margin: 22px 18px 0; padding: 25px; }
   .referral-badge { width: 88px; min-width: 88px; height: 88px; }
@@ -207,17 +210,19 @@ img { display: block; max-width: 100%; }
 
   .benefits-strip > div { padding: 18px 20px; }
   .subscription-section, .map-section, .page-shell { padding: 58px 18px; }
-  .split-heading, .account-top, .partner-callout { align-items: flex-start; flex-direction: column; }
+  .split-heading, .account-top { align-items: flex-start; flex-direction: column; }
   .month-controls { width: 100%; justify-content: space-between; }
   .pricing-hint { width: 100%; margin-left: 0; }
-  .meal-day { flex-basis: 82vw; }
+  .meal-day { flex-basis: 86vw; min-height: 620px; }
+  .meal-day img { height: 290px; }
   .subscription-summary { bottom: 8px; grid-template-columns: 1fr 1fr; gap: 12px; padding: 15px; border-radius: 20px; }
   .subscription-summary .summary-total { grid-column: 1 / 2; }
   .subscription-summary button { grid-column: 2 / 3; grid-row: 2; }
   .map-shell { height: 430px; }
   .point-list { grid-template-columns: 1fr; }
-  .partner-callout { margin: 0 18px 58px; padding: 30px; }
-  .partner-callout h2 { font-size: 30px; }
+  .reviews-section { margin: 0 18px 58px; padding: 30px 22px; }
+  .reviews-heading { align-items: flex-start; flex-direction: column; gap: 18px; }
+  .reviews-grid { grid-template-columns: 1fr; }
   .account-grid, .pause-card, .dish-grid, .contact-grid { grid-template-columns: 1fr; }
   .qr-card { flex-direction: column; align-items: flex-start; }
   .qr-box { width: 100%; height: auto; }
