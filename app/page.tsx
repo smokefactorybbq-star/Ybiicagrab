@@ -9,7 +9,7 @@ export default function HomePage() {
       <section className="hero">
         <div className="hero-copy">
           <span className="eyebrow light">MealPoint Phuket</span>
-          <h1>Мы не просто привозим еду.<br /><em>Мы возвращаем вам время.</em></h1>
+          <h1>Готовим каждый день из свежих продуктов.<br /><em>Экономим ваше время и бюджет.</em></h1>
           <p>Разные сытные обеды на каждый выбранный день. Без закупок, готовки и одинаковой еды всю неделю.</p>
           <div className="hero-actions">
             <Link className="primary-link" href="#subscription">Выбрать дни</Link>
@@ -18,7 +18,7 @@ export default function HomePage() {
           </div>
           <div className="hero-facts">
             <div><strong>от 250 ฿</strong><span>за полноценный обед</span></div>
-            <div><strong>30+ блюд</strong><span>без скучного повторения</span></div>
+            <div><strong>60+ блюд</strong><span>без скучного повторения</span></div>
             <div><strong>5 точек</strong><span>на Пхукете</span></div>
           </div>
         </div>
@@ -37,8 +37,18 @@ export default function HomePage() {
 
       <section className="benefits-strip">
         <div><b>01</b><span><strong>Выбираете период</strong>Последовательные дни, начиная с завтра</span></div>
-        <div><b>02</b><span><strong>Оплачиваете</strong>Менеджер проверяет и активирует подписку</span></div>
-        <div><b>03</b><span><strong>Получаете QR</strong>После активации он появляется в личном кабинете</span></div>
+        <div><b>02</b><span><strong>Подписка активируется</strong>В течение 15 минут после оплаты</span></div>
+        <div><b>03</b><span><strong>Получаете QR</strong>По QR-коду забираете свой заказ в любое удобное для вас время</span></div>
+      </section>
+
+      <section className="referral-promo" aria-label="Бонус за приглашённого друга">
+        <div className="referral-badge">+1 день</div>
+        <div>
+          <span className="eyebrow">Бонус за рекомендацию</span>
+          <h2>Бесплатный день подписки за друга, который оформил заказ!</h2>
+          <p>Пригласите друга в MealPoint. После оформления и оплаты его заказа мы добавим к вашей подписке один бесплатный день.</p>
+        </div>
+        <QuestionLink className="question-link referral-question-link" />
       </section>
 
       <SubscriptionCalendar />
