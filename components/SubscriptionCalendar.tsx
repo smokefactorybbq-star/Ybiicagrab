@@ -175,7 +175,23 @@ export default function SubscriptionCalendar() {
         <button type="button" className="text-button" onClick={() => openPackagePicker(14)}>Выбрать 14 дней</button>
         <button type="button" className="text-button" onClick={() => openPackagePicker(30)}>Выбрать 30 дней</button>
         <button type="button" className="text-button muted" onClick={() => setSelected([])}>Сбросить</button>
-        <span className="pricing-hint">1–6 дней: 350 ฿ · 7–29 дней: 300 ฿ · 30 дней: 250 ฿</span>
+        <div className="pricing-hint" aria-label="Цены на подписку со скидкой 50 процентов">
+          <div className="price-tier">
+            <span>1–6 дней</span>
+            <div><strong>350 ฿</strong><del>700 ฿</del></div>
+            <em>Скидка 50%</em>
+          </div>
+          <div className="price-tier">
+            <span>7–29 дней</span>
+            <div><strong>300 ฿</strong><del>600 ฿</del></div>
+            <em>Скидка 50%</em>
+          </div>
+          <div className="price-tier">
+            <span>30 дней</span>
+            <div><strong>250 ฿</strong><del>500 ฿</del></div>
+            <em>Скидка 50%</em>
+          </div>
+        </div>
       </div>
 
       <div className="calendar-scroll" ref={scrollRef}>

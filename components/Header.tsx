@@ -12,7 +12,7 @@ function AccountIcon() {
 export default function Header() {
   return (
     <header className="site-header">
-      <Link className="brand" href="/" aria-label="MealPoint — главная">
+      <Link className="brand" href="/#top" aria-label="MealPoint — вернуться наверх">
         <span className="brand-mark">M</span>
         <span>
           <strong>MealPoint</strong>

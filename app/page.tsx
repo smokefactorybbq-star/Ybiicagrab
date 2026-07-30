@@ -4,7 +4,7 @@ import QuestionLink from "../components/QuestionLink";
 
 export default function HomePage() {
   return (
-    <main>
+    <main id="top">
       <section className="hero">
         <div className="hero-copy">
           <span className="eyebrow light">MealPoint Phuket</span>

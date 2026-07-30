@@ -72,20 +72,30 @@ img { display: block; max-width: 100%; }
 .calendar-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 30px 0 18px; }
 .text-button { border: 0; padding: 9px 13px; border-radius: 10px; color: white; background: var(--green); cursor: pointer; font-weight: 800; }
 .text-button.muted { color: var(--ink); background: rgba(255,255,255,.7); }
-.pricing-hint { margin-left: auto; color: #64716d; font-size: 12px; }
-.calendar-scroll { display: flex; gap: 18px; overflow-x: auto; padding: 3px 2px 22px; scroll-snap-type: x mandatory; scrollbar-width: thin; }
-.meal-day { position: relative; flex: 0 0 min(430px, 72vw); min-height: 680px; overflow: hidden; padding: 18px; border: 2px solid transparent; border-radius: 28px; text-align: left; color: var(--ink); background: white; box-shadow: 0 10px 36px rgba(43,50,45,.07); cursor: pointer; scroll-snap-align: start; transition: .2s ease; }
+.pricing-hint { flex: 0 0 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; width: 100%; margin-top: 8px; }
+.price-tier { position: relative; min-height: 116px; padding: 18px 20px; border: 1px solid rgba(236,116,70,.24); border-radius: 18px; background: rgba(255,255,255,.78); box-shadow: 0 10px 28px rgba(43,50,45,.06); }
+.price-tier > span { display: block; color: #687671; font-size: 14px; font-weight: 900; }
+.price-tier > div { display: flex; align-items: baseline; gap: 11px; margin-top: 10px; }
+.price-tier strong { color: var(--ink); font-size: 30px; line-height: 1; }
+.price-tier del { color: #8b9692; font-size: 18px; font-weight: 800; text-decoration-color: var(--orange-dark); text-decoration-thickness: 2px; }
+.price-tier em { position: absolute; top: 15px; right: 16px; padding: 6px 9px; border-radius: 999px; color: white; background: var(--orange-dark); font-size: 11px; font-style: normal; font-weight: 900; }
+.calendar-scroll { display: flex; gap: 14px; overflow-x: auto; padding: 3px 2px 20px; scroll-snap-type: x mandatory; scrollbar-width: auto; scrollbar-color: var(--orange) #dcd4c6; }
+.calendar-scroll::-webkit-scrollbar { height: 22px; }
+.calendar-scroll::-webkit-scrollbar-track { border-radius: 999px; background: #dcd4c6; box-shadow: inset 0 1px 3px rgba(23,47,40,.16); }
+.calendar-scroll::-webkit-scrollbar-thumb { min-width: 90px; border: 4px solid #dcd4c6; border-radius: 999px; background: var(--orange); cursor: ew-resize; }
+.calendar-scroll::-webkit-scrollbar-thumb:hover { background: var(--orange-dark); }
+.meal-day { position: relative; flex: 0 0 245px; min-height: 390px; overflow: hidden; padding: 12px; border: 2px solid transparent; border-radius: 24px; text-align: left; color: var(--ink); background: white; box-shadow: 0 10px 36px rgba(43,50,45,.07); cursor: pointer; scroll-snap-align: start; transition: .2s ease; }
 .meal-day:hover { transform: translateY(-4px); }
 .meal-day.selected { border-color: var(--orange); box-shadow: 0 18px 45px rgba(216,88,47,.2); }
-.date-row { display: flex; align-items: center; height: 48px; gap: 10px; padding: 0 3px; }
-.date-row strong { font-size: 30px; }
-.date-row span { color: #7b8783; text-transform: uppercase; font-size: 12px; font-weight: 800; }
+.date-row { display: flex; align-items: center; height: 38px; gap: 8px; padding: 0 3px; }
+.date-row strong { font-size: 24px; }
+.date-row span { color: #7b8783; text-transform: uppercase; font-size: 11px; font-weight: 800; }
 .date-row b { margin-left: auto; width: 25px; height: 25px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--orange); }
-.meal-day img { width: 100%; height: 330px; object-fit: cover; border-radius: 21px; }
-.meal-tag { display: inline-block; margin: 20px 3px 9px; color: var(--orange-dark); font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; }
+.meal-day img { width: 100%; height: 165px; object-fit: cover; border-radius: 17px; }
+.meal-tag { display: inline-block; margin: 14px 3px 7px; color: var(--orange-dark); font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; }
 .meal-title, .meal-description { display: block; padding: 0 3px; }
-.meal-title { font-size: 24px; line-height: 1.16; font-weight: 900; }
-.meal-description { margin-top: 12px; color: #6a7772; font-size: 15px; line-height: 1.5; }
+.meal-title { font-size: 18px; line-height: 1.16; font-weight: 900; }
+.meal-description { margin-top: 8px; color: #6a7772; font-size: 12px; line-height: 1.45; }
 .subscription-summary { position: sticky; bottom: 14px; z-index: 20; display: grid; grid-template-columns: 120px 150px 1fr auto; align-items: center; gap: 22px; max-width: 920px; margin: 25px auto 0; padding: 15px 16px 15px 25px; border: 1px solid rgba(255,255,255,.2); border-radius: 24px; color: white; background: rgba(23,47,40,.96); box-shadow: 0 24px 80px rgba(23,47,40,.3); backdrop-filter: blur(18px); }
 .subscription-summary div { display: flex; flex-direction: column; }
 .subscription-summary small { color: rgba(255,255,255,.58); }
@@ -212,9 +222,8 @@ img { display: block; max-width: 100%; }
   .subscription-section, .map-section, .page-shell { padding: 58px 18px; }
   .split-heading, .account-top { align-items: flex-start; flex-direction: column; }
   .month-controls { width: 100%; justify-content: space-between; }
-  .pricing-hint { width: 100%; margin-left: 0; }
-  .meal-day { flex-basis: 86vw; min-height: 620px; }
-  .meal-day img { height: 290px; }
+  .pricing-hint { grid-template-columns: 1fr; width: 100%; }
+  .meal-day { flex-basis: 82vw; }
   .subscription-summary { bottom: 8px; grid-template-columns: 1fr 1fr; gap: 12px; padding: 15px; border-radius: 20px; }
   .subscription-summary .summary-total { grid-column: 1 / 2; }
   .subscription-summary button { grid-column: 2 / 3; grid-row: 2; }
@@ -341,7 +350,7 @@ img { display: block; max-width: 100%; }
 .page-intro-with-action > div { max-width: 880px; }
 .partner-actions { justify-content: flex-end; }
 
-.consecutive-actions .pricing-hint { flex: 1 1 320px; text-align: right; }
+.consecutive-actions .pricing-hint { flex: 0 0 100%; text-align: left; }
 .meal-day:disabled { cursor: not-allowed; opacity: .42; filter: grayscale(.35); }
 .meal-day:disabled:hover { transform: none; }
 .meal-day.next-available:not(.selected) { border-color: rgba(44,112,92,.35); box-shadow: 0 15px 42px rgba(44,112,92,.12); }
