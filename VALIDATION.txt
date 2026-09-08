@@ -1,0 +1,8 @@
+Smoke Factory unified project validation
+UTC 2026-08-12 20:02:11
+
+TS/TSX syntax: 73 files, 0 errors
+Python bot py_compile: OK
+shop.html main JavaScript node --check: OK
+Local menu assets: 37 referenced, 0 missing
+Full npm/next build: NOT RUN (package installation unavailable in this sandbox session).

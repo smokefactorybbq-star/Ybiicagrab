@@ -1,0 +1,22 @@
+MealPoint pickup QR / delivery confirmation validation
+Date: 2026-08-13 (Asia/Bangkok)
+
+Implemented checks:
+- 83 TypeScript/TSX source files parsed/transpiled: 0 syntax errors.
+- package.json dependencies match the root dependency set in package-lock.json: OK.
+- html5-qrcode 2.3.8 is present in package.json and package-lock.json.
+- Signed pickup QR HMAC functional test: valid QR accepted; wrong pickup point signature rejected; tampered payload rejected.
+- Customer pickup redemption endpoint exists and requires authenticated account + same-origin POST.
+- Pickup redemption is user-bound, date-bound and pickup-point-bound.
+- Second successful redemption for the same subscription day is blocked by transaction checks and a PostgreSQL partial unique index.
+- Exact duplicate-scan user error: "Ошибка чтения QR".
+- Pickup redemption decrements remaining_portions exactly once and records audit event + manager Telegram notification.
+- Delivery maintenance auto-consumes DELIVERY days after 18:00 only; PICKUP days are not auto-consumed.
+- Manager daily dashboard has separate pickup and delivery lists.
+- Pickup rows expose red/green circle state; delivery rows expose one-time confirmation square state.
+- Manager dashboard switches to the next operational day at 22:00; history is preserved in DB.
+- Five pickup-point QR generators are manager-authenticated.
+- Python bot and receipt proxy compile successfully.
+
+Environment limitation:
+A complete local `next build` could not be executed because the sandbox npm cache is incomplete (offline npm ci lacks yargs-parser). This is an environment/dependency-download limitation, not a reported source-code diagnostic. Railway should run a clean `npm ci` from package-lock.json during Docker build.

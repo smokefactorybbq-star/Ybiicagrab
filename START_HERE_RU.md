@@ -1,23 +1,26 @@
-# MealPoint — отдельный сайт подписки
+# Smoke Factory BBQ — отдельный сайт кафе
 
-Это отдельный проект для `meal-point.com` и отдельной PostgreSQL базы.
+Это проект для `smokefactorybbq.com`. MealPoint в него не встроен: на MealPoint ведёт только рекламная ссылка `https://meal-point.com`.
 
 ## Что сделано
-- регистрация и вход по SMSMKT OTP для международных номеров;
-- ссылка Smoke Factory в шапке ведёт на `https://smokefactorybbq.com`;
-- подписки, дни, QR, кухня и менеджер относятся только к MealPoint;
-- PromptPay QR формируется из корпоративного Thai QR с точной суммой подписки;
-- Cash создаёт заявку и уведомляет менеджера;
-- PromptPay остаётся `AWAITING_ACTIVATION` до загрузки и проверки чека;
-- клиент загружает JPG/PNG/WEBP/PDF в личном кабинете;
-- чек сохраняется в MealPoint DB и пересылается менеджеру через `tgfoodbot`;
-- менеджер активирует подписку вручную.
+- обязательный вход через Telegram;
+- используется та же Telegram-база клиентов, что и у существующего Mini App;
+- доставка / самовывоз;
+- Cash доступен только для самовывоза;
+- для доставки требуется точка на Google Maps;
+- заказ ко времени — минимум через 1 час;
+- PromptPay QR генерируется из корпоративного QR с суммой `Total`;
+- заказ PromptPay создаётся после кнопки «Я оплатил»;
+- заказ передаётся в существующий `tgfoodbot` на `/website-order`;
+- tgfoodbot дальше отправляет заказ на кухонный экран, в чековую программу и клиенту.
 
 ## Railway
-1. Создайте НОВУЮ PostgreSQL специально для MealPoint.
-2. Создайте отдельный Railway service из этого проекта.
-3. Добавьте Variables из `.env.example`.
-4. В SMSMKT создайте OTP project и заполните `SMSMKT_API_KEY`, `SMSMKT_SECRET_KEY`, `SMSMKT_PROJECT_KEY`.
-5. `MEALPOINT_BOT_SECRET` должен совпасть с `tgfoodbot`.
-6. `TGFOODBOT_URL` — базовый URL бота без `/mealpoint/...`.
-7. Привяжите `meal-point.com`.
+1. Создайте отдельный сервис сайта из этого проекта.
+2. Подключите PostgreSQL, которую уже использует `tgfoodbot`/Mini App.
+3. Скопируйте переменные из `.env.example` в Railway Variables.
+4. `WEBSITE_ORDER_SECRET` должен совпасть на сайте и в `tgfoodbot`.
+5. `TELEGRAM_BOT_ORDER_URL` должен быть вида `https://<bot-domain>/website-order`.
+6. Привяжите `smokefactorybbq.com`.
+
+## Важно
+Не добавляйте MealPoint DATABASE_URL в этот проект. База MealPoint отдельная.

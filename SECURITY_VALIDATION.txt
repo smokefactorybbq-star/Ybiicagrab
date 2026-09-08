@@ -1,0 +1,28 @@
+SECURITY HARDENING VALIDATION
+Date: 2026-08-13
+
+Static checks performed after the 8 security fixes:
+
+PASS - 80 TS/TSX files parsed/transpiled without syntax diagnostics.
+PASS - public/shop.html inline JavaScript: node --check.
+PASS - old Mini App public/index.html inline JavaScript: node --check.
+PASS - old Mini App server.js: node --check.
+PASS - bot-service/bot.py: Python py_compile.
+PASS - receipt proxy functional test: request without secret = 401 and does not reach upstream; valid secret = 200 and is forwarded.
+PASS - receipt-security-proxy/secure_receipt_proxy.py: Python py_compile.
+PASS - old X-Miniapp-* signed-link auth implementation is absent.
+PASS - manager/kitchen/courier password headers are absent.
+PASS - staff passwords are not persisted in sessionStorage.
+PASS - Telegram login state endpoint exists and callback verifies state.
+PASS - staff login/session endpoint exists.
+PASS - server-side delivery tariff table exists.
+PASS - app/api/shop/orders/route.ts has zero body.delivery reads.
+PASS - old Mini App serves only public/; express.static(__dirname) is absent.
+PASS - bot has X-Receipt-Secret on both receipt-delivery code paths.
+PASS - no obvious hard-coded runtime DATABASE_URL / BOT_TOKEN / order/receipt secrets found.
+
+Note:
+A full `next build` was not executed in this working container because node_modules
+are not installed here. Railway should run the real production build after deployment.
+The checks above validate syntax and the security invariants that can be verified
+without live Railway/PostgreSQL/Telegram credentials.

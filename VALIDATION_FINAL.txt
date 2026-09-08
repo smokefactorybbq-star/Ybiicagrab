@@ -1,6 +1,6 @@
 Final local checks (2026-09-08):
 - TypeScript/TSX syntax parser: OK
 - Relative imports: OK
+- public/shop.html inline JavaScript: node --check OK
 - PromptPay payload generation: tested for 1.00, 1234.56 and 7500.00 THB; amount tag + CRC generated
-- SMSMKT endpoints/fields checked against SMSMKT API reference: international OTP send + OTP validate
 - Full `next build` was NOT run in this container because outbound npm registry DNS is unavailable. Railway Dockerfile runs `npm ci` + `npm run build`.
