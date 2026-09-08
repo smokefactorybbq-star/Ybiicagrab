@@ -1,0 +1,2 @@
+MealPoint PHONE SUBSCRIPTION UI v0.8.0
+Corrected: visible day buttons + full-screen meal modal + SMS phone login.
