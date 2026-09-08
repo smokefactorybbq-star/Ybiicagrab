@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import ChatWindow from "../../components/ChatWindow";
 
 type ManagerDay = {
   service_date: string;
@@ -17,6 +16,7 @@ type ManagerSubscription = {
   full_name: string;
   phone: string | null;
   pickup_point_name: string | null;
+  fulfillment_type: "PICKUP" | "DELIVERY";
   payment_method: string | null;
   selected_days: number;
   remaining_portions: number;
@@ -27,7 +27,6 @@ type ManagerSubscription = {
   paid_at: string | null;
   activated_at: string | null;
   created_at: string;
-  manager_unread_count: number;
   dates: ManagerDay[];
 };
 
@@ -64,7 +63,14 @@ type AppClock = {
   localDateTime: string;
 };
 
-type ChatClient = { userId: string; fullName: string; phone: string | null };
+type FulfillmentClient = {
+  subscriptionId: string; code: string; fullName: string; phone: string | null; pickupPointName: string | null;
+  address: string | null; requestedTime: string | null; dayStatus: string; pickedUp: boolean; pickedUpAt: string | null;
+  pickedUpPointName: string | null; received: boolean; receivedAt: string | null; consumed: boolean;
+};
+type FulfillmentDashboard = { serviceDate: string; resetHour: number; switchedToNextDay: boolean; pickupClients: FulfillmentClient[]; deliveryClients: FulfillmentClient[] };
+type PickupQrPoint = { code: string; name: string; address: string };
+
 
 const statusLabels: Record<string, string> = {
   AWAITING_ACTIVATION: "Оплачено — активировать",
@@ -89,6 +95,7 @@ function formatDate(value: string) {
 }
 
 export default function ManagerPage() {
+  const [username, setUsername] = useState("manager");
   const [password, setPassword] = useState("");
   const [subscriptions, setSubscriptions] = useState<ManagerSubscription[]>([]);
   const [pickupDashboard, setPickupDashboard] = useState<PickupDashboard | null>(null);
@@ -98,7 +105,6 @@ export default function ManagerPage() {
   const [activating, setActivating] = useState("");
   const [deleting, setDeleting] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<ManagerSubscription | null>(null);
-  const [deletePassword, setDeletePassword] = useState("");
   const [savingPoint, setSavingPoint] = useState("");
   const [error, setError] = useState("");
   const [authorized, setAuthorized] = useState(false);
@@ -107,7 +113,11 @@ export default function ManagerPage() {
   const [testDateTime, setTestDateTime] = useState("");
   const [savingClock, setSavingClock] = useState(false);
   const [testDirty, setTestDirty] = useState(false);
-  const [chatClient, setChatClient] = useState<ChatClient | null>(null);
+  const [fulfillmentDashboard, setFulfillmentDashboard] = useState<FulfillmentDashboard | null>(null);
+  const [deliveryConfirm, setDeliveryConfirm] = useState<FulfillmentClient | null>(null);
+  const [confirmingDelivery, setConfirmingDelivery] = useState("");
+  const [pickupQrPoints, setPickupQrPoints] = useState<PickupQrPoint[]>([]);
+  const [qrPoint, setQrPoint] = useState<PickupQrPoint | null>(null);
 
   async function loadManagerData(event?: FormEvent) {
     event?.preventDefault();
@@ -115,28 +125,39 @@ export default function ManagerPage() {
     setError("");
 
     try {
-      const headers = { "x-manager-password": password };
-      const [subscriptionsResponse, pickupResponse, clockResponse] = await Promise.all([
-        fetch("/api/manager/subscriptions", { headers, cache: "no-store" }),
-        fetch("/api/manager/pickup-points", { headers, cache: "no-store" }),
-        fetch("/api/manager/test-clock", { headers, cache: "no-store" })
+      if (event) {
+        const loginResponse = await fetch("/api/staff/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ role: "MANAGER", username, password })
+        });
+        const loginData = await loginResponse.json();
+        if (!loginResponse.ok || !loginData.ok) throw new Error(loginData.error || "Неверный логин или пароль");
+        setPassword("");
+      }
+
+      const [subscriptionsResponse, pickupResponse, clockResponse, fulfillmentResponse, qrPointsResponse] = await Promise.all([
+        fetch("/api/manager/subscriptions", { cache: "no-store", credentials: "same-origin" }),
+        fetch("/api/manager/pickup-points", { cache: "no-store", credentials: "same-origin" }),
+        fetch("/api/manager/test-clock", { cache: "no-store", credentials: "same-origin" }),
+        fetch("/api/manager/fulfillment-today", { cache: "no-store", credentials: "same-origin" }),
+        fetch("/api/manager/pickup-qr", { cache: "no-store", credentials: "same-origin" })
       ]);
-      const [subscriptionsData, pickupData, clockData] = await Promise.all([
-        subscriptionsResponse.json(), pickupResponse.json(), clockResponse.json()
+      const [subscriptionsData, pickupData, clockData, fulfillmentData, qrPointsData] = await Promise.all([
+        subscriptionsResponse.json(), pickupResponse.json(), clockResponse.json(), fulfillmentResponse.json(), qrPointsResponse.json()
       ]);
 
-      if (!subscriptionsResponse.ok || !subscriptionsData.ok) {
-        throw new Error(subscriptionsData.error || "Ошибка загрузки подписок");
-      }
-      if (!pickupResponse.ok || !pickupData.ok) {
-        throw new Error(pickupData.error || "Ошибка загрузки пунктов выдачи");
-      }
-      if (!clockResponse.ok || !clockData.ok) {
-        throw new Error(clockData.error || "Ошибка загрузки тестового времени");
-      }
+      if (!subscriptionsResponse.ok || !subscriptionsData.ok) throw new Error(subscriptionsData.error || "Ошибка загрузки подписок");
+      if (!pickupResponse.ok || !pickupData.ok) throw new Error(pickupData.error || "Ошибка загрузки пунктов выдачи");
+      if (!clockResponse.ok || !clockData.ok) throw new Error(clockData.error || "Ошибка загрузки тестового времени");
+      if (!fulfillmentResponse.ok || !fulfillmentData.ok) throw new Error(fulfillmentData.error || "Ошибка загрузки клиентов на сегодня");
+      if (!qrPointsResponse.ok || !qrPointsData.ok) throw new Error(qrPointsData.error || "Ошибка загрузки QR точек");
 
       setSubscriptions(subscriptionsData.subscriptions);
       setPickupDashboard(pickupData as PickupDashboard);
+      setFulfillmentDashboard(fulfillmentData as FulfillmentDashboard);
+      setPickupQrPoints((qrPointsData.points || []) as PickupQrPoint[]);
       setTestClock(clockData.clock as AppClock);
       if (!testDirty) {
         setTestEnabled(Boolean(clockData.clock.isTestMode));
@@ -154,12 +175,46 @@ export default function ManagerPage() {
     }
   }
 
+  async function logout() {
+    await fetch("/api/staff/logout", { method: "POST", credentials: "same-origin" }).catch(() => undefined);
+    setAuthorized(false);
+    setSubscriptions([]);
+    setPickupDashboard(null);
+    setFulfillmentDashboard(null);
+    setPassword("");
+  }
+
+  useEffect(() => {
+    void loadManagerData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!authorized) return;
     const timer = window.setInterval(() => void loadManagerData(), 15_000);
     return () => window.clearInterval(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authorized, password, testDirty]);
+  }, [authorized, testDirty]);
+
+  async function confirmDeliveryReceived() {
+    if (!deliveryConfirm || !fulfillmentDashboard) return;
+    setConfirmingDelivery(deliveryConfirm.subscriptionId);
+    setError("");
+    try {
+      const response = await fetch("/api/manager/fulfillment-today", {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
+        body: JSON.stringify({ subscriptionId: deliveryConfirm.subscriptionId, serviceDate: fulfillmentDashboard.serviceDate, received: true })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || "Не удалось отметить получение");
+      setDeliveryConfirm(null);
+      await loadManagerData();
+    } catch (confirmError) {
+      setError(confirmError instanceof Error ? confirmError.message : "Не удалось отметить получение");
+    } finally {
+      setConfirmingDelivery("");
+    }
+  }
 
   async function activateSubscription(id: string) {
     setActivating(id);
@@ -167,10 +222,8 @@ export default function ManagerPage() {
     try {
       const response = await fetch("/api/manager/subscriptions", {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-manager-password": password
-        },
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ id, action: "activate" })
       });
       const data = await response.json();
@@ -186,20 +239,13 @@ export default function ManagerPage() {
 
   async function deleteSubscription() {
     if (!deleteTarget) return;
-    if (!deletePassword) {
-      setError("Введите пароль менеджера для удаления подписки");
-      return;
-    }
-
     setDeleting(deleteTarget.id);
     setError("");
     try {
       const response = await fetch("/api/manager/subscriptions", {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          "x-manager-password": deletePassword
-        },
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ id: deleteTarget.id })
       });
       const data = await response.json();
@@ -208,7 +254,6 @@ export default function ManagerPage() {
       }
       setSubscriptions((current) => current.filter((subscription) => subscription.id !== deleteTarget.id));
       setDeleteTarget(null);
-      setDeletePassword("");
       await loadManagerData();
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Не удалось удалить подписку");
@@ -224,7 +269,8 @@ export default function ManagerPage() {
     try {
       const response = await fetch("/api/manager/test-clock", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-manager-password": password },
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ enabled: testEnabled, localDateTime: testDateTime })
       });
       const data = await response.json();
@@ -249,10 +295,8 @@ export default function ManagerPage() {
     try {
       const response = await fetch("/api/manager/pickup-points", {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-manager-password": password
-        },
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({
           pickupPointName: point.pickupPointName,
           deliveredCount
@@ -274,7 +318,8 @@ export default function ManagerPage() {
         <form className="manager-login" onSubmit={(event) => void loadManagerData(event)}>
           <span className="eyebrow">MealPoint Manager</span>
           <h1>Вход менеджера</h1>
-          <p>Пароль задаётся переменной <b>MANAGER_PASSWORD</b> в Railway.</p>
+          <p>Вход защищён серверной сессией. Логин и пароль задаются в Railway.</p>
+          <input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Логин" autoComplete="username" required />
           <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Пароль" required />
           {error && <p className="form-error">{error}</p>}
           <button type="submit" disabled={loading}>{loading ? "Проверяем…" : "Открыть кабинет"}</button>
@@ -293,15 +338,16 @@ export default function ManagerPage() {
         </div>
         <div className="manager-heading-actions">
           <Link className="manager-scanner-link" href="/kitchen">Открыть кухню</Link>
-          <Link className="manager-scanner-link" href="/scanner">Открыть сканер</Link>
+          <Link className="manager-scanner-link" href="/courier">Открыть курьера</Link>
           <button type="button" onClick={() => void loadManagerData()} disabled={loading}>{loading ? "Обновляем…" : "Обновить"}</button>
+          <button type="button" className="kitchen-logout" onClick={() => void logout()}>Выйти</button>
         </div>
       </section>
 
       {error && <p className="form-error">{error}</p>}
 
       <section className={`test-clock-card ${testEnabled ? "is-enabled" : ""}`}>
-        <div className="test-clock-heading"><div><span className="eyebrow">Тестовый режим</span><h2>Подменить дату и время сайта</h2><p>Влияет на ЛК, QR, паузы, ПВ и кухню.</p></div>{testClock?.isTestMode && <span className="test-clock-badge">TEST</span>}</div>
+        <div className="test-clock-heading"><div><span className="eyebrow">Тестовый режим</span><h2>Подменить дату и время сайта</h2><p>Влияет на ЛК, паузы, автоматическое списание, ПВ, курьера и кухню.</p></div>{testClock?.isTestMode && <span className="test-clock-badge">TEST</span>}</div>
         <div className="test-clock-controls">
           <label className="test-clock-switch"><input type="checkbox" checked={testEnabled} onChange={(event) => { setTestEnabled(event.target.checked); setTestDirty(true); }} /><span>Включить тестовое время</span></label>
           <label>Дата и время Пхукета<input type="datetime-local" value={testDateTime} onChange={(event) => { setTestDateTime(event.target.value); setTestDirty(true); }} disabled={!testEnabled} /></label>
@@ -310,16 +356,29 @@ export default function ManagerPage() {
         <p className="test-clock-current">Сейчас сайт считает: {testClock ? `${formatDate(testClock.date)}, ${String(testClock.hour).padStart(2,"0")}:${String(testClock.minute).padStart(2,"0")}` : "—"}</p>
       </section>
 
+      <section className="daily-fulfillment-card">
+        <div className="pickup-today-heading"><div><span className="eyebrow">Клиенты на день</span><h2>{fulfillmentDashboard ? formatDate(fulfillmentDashboard.serviceDate) : "Сегодня"}</h2><p>В 22:00 панель автоматически переключается на следующий день — индикаторы снова становятся пустыми.</p></div>{fulfillmentDashboard?.switchedToNextDay && <small>После 22:00 показан следующий день</small>}</div>
+        <div className="fulfillment-columns">
+          <section className="fulfillment-column"><div className="fulfillment-column-title"><h3>Самовывоз</h3><span>{fulfillmentDashboard?.pickupClients.length || 0}</span></div><div className="fulfillment-client-list">
+            {fulfillmentDashboard?.pickupClients.map((client) => <article key={`pickup:${client.subscriptionId}`} className="fulfillment-client-row"><span className={`pickup-status-circle ${client.pickedUp ? "is-done" : "is-waiting"}`} /><div><strong>{client.fullName}</strong><small>{client.requestedTime || "—"} · {client.pickupPointName || "Точка не указана"}</small><small>{client.phone || "Телефон не указан"} · {client.code}</small></div></article>)}
+            {!fulfillmentDashboard?.pickupClients.length && <p className="empty-table">Самовывоза на этот день нет.</p>}
+          </div></section>
+          <section className="fulfillment-column"><div className="fulfillment-column-title"><h3>Доставка</h3><span>{fulfillmentDashboard?.deliveryClients.length || 0}</span></div><div className="fulfillment-client-list">
+            {fulfillmentDashboard?.deliveryClients.map((client) => <article key={`delivery:${client.subscriptionId}`} className="fulfillment-client-row"><button type="button" className={`delivery-status-box ${client.received ? "is-done" : ""}`} disabled={client.received} onClick={() => setDeliveryConfirm(client)}>{client.received ? "✓" : ""}</button><div><strong>{client.fullName}</strong><small>{client.requestedTime || "—"} · {client.phone || "Телефон не указан"}</small><small>{client.address || "Адрес не указан"}</small></div></article>)}
+            {!fulfillmentDashboard?.deliveryClients.length && <p className="empty-table">Доставок на этот день нет.</p>}
+          </div></section>
+        </div>
+      </section>
+      <section className="pickup-qr-points-card"><div className="pickup-today-heading"><div><span className="eyebrow">QR точек выдачи</span><h2>Распечатать QR для каждой точки</h2><p>QR статический и подписан серверным секретом. Клиент может списать только свою подписку и только один раз за день.</p></div></div><div className="pickup-qr-point-grid">{pickupQrPoints.map(point => <button type="button" key={point.code} onClick={() => setQrPoint(point)}><strong>{point.name}</strong><small>{point.address}</small><span>Показать QR</span></button>)}</div></section>
+
       <section className="pickup-today-card">
         <div className="pickup-today-heading">
           <div>
             <span className="eyebrow">Пункты выдачи</span>
             <h2>Остатки на {pickupDashboard ? formatDate(pickupDashboard.serviceDate) : "сегодня"}</h2>
-            <p>«Забрали» меняется автоматически после каждого успешного сканирования QR.</p>
+            <p>Самовывоз списывается только после QR. Красный индикатор — клиент ещё не забрал, зелёный — QR успешно отсканирован.</p>
           </div>
-          {pickupDashboard && !pickupDashboard.isEndOfDay && (
-            <small>Список не забравших появится после {String(pickupDashboard.dayEndHour).padStart(2, "0")}:00</small>
-          )}
+          {pickupDashboard && <small>После 22:00 панель автоматически переключится на следующий день.</small>}
         </div>
 
         <div className="manager-table-wrap pickup-table-wrap">
@@ -328,7 +387,7 @@ export default function ManagerPage() {
               <tr>
                 <th>Пункт выдачи</th>
                 <th>Доставлено</th>
-                <th>Забрали</th>
+                <th>Списано</th>
                 <th>Осталось</th>
                 <th>Клиенты</th>
               </tr>
@@ -365,14 +424,10 @@ export default function ManagerPage() {
                   <td><b className="pickup-number pickup-picked">{point.pickedUpCount}</b></td>
                   <td><b className={`pickup-number ${point.remainingCount > 0 ? "pickup-left" : "pickup-empty"}`}>{point.remainingCount}</b></td>
                   <td>
-                    {pickupDashboard.isEndOfDay && point.remainingCount > 0 ? (
-                      <button className="contact-clients-button" type="button" onClick={() => setContactPoint(point)}>
-                        Связаться с клиентами
-                      </button>
-                    ) : point.remainingCount === 0 ? (
+                    {point.remainingCount === 0 ? (
                       <span className="manager-done">Все обеды забрали</span>
                     ) : (
-                      <span className="pickup-waiting">До конца дня</span>
+                      <span className="pickup-waiting">См. клиентов выше</span>
                     )}
                   </td>
                 </tr>
@@ -402,14 +457,13 @@ export default function ManagerPage() {
                 <th>Цена</th>
                 <th>Статус</th>
                 <th>Действие</th>
-                <th>Сообщения</th>
               </tr>
             </thead>
             <tbody>
               {subscriptions.map((item) => (
                 <tr key={item.id} className={item.status === "AWAITING_ACTIVATION" ? "needs-activation" : ""}>
                   <td><strong>{item.full_name}</strong><small>{item.phone || "—"}</small>{item.status === "ACTIVE" && <small>Код: {item.code}</small>}</td>
-                  <td><strong>{item.pickup_point_name || "—"}</strong><small>{item.payment_method || "—"}</small></td>
+                  <td><strong>{item.fulfillment_type === "DELIVERY" ? "Доставка" : (item.pickup_point_name || "—")}</strong><small>{item.payment_method || "—"}</small></td>
                   <td>
                     <details>
                       <summary>{item.selected_days} оплаченных дней</summary>
@@ -442,17 +496,16 @@ export default function ManagerPage() {
                         className="delete-subscription-button"
                         type="button"
                         disabled={deleting === item.id}
-                        onClick={() => { setDeleteTarget(item); setDeletePassword(""); setError(""); }}
+                        onClick={() => { setDeleteTarget(item); setError(""); }}
                       >
                         {deleting === item.id ? "Удаляем…" : "Удалить"}
                       </button>
                     </div>
                   </td>
-                  <td><button type="button" className="manager-message-button" onClick={() => setChatClient({ userId: item.user_id, fullName: item.full_name, phone: item.phone })}>Написать{item.manager_unread_count > 0 && <span className="message-alert">!</span>}</button></td>
                 </tr>
               ))}
               {!subscriptions.length && (
-                <tr><td colSpan={7} className="empty-table">Подписок пока нет.</td></tr>
+                <tr><td colSpan={6} className="empty-table">Подписок пока нет.</td></tr>
               )}
             </tbody>
           </table>
@@ -461,27 +514,18 @@ export default function ManagerPage() {
 
       {deleteTarget && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
-          if (event.currentTarget === event.target && !deleting) { setDeleteTarget(null); setDeletePassword(""); }
+          if (event.currentTarget === event.target && !deleting) setDeleteTarget(null);
         }}>
           <section className="payment-modal delete-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="delete-subscription-title">
-            <button className="modal-close" type="button" aria-label="Закрыть" disabled={Boolean(deleting)} onClick={() => { setDeleteTarget(null); setDeletePassword(""); }}>×</button>
+            <button className="modal-close" type="button" aria-label="Закрыть" disabled={Boolean(deleting)} onClick={() => setDeleteTarget(null)}>×</button>
             <span className="eyebrow">Удаление подписки</span>
             <h2 id="delete-subscription-title">Подтвердите удаление</h2>
             <p><b>{deleteTarget.full_name}</b> · {deleteTarget.code || "код ещё не присвоен"}</p>
-            <p className="delete-warning">Подписка, её даты, QR-сканирования и заявки доставки будут удалены без возможности восстановления.</p>
-            <label>Пароль менеджера
-              <input
-                type="password"
-                value={deletePassword}
-                onChange={(event) => setDeletePassword(event.target.value)}
-                placeholder="Введите пароль"
-                autoFocus
-                onKeyDown={(event) => { if (event.key === "Enter") void deleteSubscription(); }}
-              />
-            </label>
+            <p className="delete-warning">Подписка, её даты и заявки доставки будут удалены без возможности восстановления.</p>
+            <p>Для подтверждения нажмите кнопку ниже. Действие необратимо.</p>
             <div className="delete-confirm-actions">
-              <button type="button" className="delete-confirm-cancel" disabled={Boolean(deleting)} onClick={() => { setDeleteTarget(null); setDeletePassword(""); }}>Отмена</button>
-              <button type="button" className="delete-confirm-submit" disabled={Boolean(deleting) || !deletePassword} onClick={() => void deleteSubscription()}>
+              <button type="button" className="delete-confirm-cancel" disabled={Boolean(deleting)} onClick={() => setDeleteTarget(null)}>Отмена</button>
+              <button type="button" className="delete-confirm-submit" disabled={Boolean(deleting)} onClick={() => void deleteSubscription()}>
                 {deleting ? "Удаляем…" : "Удалить подписку"}
               </button>
             </div>
@@ -521,18 +565,8 @@ export default function ManagerPage() {
           </section>
         </div>
       )}
-      <ChatWindow
-        open={Boolean(chatClient)}
-        onClose={() => setChatClient(null)}
-        mode="MANAGER"
-        title={chatClient ? `${chatClient.fullName}${chatClient.phone ? ` · ${chatClient.phone}` : ""}` : "Чат с клиентом"}
-        userId={chatClient?.userId}
-        managerPassword={password}
-        onRead={() => {
-          if (!chatClient) return;
-          setSubscriptions((current) => current.map((item) => item.user_id === chatClient.userId ? { ...item, manager_unread_count: 0 } : item));
-        }}
-      />
+      {deliveryConfirm && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && !confirmingDelivery) setDeliveryConfirm(null); }}><section className="payment-modal delivery-confirm-modal" role="dialog" aria-modal="true"><button className="modal-close" type="button" disabled={Boolean(confirmingDelivery)} onClick={() => setDeliveryConfirm(null)}>×</button><span className="eyebrow">Доставка</span><h2>Клиент получил еду?</h2><p><strong>{deliveryConfirm.fullName}</strong><br/>{deliveryConfirm.requestedTime || "—"} · {deliveryConfirm.address || "Адрес не указан"}</p><div className="delivery-confirm-actions"><button type="button" className="confirm-yes" disabled={Boolean(confirmingDelivery)} onClick={() => void confirmDeliveryReceived()}>{confirmingDelivery ? "Сохраняем…" : "Да"}</button><button type="button" className="confirm-no" disabled={Boolean(confirmingDelivery)} onClick={() => setDeliveryConfirm(null)}>Нет</button></div></section></div>}
+      {qrPoint && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setQrPoint(null); }}><section className="payment-modal pickup-qr-modal" role="dialog" aria-modal="true"><button className="modal-close" type="button" onClick={() => setQrPoint(null)}>×</button><span className="eyebrow">QR точки выдачи</span><h2>{qrPoint.name}</h2><p>{qrPoint.address}</p><img src={`/api/manager/pickup-qr?point=${encodeURIComponent(qrPoint.code)}`} alt={`QR ${qrPoint.name}`} /><p><small>Распечатайте этот QR и разместите только на соответствующей точке выдачи.</small></p></section></div>}
     </main>
   );
 }

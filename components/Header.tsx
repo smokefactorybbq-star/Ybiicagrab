@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 
 function AccountIcon() {
@@ -12,18 +14,18 @@ function AccountIcon() {
 export default function Header() {
   return (
     <header className="site-header">
-      <Link className="brand" href="/#top" aria-label="MealPoint — вернуться наверх">
+      <Link className="brand" href="/#top" aria-label="MealPoint — наверх страницы">
         <span className="brand-mark">M</span>
         <span>
           <strong>MealPoint</strong>
-          <small>Еда близко.</small>
+          <small>Еда по подписке.</small>
         </span>
       </Link>
 
       <nav className="desktop-nav" aria-label="Основная навигация">
-        <Link href="/#subscription">Меню подписки</Link>
-        <Link href="/rules">Правила и условия</Link>
-        <Link href="/contacts">Контакты</Link>
+        <Link href="/#subscription">Подписка</Link>
+        <Link href="/#pickup-points">Точки выдачи</Link>
+        <Link href="/rules">Правила</Link>
       </nav>
 
       <Link className="account-button" href="/account" aria-label="Личный кабинет">

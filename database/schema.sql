@@ -1,10 +1,11 @@
--- MealPoint PostgreSQL schema.
--- Idempotent: it can safely run on every Railway service start.
+-- MealPoint subscription-only schema for Railway PostgreSQL.
+-- Safe to run on every deploy. It creates/extends only the tables required
+-- for subscriptions, customer accounts, pickup QR, staff dashboards and locks.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 DO $$ BEGIN
-  CREATE TYPE user_role AS ENUM ('CUSTOMER', 'ADMIN', 'MANAGER', 'PARTNER_OWNER', 'PARTNER_STAFF');
+  CREATE TYPE user_role AS ENUM ('CUSTOMER', 'MANAGER');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
@@ -12,7 +13,6 @@ DO $$ BEGIN
   CREATE TYPE subscription_status AS ENUM ('PENDING_PAYMENT', 'AWAITING_ACTIVATION', 'ACTIVE', 'PAUSED', 'COMPLETED', 'CANCELLED');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
-
 ALTER TYPE subscription_status ADD VALUE IF NOT EXISTS 'AWAITING_ACTIVATION';
 
 DO $$ BEGIN
@@ -20,306 +20,281 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
-DO $$ BEGIN
-  CREATE TYPE order_kind AS ENUM ('DELIVERY', 'PARTNER_DELIVERY');
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
-
-DO $$ BEGIN
-  CREATE TYPE order_status AS ENUM ('NEW', 'ACCEPTED', 'COOKING', 'READY', 'COURIER_ASSIGNED', 'ON_THE_WAY', 'DELIVERED', 'CANCELLED');
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
-
 CREATE TABLE IF NOT EXISTS users (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  telegram_id bigint UNIQUE,
-  telegram_username text,
-  full_name text NOT NULL,
-  phone text,
-  avatar_url text,
-  role user_role NOT NULL DEFAULT 'CUSTOMER',
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  telegram_id BIGINT,
+  username TEXT,
+  telegram_username TEXT,
+  telegram_first_name TEXT,
+  telegram_last_name TEXT,
+  profile_name TEXT,
+  full_name TEXT,
+  phone TEXT,
+  address TEXT,
+  photo_url TEXT,
+  avatar_url TEXT,
+  role user_role DEFAULT 'CUSTOMER',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_site_visit_at TIMESTAMPTZ
 );
 
-CREATE TABLE IF NOT EXISTS restaurants (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  slug text UNIQUE NOT NULL,
-  description text,
-  logo_url text,
-  cover_url text,
-  phone text,
-  address text,
-  latitude numeric(10,7),
-  longitude numeric(10,7),
-  working_hours jsonb NOT NULL DEFAULT '{}'::jsonb,
-  is_active boolean NOT NULL DEFAULT true,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
+-- Migration from the previous Telegram-first schema.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid();
+ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_id BIGINT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_username TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_first_name TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_last_name TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_name TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_url TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role user_role DEFAULT 'CUSTOMER';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_site_visit_at TIMESTAMPTZ;
+UPDATE users SET id = gen_random_uuid() WHERE id IS NULL;
 
-CREATE TABLE IF NOT EXISTS restaurant_users (
-  restaurant_id uuid NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
-  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  role user_role NOT NULL DEFAULT 'PARTNER_STAFF',
-  PRIMARY KEY (restaurant_id, user_id)
-);
+DO $$
+DECLARE current_pk TEXT;
+BEGIN
+  SELECT conname INTO current_pk FROM pg_constraint WHERE conrelid = 'users'::regclass AND contype = 'p' LIMIT 1;
+  IF current_pk IS NOT NULL AND EXISTS (
+    SELECT 1 FROM pg_constraint c
+    JOIN unnest(c.conkey) AS k(attnum) ON TRUE
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+    WHERE c.conrelid = 'users'::regclass AND c.contype = 'p' AND a.attname = 'telegram_id'
+  ) THEN
+    EXECUTE format('ALTER TABLE users DROP CONSTRAINT %I', current_pk);
+  END IF;
+END $$;
 
-CREATE TABLE IF NOT EXISTS meals (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  service_date date NOT NULL,
-  title text NOT NULL,
-  description text NOT NULL,
-  image_url text,
-  allergens text[],
-  is_available boolean NOT NULL DEFAULT true,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE(service_date)
-);
+ALTER TABLE users ALTER COLUMN telegram_id DROP NOT NULL;
+ALTER TABLE users ALTER COLUMN id SET NOT NULL;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'users'::regclass AND contype = 'p') THEN
+    ALTER TABLE users ADD PRIMARY KEY (id);
+  END IF;
+END $$;
 
-CREATE TABLE IF NOT EXISTS pickup_points (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  address text NOT NULL,
-  latitude numeric(10,7) NOT NULL,
-  longitude numeric(10,7) NOT NULL,
-  instructions text,
-  working_hours jsonb NOT NULL DEFAULT '{}'::jsonb,
-  is_active boolean NOT NULL DEFAULT true,
-  created_by uuid REFERENCES users(id),
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS subscriptions (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  code text UNIQUE NOT NULL,
-  user_id uuid NOT NULL REFERENCES users(id),
-  status subscription_status NOT NULL DEFAULT 'PENDING_PAYMENT',
-  selected_days integer NOT NULL CHECK (selected_days > 0),
-  remaining_portions integer NOT NULL CHECK (remaining_portions >= 0),
-  pause_limit integer NOT NULL DEFAULT 0,
-  pauses_used integer NOT NULL DEFAULT 0,
-  rate_thb integer NOT NULL,
-  total_thb integer NOT NULL,
-  starts_on date NOT NULL,
-  ends_on date NOT NULL,
-  qr_secret_hash text NOT NULL,
-  account_access_hash text,
-  payment_method text,
-  paid_at timestamptz,
-  activated_at timestamptz,
-  pickup_point_name text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-
-ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS pickup_point_name text;
-ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS account_access_hash text;
-ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS payment_method text;
-ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS paid_at timestamptz;
-ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS activated_at timestamptz;
-
-CREATE TABLE IF NOT EXISTS subscription_days (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  subscription_id uuid NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
-  meal_id uuid REFERENCES meals(id),
-  pickup_point_id uuid REFERENCES pickup_points(id),
-  service_date date NOT NULL,
-  status subscription_day_status NOT NULL DEFAULT 'PLANNED',
-  pause_requested_at timestamptz,
-  redeemed_at timestamptz,
-  UNIQUE(subscription_id, service_date)
-);
-
-CREATE TABLE IF NOT EXISTS subscription_scans (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  subscription_id uuid NOT NULL REFERENCES subscriptions(id),
-  subscription_day_id uuid NOT NULL REFERENCES subscription_days(id),
-  pickup_point_id uuid REFERENCES pickup_points(id),
-  device_id text NOT NULL,
-  token_nonce text UNIQUE NOT NULL,
-  result text NOT NULL,
-  pickup_point_name text,
-  portions_after integer,
-  scanned_at timestamptz NOT NULL DEFAULT now()
-);
-
-ALTER TABLE subscription_scans ALTER COLUMN pickup_point_id DROP NOT NULL;
-ALTER TABLE subscription_scans ADD COLUMN IF NOT EXISTS pickup_point_name text;
-ALTER TABLE subscription_scans ADD COLUMN IF NOT EXISTS portions_after integer;
-CREATE INDEX IF NOT EXISTS subscription_scans_subscription_idx ON subscription_scans(subscription_id, scanned_at DESC);
-
-CREATE TABLE IF NOT EXISTS menu_items (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  restaurant_id uuid REFERENCES restaurants(id) ON DELETE CASCADE,
-  name text NOT NULL,
-  description text,
-  image_url text,
-  price_thb integer NOT NULL CHECK (price_thb >= 0),
-  category text,
-  is_available boolean NOT NULL DEFAULT true,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS orders (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  public_number text UNIQUE NOT NULL,
-  user_id uuid NOT NULL REFERENCES users(id),
-  restaurant_id uuid REFERENCES restaurants(id),
-  kind order_kind NOT NULL DEFAULT 'DELIVERY',
-  status order_status NOT NULL DEFAULT 'NEW',
-  customer_name text NOT NULL,
-  customer_phone text NOT NULL,
-  address text NOT NULL,
-  map_url text,
-  district text,
-  delivery_fee_thb integer NOT NULL DEFAULT 0,
-  subtotal_thb integer NOT NULL,
-  total_thb integer NOT NULL,
-  payment_method text NOT NULL,
-  requested_for timestamptz,
-  preparation_minutes integer,
-  estimated_delivery_at timestamptz,
-  comment text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS order_items (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  order_id uuid NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-  menu_item_id uuid REFERENCES menu_items(id),
-  item_name text NOT NULL,
-  quantity integer NOT NULL CHECK (quantity > 0),
-  unit_price_thb integer NOT NULL,
-  line_total_thb integer NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS reviews (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  order_id uuid UNIQUE NOT NULL REFERENCES orders(id),
-  user_id uuid NOT NULL REFERENCES users(id),
-  restaurant_id uuid NOT NULL REFERENCES restaurants(id),
-  rating integer NOT NULL CHECK (rating BETWEEN 1 AND 5),
-  text text,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS manager_events (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  event_type text NOT NULL,
-  entity_id uuid NOT NULL,
-  payload jsonb NOT NULL,
-  acknowledged_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
+UPDATE users
+SET telegram_username = COALESCE(telegram_username, username),
+    avatar_url = COALESCE(avatar_url, photo_url),
+    full_name = COALESCE(NULLIF(full_name, ''), NULLIF(profile_name, ''),
+      NULLIF(trim(concat_ws(' ', telegram_first_name, telegram_last_name)), ''),
+      'Пользователь MealPoint')
+WHERE telegram_username IS NULL OR avatar_url IS NULL OR full_name IS NULL OR full_name = '';
+CREATE UNIQUE INDEX IF NOT EXISTS users_uuid_unique_idx ON users(id);
+CREATE UNIQUE INDEX IF NOT EXISTS users_telegram_id_unique_idx ON users(telegram_id) WHERE telegram_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS users_phone_idx ON users(phone);
-CREATE INDEX IF NOT EXISTS subscription_days_service_date_idx ON subscription_days(service_date, status);
-CREATE INDEX IF NOT EXISTS subscriptions_created_at_idx ON subscriptions(created_at DESC);
-CREATE INDEX IF NOT EXISTS orders_restaurant_status_idx ON orders(restaurant_id, status, created_at DESC);
-CREATE INDEX IF NOT EXISTS manager_events_pending_idx ON manager_events(created_at) WHERE acknowledged_at IS NULL;
-
--- Weekly kitchen dashboard indexes.
-CREATE INDEX IF NOT EXISTS subscriptions_status_idx ON subscriptions(status);
-CREATE INDEX IF NOT EXISTS subscription_days_subscription_date_idx ON subscription_days(subscription_id, service_date);
-
--- Daily pickup-point inventory — v0.5.1.
--- If no manual value exists, the manager dashboard uses today's active subscription plan.
-CREATE TABLE IF NOT EXISTS pickup_point_daily_inventory (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  service_date date NOT NULL,
-  pickup_point_name text NOT NULL,
-  delivered_count integer NOT NULL DEFAULT 0 CHECK (delivered_count >= 0),
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE(service_date, pickup_point_name)
-);
-
-CREATE INDEX IF NOT EXISTS pickup_point_daily_inventory_date_idx
-  ON pickup_point_daily_inventory(service_date, pickup_point_name);
-
--- Customer accounts, cross-device login and pickup delivery requests — v0.6.0.
-ALTER TABLE users ADD COLUMN IF NOT EXISTS address text;
 
 CREATE TABLE IF NOT EXISTS customer_accounts (
-  user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  phone text UNIQUE NOT NULL,
-  password_hash text NOT NULL,
-  terms_version text NOT NULL DEFAULT '2026-07-30',
-  terms_accepted_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  phone TEXT,
+  password_hash TEXT NOT NULL DEFAULT '',
+  terms_version TEXT NOT NULL DEFAULT '2026-08-13',
+  terms_accepted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE customer_accounts ALTER COLUMN phone DROP NOT NULL;
+
+CREATE TABLE IF NOT EXISTS phone_otp_codes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  phone TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  expires_at TIMESTAMPTZ NOT NULL,
+  consumed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS phone_otp_codes_phone_idx ON phone_otp_codes(phone, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS customer_sessions (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token_hash text UNIQUE NOT NULL,
-  expires_at timestamptz NOT NULL,
-  last_used_at timestamptz NOT NULL DEFAULT now(),
-  created_at timestamptz NOT NULL DEFAULT now()
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT UNIQUE NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS customer_sessions_user_idx ON customer_sessions(user_id, expires_at DESC);
 CREATE INDEX IF NOT EXISTS customer_sessions_expiry_idx ON customer_sessions(expires_at);
 
-CREATE TABLE IF NOT EXISTS pickup_delivery_requests (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  public_token text UNIQUE NOT NULL,
-  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  subscription_id uuid NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
-  service_date date NOT NULL,
-  pickup_point_name text NOT NULL,
-  customer_name text NOT NULL,
-  customer_phone text NOT NULL,
-  delivery_address text NOT NULL,
-  delivery_type text NOT NULL CHECK (delivery_type IN ('ASAP', 'SCHEDULED')),
-  requested_time text,
-  status text NOT NULL DEFAULT 'NEW',
-  telegram_started_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
+CREATE TABLE IF NOT EXISTS meals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  service_date DATE NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  image_url TEXT,
+  allergens TEXT[],
+  is_available BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS pickup_points (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  address TEXT NOT NULL,
+  latitude NUMERIC(10,7) NOT NULL,
+  longitude NUMERIC(10,7) NOT NULL,
+  instructions TEXT,
+  working_hours JSONB NOT NULL DEFAULT '{}'::jsonb,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_by UUID REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code TEXT UNIQUE NOT NULL,
+  user_id UUID NOT NULL REFERENCES users(id),
+  status subscription_status NOT NULL DEFAULT 'PENDING_PAYMENT',
+  selected_days INTEGER NOT NULL CHECK (selected_days > 0),
+  remaining_portions INTEGER NOT NULL CHECK (remaining_portions >= 0),
+  pause_limit INTEGER NOT NULL DEFAULT 0,
+  pauses_used INTEGER NOT NULL DEFAULT 0,
+  rate_thb INTEGER NOT NULL,
+  total_thb INTEGER NOT NULL,
+  starts_on DATE NOT NULL,
+  ends_on DATE NOT NULL,
+  qr_secret_hash TEXT NOT NULL DEFAULT '',
+  account_access_hash TEXT,
+  payment_method TEXT,
+  paid_at TIMESTAMPTZ,
+  activated_at TIMESTAMPTZ,
+  pickup_point_name TEXT,
+  fulfillment_type TEXT NOT NULL DEFAULT 'PICKUP' CHECK (fulfillment_type IN ('PICKUP','DELIVERY')),
+  customer_name TEXT,
+  customer_phone TEXT,
+  delivery_address TEXT,
+  default_time TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS fulfillment_type TEXT NOT NULL DEFAULT 'PICKUP';
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS customer_name TEXT;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS customer_phone TEXT;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS delivery_address TEXT;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS default_time TEXT;
+CREATE INDEX IF NOT EXISTS subscriptions_status_idx ON subscriptions(status);
+CREATE INDEX IF NOT EXISTS subscriptions_created_at_idx ON subscriptions(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS subscription_days (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  subscription_id UUID NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+  meal_id UUID REFERENCES meals(id),
+  pickup_point_id UUID REFERENCES pickup_points(id),
+  service_date DATE NOT NULL,
+  status subscription_day_status NOT NULL DEFAULT 'PLANNED',
+  pause_requested_at TIMESTAMPTZ,
+  redeemed_at TIMESTAMPTZ,
+  fulfillment_type TEXT NOT NULL DEFAULT 'PICKUP' CHECK (fulfillment_type IN ('PICKUP','DELIVERY')),
+  requested_time TEXT,
+  customer_name TEXT,
+  customer_phone TEXT,
+  delivery_address TEXT,
+  consumed_at TIMESTAMPTZ,
+  delivery_received_at TIMESTAMPTZ,
+  delivery_received_by TEXT,
+  pickup_redeemed_point_name TEXT,
   UNIQUE(subscription_id, service_date)
 );
-CREATE INDEX IF NOT EXISTS pickup_delivery_requests_user_idx
-  ON pickup_delivery_requests(user_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS pickup_delivery_requests_status_idx
-  ON pickup_delivery_requests(status, created_at DESC);
+ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS fulfillment_type TEXT NOT NULL DEFAULT 'PICKUP';
+ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS requested_time TEXT;
+ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS customer_name TEXT;
+ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS customer_phone TEXT;
+ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS delivery_address TEXT;
+ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS consumed_at TIMESTAMPTZ;
+ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS delivery_received_at TIMESTAMPTZ;
+ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS delivery_received_by TEXT;
+ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS pickup_redeemed_point_name TEXT;
+CREATE INDEX IF NOT EXISTS subscription_days_subscription_date_idx ON subscription_days(subscription_id, service_date);
+CREATE INDEX IF NOT EXISTS subscription_days_service_date_idx ON subscription_days(service_date, status);
 
--- Global test clock and permanent customer-manager chat — v0.7.0.
+CREATE TABLE IF NOT EXISTS subscription_scans (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  subscription_id UUID NOT NULL REFERENCES subscriptions(id),
+  subscription_day_id UUID NOT NULL REFERENCES subscription_days(id),
+  pickup_point_id UUID REFERENCES pickup_points(id),
+  device_id TEXT NOT NULL,
+  token_nonce TEXT UNIQUE NOT NULL,
+  result TEXT NOT NULL,
+  pickup_point_name TEXT,
+  portions_after INTEGER,
+  scanned_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DELETE FROM subscription_scans newer
+USING subscription_scans older
+WHERE newer.result = 'REDEEMED'
+  AND older.result = 'REDEEMED'
+  AND newer.subscription_day_id = older.subscription_day_id
+  AND (newer.scanned_at, newer.id) > (older.scanned_at, older.id);
+CREATE UNIQUE INDEX IF NOT EXISTS subscription_scans_one_redeem_day_idx
+  ON subscription_scans(subscription_day_id)
+  WHERE result = 'REDEEMED';
+
+CREATE TABLE IF NOT EXISTS pickup_lock_states (
+  point_code TEXT PRIMARY KEY,
+  open_until TIMESTAMPTZ,
+  last_seen_at TIMESTAMPTZ,
+  last_redeemed_subscription_id UUID REFERENCES subscriptions(id) ON DELETE SET NULL,
+  last_redeemed_subscription_day_id UUID REFERENCES subscription_days(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS pickup_lock_states_seen_idx ON pickup_lock_states(last_seen_at DESC);
+
+CREATE TABLE IF NOT EXISTS pickup_point_daily_inventory (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  service_date DATE NOT NULL,
+  pickup_point_name TEXT NOT NULL,
+  delivered_count INTEGER NOT NULL DEFAULT 0 CHECK (delivered_count >= 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(service_date, pickup_point_name)
+);
+
 CREATE TABLE IF NOT EXISTS app_runtime_settings (
-  id smallint PRIMARY KEY DEFAULT 1 CHECK (id = 1),
-  test_mode boolean NOT NULL DEFAULT false,
-  test_datetime_local varchar(16),
-  updated_at timestamptz NOT NULL DEFAULT now()
+  id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  test_mode BOOLEAN NOT NULL DEFAULT FALSE,
+  test_datetime_local VARCHAR(16),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 INSERT INTO app_runtime_settings (id, test_mode, test_datetime_local)
-VALUES (1, false, NULL)
-ON CONFLICT (id) DO NOTHING;
+VALUES (1, FALSE, NULL) ON CONFLICT (id) DO NOTHING;
 
-CREATE TABLE IF NOT EXISTS customer_conversations (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
+CREATE TABLE IF NOT EXISTS manager_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_type TEXT NOT NULL,
+  entity_id UUID NOT NULL,
+  payload JSONB NOT NULL,
+  acknowledged_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS manager_events_pending_idx ON manager_events(created_at) WHERE acknowledged_at IS NULL;
 
-CREATE TABLE IF NOT EXISTS customer_messages (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  conversation_id uuid NOT NULL REFERENCES customer_conversations(id) ON DELETE CASCADE,
-  sender_role text NOT NULL CHECK (sender_role IN ('CUSTOMER', 'MANAGER')),
-  body text NOT NULL CHECK (char_length(body) BETWEEN 1 AND 4000),
-  read_by_customer_at timestamptz,
-  read_by_manager_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now()
+CREATE TABLE IF NOT EXISTS staff_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  role TEXT NOT NULL CHECK (role IN ('MANAGER','KITCHEN','COURIER')),
+  username TEXT NOT NULL,
+  token_hash TEXT UNIQUE NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS customer_messages_conversation_idx
-  ON customer_messages(conversation_id, created_at ASC);
-CREATE INDEX IF NOT EXISTS customer_messages_manager_unread_idx
-  ON customer_messages(conversation_id, created_at)
-  WHERE sender_role = 'CUSTOMER' AND read_by_manager_at IS NULL;
-CREATE INDEX IF NOT EXISTS customer_messages_customer_unread_idx
-  ON customer_messages(conversation_id, created_at)
-  WHERE sender_role = 'MANAGER' AND read_by_customer_at IS NULL;
+CREATE INDEX IF NOT EXISTS staff_sessions_expiry_idx ON staff_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS staff_sessions_role_idx ON staff_sessions(role, expires_at DESC);
+
+CREATE TABLE IF NOT EXISTS security_rate_limits (
+  rate_key TEXT NOT NULL,
+  window_start TIMESTAMPTZ NOT NULL,
+  hits INTEGER NOT NULL DEFAULT 0 CHECK (hits >= 0),
+  PRIMARY KEY (rate_key, window_start)
+);
+CREATE INDEX IF NOT EXISTS security_rate_limits_window_idx ON security_rate_limits(window_start);

@@ -18,11 +18,16 @@ button, a { -webkit-tap-highlight-color: transparent; }
 a { color: inherit; text-decoration: none; }
 img { display: block; max-width: 100%; }
 .site-header { height: 82px; position: sticky; top: 0; z-index: 50; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 0 4vw; background: rgba(255,253,248,.94); border-bottom: 1px solid var(--line); backdrop-filter: blur(16px); }
-.brand { display: flex; align-items: center; gap: 11px; min-width: 210px; }
+.brand-cluster { display: flex; align-items: center; gap: 13px; min-width: 210px; }
+.brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
 .brand-mark { width: 41px; height: 41px; display: grid; place-items: center; border-radius: 14px; color: white; background: var(--orange); font-weight: 900; font-size: 22px; transform: rotate(-4deg); }
 .brand strong, .brand small { display: block; }
 .brand strong { font-size: 20px; letter-spacing: -.5px; }
 .brand small { margin-top: 1px; color: #6b7772; font-size: 11px; }
+.brand-divider { width: 1px; height: 42px; flex: 0 0 1px; background: var(--line); }
+.smoke-brand { display: flex; align-items: center; justify-content: center; padding: 2px 5px; border-radius: 12px; transition: background .18s ease, transform .18s ease; }
+.smoke-brand:hover { background: rgba(23,47,40,.05); transform: translateY(-1px); }
+.smoke-brand img { width: 92px; height: 52px; object-fit: contain; border-radius: 8px; background: white; }
 .desktop-nav { display: flex; justify-content: center; gap: 26px; font-size: 14px; font-weight: 700; }
 .desktop-nav a:hover { color: var(--orange-dark); }
 .account-button { display: flex; align-items: center; gap: 9px; padding: 11px 15px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; font-weight: 800; white-space: nowrap; }
@@ -72,13 +77,6 @@ img { display: block; max-width: 100%; }
 .calendar-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 30px 0 18px; }
 .text-button { border: 0; padding: 9px 13px; border-radius: 10px; color: white; background: var(--green); cursor: pointer; font-weight: 800; }
 .text-button.muted { color: var(--ink); background: rgba(255,255,255,.7); }
-.pricing-hint { flex: 0 0 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; width: 100%; margin-top: 8px; }
-.price-tier { position: relative; min-height: 116px; padding: 18px 20px; border: 1px solid rgba(236,116,70,.24); border-radius: 18px; background: rgba(255,255,255,.78); box-shadow: 0 10px 28px rgba(43,50,45,.06); }
-.price-tier > span { display: block; color: #687671; font-size: 14px; font-weight: 900; }
-.price-tier > div { display: flex; align-items: baseline; gap: 11px; margin-top: 10px; }
-.price-tier strong { color: var(--ink); font-size: 30px; line-height: 1; }
-.price-tier del { color: #8b9692; font-size: 18px; font-weight: 800; text-decoration-color: var(--orange-dark); text-decoration-thickness: 2px; }
-.price-tier em { position: absolute; top: 15px; right: 16px; padding: 6px 9px; border-radius: 999px; color: white; background: var(--orange-dark); font-size: 11px; font-style: normal; font-weight: 900; }
 .calendar-scroll { display: flex; gap: 14px; overflow-x: auto; padding: 3px 2px 12px; scroll-snap-type: x mandatory; scrollbar-width: none; }
 .calendar-scroll::-webkit-scrollbar { display: none; }
 .calendar-drag-control { margin-top: 10px; padding: 10px 18px; border: 1px solid rgba(23,47,40,.1); border-radius: 18px; background: rgba(255,255,255,.7); }
@@ -207,9 +205,15 @@ img { display: block; max-width: 100%; }
   .checkout-card { position: static; }
 }
 @media (max-width: 720px) {
-  .site-header { height: 70px; padding: 0 16px; }
+  .site-header { height: 70px; padding: 0 12px; gap: 10px; }
   .brand small, .account-button span { display: none; }
-  .brand { min-width: unset; }
+  .brand-cluster { min-width: 0; gap: 8px; }
+  .brand { min-width: unset; gap: 8px; }
+  .brand-mark { width: 36px; height: 36px; border-radius: 12px; font-size: 19px; }
+  .brand strong { font-size: 17px; }
+  .brand-divider { height: 34px; }
+  .smoke-brand { padding: 0 2px; }
+  .smoke-brand img { width: 68px; height: 40px; border-radius: 6px; }
   .account-button { padding: 10px; }
   .hero { min-height: unset; padding: 50px 20px 58px; }
   .hero h1 { font-size: 43px; letter-spacing: -2px; }
@@ -229,7 +233,6 @@ img { display: block; max-width: 100%; }
   .subscription-section, .map-section, .page-shell { padding: 58px 18px; }
   .split-heading, .account-top { align-items: flex-start; flex-direction: column; }
   .month-controls { width: 100%; justify-content: space-between; }
-  .pricing-hint { grid-template-columns: 1fr; width: 100%; }
   .meal-day { flex-basis: 82vw; }
   .subscription-summary { bottom: 8px; grid-template-columns: 1fr 1fr; gap: 12px; padding: 15px; border-radius: 20px; }
   .subscription-summary .summary-total { grid-column: 1 / 2; }
@@ -357,7 +360,6 @@ img { display: block; max-width: 100%; }
 .page-intro-with-action > div { max-width: 880px; }
 .partner-actions { justify-content: flex-end; }
 
-.consecutive-actions .pricing-hint { flex: 0 0 100%; text-align: left; }
 .meal-day:disabled { cursor: not-allowed; opacity: .42; filter: grayscale(.35); }
 .meal-day:disabled:hover { transform: none; }
 .meal-day.next-available:not(.selected) { border-color: rgba(44,112,92,.35); box-shadow: 0 15px 42px rgba(44,112,92,.12); }
@@ -432,7 +434,6 @@ img { display: block; max-width: 100%; }
 @media (max-width: 720px) {
   .section-actions, .account-top-actions, .partner-actions { align-items: stretch; width: 100%; }
   .section-actions > *, .account-top-actions > *, .partner-actions > * { flex: 1; }
-  .consecutive-actions .pricing-hint { text-align: left; }
   .account-login-card { padding: 25px; }
   .purchase-card { grid-template-columns: 1fr; padding: 22px; }
   .purchase-card > div { grid-column: 1; }
@@ -923,4 +924,259 @@ img { display: block; max-width: 100%; }
   .cafe-menu-intro > .question-link { grid-column: 1 / -1; margin-left: 0; }
   .cafe-logo-large { width: 82px; height: 82px; flex-basis: 82px; border-radius: 21px; font-size: 31px; }
   .delete-confirm-actions, .pause-confirm-actions { grid-template-columns: 1fr; }
+}
+
+/* Pickup QR + daily fulfillment dashboard — v0.8.0 */
+.subscription-pickup-scan-actions { display:grid; justify-items:end; gap:8px; min-width:190px; }
+.pickup-scan-button { border:0; padding:13px 18px; border-radius:13px; color:#fff; background:#1c6b4b; cursor:pointer; font-weight:900; }
+.pickup-scan-button:disabled { opacity:.45; cursor:not-allowed; }
+.pickup-today-success { display:inline-flex; align-items:center; gap:7px; padding:10px 13px; border-radius:999px; color:#14623f; background:#dcf5e6; font-weight:900; }
+.customer-qr-modal { width:min(560px,100%); }
+.customer-qr-reader { min-height:310px; margin:16px 0; overflow:hidden; border:2px dashed #b9c8c1; border-radius:18px; background:#f3f5f2; }
+.customer-qr-reader video { border-radius:16px; }
+.qr-scan-message { min-height:24px; text-align:center; color:#61706b; font-weight:800; }
+.customer-file-scan { justify-content:center; width:100%; margin:10px 0; }
+.subscription-checkout-form select { width:100%; border:1px solid var(--line); padding:13px; border-radius:12px; background:var(--paper); font:inherit; }
+.daily-fulfillment-card, .pickup-qr-points-card { margin-top:26px; padding:28px; border-radius:28px; background:#fff; box-shadow:var(--shadow); }
+.fulfillment-columns { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+.fulfillment-column { padding:18px; border:1px solid var(--line); border-radius:20px; background:#faf9f5; }
+.fulfillment-column-title { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+.fulfillment-column-title h3 { margin:0; font-size:25px; }
+.fulfillment-column-title span { min-width:34px; height:34px; display:grid; place-items:center; border-radius:50%; background:#ece9df; font-weight:900; }
+.fulfillment-client-list { display:grid; gap:9px; }
+.fulfillment-client-row { display:grid; grid-template-columns:42px 1fr; align-items:center; gap:12px; padding:12px; border-radius:15px; background:#fff; border:1px solid var(--line); }
+.fulfillment-client-row strong, .fulfillment-client-row small { display:block; }
+.fulfillment-client-row small { margin-top:3px; color:#6f7c77; }
+.pickup-status-circle { width:28px; height:28px; justify-self:center; border-radius:50%; border:3px solid rgba(0,0,0,.08); }
+.pickup-status-circle.is-waiting { background:#e84d45; }
+.pickup-status-circle.is-done { background:#34a56d; }
+.delivery-status-box { width:32px; height:32px; justify-self:center; border:2px solid #8d9894; border-radius:7px; background:#fff; cursor:pointer; font-size:21px; font-weight:1000; line-height:1; }
+.delivery-status-box.is-done { color:#fff; border-color:#2e9d67; background:#2e9d67; cursor:default; }
+.pickup-qr-point-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.pickup-qr-point-grid button { display:grid; gap:5px; padding:16px; border:1px solid var(--line); border-radius:16px; background:#faf9f5; text-align:left; cursor:pointer; }
+.pickup-qr-point-grid button strong { font-size:16px; }
+.pickup-qr-point-grid button small { color:#6e7b76; }
+.pickup-qr-point-grid button span { margin-top:6px; color:#1c6b4b; font-weight:900; }
+.pickup-qr-modal { width:min(520px,100%); text-align:center; }
+.pickup-qr-modal img { display:block; width:min(380px,100%); margin:16px auto; border-radius:12px; background:#fff; }
+.delivery-confirm-actions { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:20px; }
+.delivery-confirm-actions button { border:0; padding:14px; border-radius:13px; cursor:pointer; font-weight:900; }
+.delivery-confirm-actions .confirm-yes { color:#fff; background:#2e9d67; }
+.delivery-confirm-actions .confirm-no { color:var(--ink); background:var(--cream); }
+@media (max-width:800px){ .fulfillment-columns{grid-template-columns:1fr}.pickup-qr-point-grid{grid-template-columns:1fr}.subscription-pickup-scan-actions{justify-items:stretch;width:100%}.daily-fulfillment-card,.pickup-qr-points-card{padding:18px;border-radius:21px} }
+
+
+/* Subscription-only checkout */
+.fulfillment-choice-summary { display:grid; gap:5px; padding:14px 15px; border:1px solid var(--line); border-radius:14px; background:var(--cream); }
+.fulfillment-choice-summary strong { font-size:17px; }
+.fulfillment-choice-summary small { color:#65736e; }
+.fulfillment-choice-summary a { margin-top:3px; color:var(--green); font-size:12px; font-weight:900; }
+.fulfillment-choice-modal label { display:grid; gap:8px; margin:16px 0; color:#61706b; font-size:12px; font-weight:900; text-align:left; }
+.fulfillment-choice-modal select { width:100%; padding:13px; border:1px solid var(--line); border-radius:12px; background:var(--paper); font:inherit; }
+
+/* Phone registration */
+.phone-login-box { display: grid; gap: 12px; margin: 20px 0 16px; }
+.phone-login-box label { display: grid; gap: 7px; margin: 0; }
+.phone-login-box input { margin: 0; font-size: 18px; }
+.phone-login-box > button { width: 100%; border: 0; padding: 14px 18px; border-radius: 13px; color: white; background: var(--ink); cursor: pointer; font-weight: 900; }
+.phone-login-box > button:disabled { opacity: .5; cursor: not-allowed; }
+.phone-login-box > button.phone-change-button { color: var(--ink); background: var(--cream); }
+.phone-login-message { margin: 0 !important; padding: 10px 12px; border-radius: 11px; color: #176640 !important; background: #e7f6ed; font-size: 13px; font-weight: 800; }
+.phone-login-dev-code { margin: 0 !important; padding: 10px 12px; border-radius: 11px; color: #76500f !important; background: #fff3cf; font-size: 13px; }
+
+/* === MealPoint subscription day picker v0.8.0 === */
+.meal-day {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 270px;
+  min-height: 470px;
+  padding: 12px;
+  overflow: visible;
+  border: 2px solid transparent;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 12px 34px rgba(23,47,40,.09);
+}
+.meal-day.selected { border-color: var(--orange); }
+.meal-day.next-available { border-color: rgba(216,88,47,.42); box-shadow: 0 16px 42px rgba(216,88,47,.18); }
+.meal-day-open-area {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  min-height: 390px;
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.meal-day-open-area:hover .meal-open-overlay { opacity: 1; transform: translateY(0); }
+.meal-day-open-area:focus-visible { outline: 3px solid rgba(216,88,47,.35); outline-offset: 3px; }
+.meal-image-frame { position: relative; }
+.meal-open-overlay {
+  position: absolute;
+  inset: auto 10px 10px 10px;
+  display: grid;
+  min-height: 38px;
+  place-items: center;
+  padding: 8px 10px;
+  border-radius: 12px;
+  color: #fff;
+  background: rgba(23,47,40,.9);
+  font-size: 11px;
+  font-weight: 900;
+  opacity: .94;
+  transition: .18s ease;
+}
+.meal-details-hint {
+  display: block;
+  margin: 10px 3px 14px;
+  color: #687671;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.meal-day-button-zone {
+  position: relative;
+  z-index: 4;
+  width: 100%;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid #edf0ed;
+  background: #fff;
+}
+.add-next-day-button {
+  display: block;
+  width: 100%;
+  min-height: 52px;
+  padding: 13px 14px;
+  border: 0;
+  border-radius: 14px;
+  color: #fff;
+  background: var(--orange);
+  box-shadow: 0 9px 20px rgba(216,88,47,.22);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 950;
+  line-height: 1.15;
+}
+.add-next-day-button:hover:not(:disabled) { transform: translateY(-1px); }
+.add-next-day-button:disabled {
+  color: #8d9894;
+  background: #ecefeb;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.meal-day.selected .add-next-day-button:disabled {
+  color: #8c4c31;
+  background: #ffe5d9;
+}
+
+.meal-details-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483000 !important;
+  display: block !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: rgba(10,24,20,.72) !important;
+}
+.meal-details-modal {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483001 !important;
+  display: grid !important;
+  grid-template-rows: minmax(0,1fr) auto !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  border-radius: 0 !important;
+  color: var(--ink);
+  background: var(--paper, #fffdf8) !important;
+}
+.meal-details-content { overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 60px clamp(72px,8vw,128px) 34px; }
+.meal-details-close,
+.meal-details-arrow { position: fixed !important; z-index: 2147483005 !important; }
+.meal-details-close {
+  top: max(18px, env(safe-area-inset-top));
+  right: max(18px, env(safe-area-inset-right));
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: var(--ink);
+  background: #fff;
+  box-shadow: 0 8px 28px rgba(0,0,0,.15);
+  cursor: pointer;
+  font-size: 34px;
+  line-height: 1;
+}
+.meal-details-arrow {
+  top: 50%;
+  display: grid;
+  width: 54px;
+  height: 54px;
+  margin-top: -27px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  background: #173028;
+  box-shadow: 0 8px 28px rgba(0,0,0,.18);
+  cursor: pointer;
+  font-size: 27px;
+}
+.meal-details-arrow.left { left: 16px; }
+.meal-details-arrow.right { right: 16px; }
+.meal-details-arrow:disabled { opacity: .25; cursor: not-allowed; }
+.meal-details-footer {
+  position: relative;
+  z-index: 2147483004;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 82px;
+  padding: 14px clamp(18px,4vw,64px) calc(14px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: #fff;
+  box-shadow: 0 -8px 30px rgba(23,47,40,.1);
+}
+.meal-details-footer > button {
+  min-height: 54px;
+  padding: 14px 22px;
+  border: 0;
+  border-radius: 14px;
+  color: #fff;
+  background: var(--orange);
+  box-shadow: 0 9px 20px rgba(216,88,47,.22);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 950;
+}
+.meal-details-footer > button:disabled { opacity: .4; box-shadow: none; cursor: not-allowed; }
+
+@media (max-width: 720px) {
+  .meal-day { flex-basis: 86vw; min-height: 485px; }
+  .meal-day-open-area { min-height: 400px; }
+  .meal-details-content { padding: 84px 16px 24px; }
+  .meal-details-heading { padding: 0 46px 0 0; }
+  .meal-details-heading h2 { font-size: 38px; line-height: 1; letter-spacing: -1.8px; }
+  .meal-details-arrow { top: auto; bottom: 90px; width: 46px; height: 46px; margin: 0; }
+  .meal-details-arrow.left { left: 12px; }
+  .meal-details-arrow.right { right: 12px; }
+  .meal-details-close { top: max(14px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); width: 46px; height: 46px; font-size: 30px; }
+  .meal-details-footer { display: block; min-height: 78px; padding: 11px 12px calc(11px + env(safe-area-inset-bottom)); }
+  .meal-details-footer > div { display: none; }
+  .meal-details-footer > button { width: 100%; }
 }

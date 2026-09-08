@@ -4,7 +4,14 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const BANGKOK_TIME_ZONE = "Asia/Bangkok";
 
 export function normalizePhone(phone: string) {
-  return phone.trim().replace(/[^\d+]/g, "");
+  const raw = phone.trim();
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return "";
+  if (raw.startsWith("+")) return `+${digits}`;
+  if (digits.length === 10 && digits.startsWith("0")) return `+66${digits.slice(1)}`;
+  if (digits.startsWith("66") && digits.length >= 10) return `+${digits}`;
+  if (digits.startsWith("7") && digits.length === 11) return `+${digits}`;
+  return `+${digits}`;
 }
 
 export function normalizeDates(input: unknown) {

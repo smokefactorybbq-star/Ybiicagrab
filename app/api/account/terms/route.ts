@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
 
   const result = await query<{ terms_accepted_at: string }>(
     `UPDATE customer_accounts
-     SET terms_accepted_at = now(), terms_version = '2026-07-30', updated_at = now()
+     SET terms_accepted_at = now(), terms_version = '2026-08-13', updated_at = now()
      WHERE user_id = $1
      RETURNING terms_accepted_at::text`,
     [account.userId]

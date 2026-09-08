@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getMealTemplateForDate, type MealTemplate } from "../data/meals";
+import { getCourseDetails, getMealNutrition, getMealTemplateForDate, type MealTemplate } from "../data/meals";
 import QuestionLink from "./QuestionLink";
+import { pickupPoints } from "../data/pickupPoints";
 
 type CalendarDay = {
   id: string;
@@ -19,6 +20,8 @@ type SubscriptionDraft = {
   rate: number;
   total: number;
   createdAt: string;
+  fulfillmentType: "PICKUP" | "DELIVERY";
+  pickupPointName?: string;
   duplicateConfirmed?: boolean;
 };
 
@@ -29,6 +32,7 @@ type ExistingSubscription = {
 
 const monthNames = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
 const weekdayNames = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+const MAX_SUBSCRIPTION_DAYS = 30;
 
 function bangkokTodayIso() {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -60,25 +64,33 @@ function sameDates(left: string[], right: string[]) {
   return left.length === right.length && left.every((date, index) => date === right[index]);
 }
 
+function formatLongDate(item: CalendarDay) {
+  return `${item.day} ${item.monthLabel}, ${item.weekday}`;
+}
+
 export default function SubscriptionCalendar() {
   const router = useRouter();
   const [todayIso, setTodayIso] = useState(bangkokTodayIso());
   const [testMode, setTestMode] = useState(false);
   const days = useMemo(() => makeDays(todayIso), [todayIso]);
   const [selected, setSelected] = useState<string[]>([]);
-  const [packageDays, setPackageDays] = useState<7 | 14 | 30 | null>(null);
-  const [packageStart, setPackageStart] = useState(addDays(todayIso, 1));
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [checkingDuplicate, setCheckingDuplicate] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
+  const [fulfillmentOpen, setFulfillmentOpen] = useState(false);
+  const [fulfillmentChoice, setFulfillmentChoice] = useState<"PICKUP" | "DELIVERY">("PICKUP");
+  const [chosenPickupPoint, setChosenPickupPoint] = useState(pickupPoints[0]?.name || "");
+  const [duplicateConfirmed, setDuplicateConfirmed] = useState(false);
   const [showFirstCourse, setShowFirstCourse] = useState(true);
   const [scrollPosition, setScrollPosition] = useState(0);
+  const [detailsIndex, setDetailsIndex] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
   const rate = getRate(selected.length);
   const total = selected.length * rate;
   const selectedSet = useMemo(() => new Set(selected), [selected]);
-  const selectedStartIndex = selected.length ? days.findIndex((day) => day.id === selected[0]) : -1;
-  const selectedEndIndex = selected.length ? selectedStartIndex + selected.length - 1 : -1;
+  const nextIndex = selected.length;
+  const detailsDay = detailsIndex === null ? null : days[detailsIndex];
 
   useEffect(() => {
     let cancelled = false;
@@ -87,7 +99,6 @@ export default function SubscriptionCalendar() {
       const nextToday = String(data.clock.date || todayIso);
       setTodayIso(nextToday);
       setTestMode(Boolean(data.clock.isTestMode));
-      setPackageStart(addDays(nextToday, 1));
       setSelected([]);
     }).catch(() => undefined);
     return () => { cancelled = true; };
@@ -99,33 +110,33 @@ export default function SubscriptionCalendar() {
     return () => window.clearInterval(rotation);
   }, []);
 
-  function toggleDay(index: number) {
-    setSelected((current) => {
-      if (!current.length) return index === 0 ? [days[0].id] : current;
-      const startIndex = days.findIndex((day) => day.id === current[0]);
-      const endIndex = startIndex + current.length - 1;
-      if (index === endIndex + 1 && current.length < 30) return [...current, days[index].id];
-      if (index >= startIndex && index <= endIndex) {
-        if (index === startIndex && current.length === 1) return [];
-        if (index === endIndex) return current.slice(0, -1);
-        return days.slice(startIndex, index + 1).map((day) => day.id);
-      }
-      return current;
-    });
+  useEffect(() => {
+    if (detailsIndex === null) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDetailsIndex(null);
+      if (event.key === "ArrowLeft") setDetailsIndex((current) => current === null ? current : Math.max(0, current - 1));
+      if (event.key === "ArrowRight") setDetailsIndex((current) => current === null ? current : Math.min(days.length - 1, current + 1));
+    };
+    window.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [detailsIndex, days.length]);
+
+  function addNextDay() {
+    if (selected.length >= MAX_SUBSCRIPTION_DAYS || nextIndex >= days.length) return;
+    const nextDay = days[nextIndex];
+    setSelected((current) => [...current, nextDay.id]);
+    requestAnimationFrame(() => document.getElementById(`meal-day-${days[Math.min(nextIndex + 1, days.length - 1)].id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" }));
   }
 
-  function openPackagePicker(length: 7 | 14 | 30) {
-    setPackageDays(length);
-    setPackageStart(days[0].id);
-  }
-
-  function applyPackage() {
-    if (!packageDays) return;
-    const startIndex = days.findIndex((day) => day.id === packageStart);
-    if (startIndex < 0 || startIndex + packageDays > days.length) return;
-    setSelected(days.slice(startIndex, startIndex + packageDays).map((day) => day.id));
-    setPackageDays(null);
-    requestAnimationFrame(() => document.getElementById(`meal-day-${packageStart}`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" }));
+  function addNextDayFromModal() {
+    if (selected.length >= MAX_SUBSCRIPTION_DAYS || nextIndex >= days.length) return;
+    const indexToAdd = nextIndex;
+    setSelected((current) => [...current, days[indexToAdd].id]);
+    setDetailsIndex(Math.min(indexToAdd + 1, days.length - 1));
   }
 
   function moveCalendar(value: number) {
@@ -143,9 +154,28 @@ export default function SubscriptionCalendar() {
     setScrollPosition(maximum > 0 ? Math.round((calendar.scrollLeft / maximum) * 1000) : 0);
   }
 
-  function saveDraftAndOpenAccount(duplicateConfirmed = false) {
+  function openFulfillmentChoice(isDuplicate = false) {
+    setDuplicateConfirmed(isDuplicate);
+    setDuplicateOpen(false);
+    setFulfillmentOpen(true);
+  }
+
+  function saveDraftAndOpenAccount() {
     if (!selected.length) return;
-    const draft: SubscriptionDraft = { dates: selected, selectedDays: selected.length, rate, total, createdAt: new Date().toISOString(), duplicateConfirmed };
+    if (fulfillmentChoice === "PICKUP" && !chosenPickupPoint) {
+      setCheckoutError("Выберите точку самовывоза");
+      return;
+    }
+    const draft: SubscriptionDraft = {
+      dates: selected,
+      selectedDays: selected.length,
+      rate,
+      total,
+      createdAt: new Date().toISOString(),
+      fulfillmentType: fulfillmentChoice,
+      pickupPointName: fulfillmentChoice === "PICKUP" ? chosenPickupPoint : undefined,
+      duplicateConfirmed
+    };
     localStorage.setItem("mealpoint_subscription_draft", JSON.stringify(draft));
     router.push("/account?checkout=1");
   }
@@ -157,7 +187,7 @@ export default function SubscriptionCalendar() {
     try {
       const meResponse = await fetch("/api/account/me", { cache: "no-store" });
       if (meResponse.status === 401) {
-        saveDraftAndOpenAccount();
+        openFulfillmentChoice(false);
         return;
       }
       const me = await meResponse.json();
@@ -171,7 +201,7 @@ export default function SubscriptionCalendar() {
         return sameDates(subscription.days.map((day) => day.service_date), selected);
       });
       if (duplicate) setDuplicateOpen(true);
-      else saveDraftAndOpenAccount();
+      else openFulfillmentChoice(false);
     } catch (error) {
       setCheckoutError(error instanceof Error ? error.message : "Ошибка проверки подписок");
     } finally {
@@ -179,13 +209,15 @@ export default function SubscriptionCalendar() {
     }
   }
 
+  const nextDayForButton = selected.length < MAX_SUBSCRIPTION_DAYS ? days[nextIndex] : null;
+
   return (
     <section id="subscription" className="subscription-section">
       <div className="section-heading split-heading">
         <div>
           <span className="eyebrow">Меню подписки</span>
-          <h2>Целый месяц <em>неодинаковой</em> еды</h2>
-          <p>Оформи подписку — и уже завтра твой первый обед тебя удивит. Для пакетов на 7, 14 или 30 дней можно выбрать удобную дату начала.</p>
+          <h2>Выбирайте обеды <em>день за днём</em></h2>
+          <p>Начните с завтрашнего дня и добавляйте следующий день в подписку. Нажмите на центр карточки, чтобы посмотреть состав, описание, калории и КБЖУ.</p>
         </div>
         <QuestionLink />
       </div>
@@ -193,58 +225,61 @@ export default function SubscriptionCalendar() {
       {testMode && <p className="test-mode-banner">Тестовый режим включён: календарь построен относительно {todayIso}.</p>}
 
       <div className="calendar-actions consecutive-actions">
-        <button type="button" className="text-button" onClick={() => openPackagePicker(7)}>Выбрать 7 дней</button>
-        <button type="button" className="text-button" onClick={() => openPackagePicker(14)}>Выбрать 14 дней</button>
-        <button type="button" className="text-button" onClick={() => openPackagePicker(30)}>Выбрать 30 дней</button>
-        <button type="button" className="text-button muted" onClick={() => setSelected([])}>Сбросить</button>
-        <div className="pricing-hint" aria-label="Цены на подписку со скидкой 50 процентов">
-          <div className="price-tier">
-            <span>1–6 дней</span>
-            <div><strong>350 ฿</strong><del>700 ฿</del></div>
-            <em>Скидка 50%</em>
-          </div>
-          <div className="price-tier">
-            <span>7–29 дней</span>
-            <div><strong>300 ฿</strong><del>600 ฿</del></div>
-            <em>Скидка 50%</em>
-          </div>
-          <div className="price-tier">
-            <span>30 дней</span>
-            <div><strong>250 ฿</strong><del>500 ฿</del></div>
-            <em>Скидка 50%</em>
-          </div>
-        </div>
+        <button type="button" className="text-button muted" onClick={() => setSelected([])} disabled={!selected.length}>Сбросить выбранные дни</button>
+        <span className="calendar-action-note">Добавляйте дни последовательно — следующий день становится доступен после предыдущего.</span>
       </div>
 
       <div className="calendar-scroll" ref={scrollRef} onScroll={syncCalendarSlider}>
         {days.map((item, index) => {
           const isSelected = selectedSet.has(item.id);
-          const isNext = selected.length ? selected.length < 30 && index === selectedEndIndex + 1 : index === 0;
-          const isDisabled = !isSelected && !isNext;
+          const isNext = index === nextIndex && selected.length < MAX_SUBSCRIPTION_DAYS;
           const visibleCourse = showFirstCourse ? item.meal.firstCourse : item.meal.secondCourse;
           return (
-            <button id={`meal-day-${item.id}`} type="button" key={item.id} className={`meal-day ${isSelected ? "selected" : ""} ${isNext ? "next-available" : ""}`} onClick={() => toggleDay(index)} aria-pressed={isSelected} disabled={isDisabled}>
-              <span className="date-row"><strong>{item.day}</strong><span>{item.monthLabel} · {item.weekday}</span>{isSelected && <b>✓</b>}</span>
-              <span className="meal-image-frame">
-                <img key={`${item.id}-${showFirstCourse ? "first" : "second"}`} src={visibleCourse.image} alt={visibleCourse.title} loading="lazy" />
-                <span className="meal-course-badge">{showFirstCourse ? "Первое блюдо" : "Второе блюдо"}</span>
-              </span>
-              <span className="meal-tag">{item.id === days[0].id ? "Можно начать завтра" : item.meal.tag}</span>
-              <span className="meal-title">{visibleCourse.title}</span>
-              {isNext && selected.length > 0 && <span className="next-day-hint">Добавить следующий день</span>}
-            </button>
+            <article id={`meal-day-${item.id}`} key={item.id} className={`meal-day ${isSelected ? "selected" : ""} ${isNext ? "next-available" : ""}`}>
+              <button
+                type="button"
+                className="meal-day-open-area"
+                onClick={() => setDetailsIndex(index)}
+                aria-label={`Открыть подробное меню на ${formatLongDate(item)}`}
+              >
+                <span className="date-row">
+                  <strong>{item.day}</strong>
+                  <span>{item.monthLabel} · {item.weekday}</span>
+                  {isSelected && <b>✓</b>}
+                </span>
+                <span className="meal-image-frame">
+                  <img key={`${item.id}-${showFirstCourse ? "first" : "second"}`} src={visibleCourse.image} alt={visibleCourse.title} loading="lazy" />
+                  <span className="meal-course-badge">{showFirstCourse ? "Первое блюдо" : "Второе блюдо"}</span>
+                  <span className="meal-open-overlay">Открыть меню и КБЖУ</span>
+                </span>
+                <span className="meal-tag">{item.id === days[0].id ? "Можно начать завтра" : item.meal.tag}</span>
+                <span className="meal-title">{visibleCourse.title}</span>
+                <span className="meal-details-hint">Нажмите на дату или блюдо — откроется подробное меню на весь экран</span>
+              </button>
+
+              <div className="meal-day-button-zone">
+                <button
+                  type="button"
+                  className={`add-next-day-button ${isSelected ? "is-selected" : ""}`}
+                  disabled={!isNext}
+                  onClick={addNextDay}
+                >
+                  {isSelected
+                    ? "✓ День добавлен"
+                    : isNext
+                      ? selected.length === 0
+                        ? "+ Добавить первый день"
+                        : "+ Добавить следующий день"
+                      : "Сначала добавьте предыдущий день"}
+                </button>
+              </div>
+            </article>
           );
         })}
       </div>
+
       <div className="calendar-drag-control">
-        <input
-          type="range"
-          min="0"
-          max="1000"
-          value={scrollPosition}
-          onChange={(event) => moveCalendar(Number(event.target.value))}
-          aria-label="Горизонтальная прокрутка календаря"
-        />
+        <input type="range" min="0" max="1000" value={scrollPosition} onChange={(event) => moveCalendar(Number(event.target.value))} aria-label="Горизонтальная прокрутка календаря" />
       </div>
 
       {checkoutError && <p className="form-error calendar-checkout-error">{checkoutError}</p>}
@@ -255,15 +290,94 @@ export default function SubscriptionCalendar() {
         <button type="button" disabled={!selected.length || checkingDuplicate} onClick={goToCheckout}>{checkingDuplicate ? "Проверяем…" : "Оформить подписку"}</button>
       </div>
 
-      {packageDays && (
+      {detailsDay && detailsIndex !== null && (() => {
+        const first = getCourseDetails(detailsDay.meal.firstCourse, "first");
+        const second = getCourseDetails(detailsDay.meal.secondCourse, "second");
+        const totalNutrition = getMealNutrition(detailsDay.meal);
+        return (
+          <div className="meal-details-backdrop" role="dialog" aria-modal="true" aria-label={`Меню на ${formatLongDate(detailsDay)}`}>
+            <div className="meal-details-modal">
+              <button className="meal-details-close" type="button" onClick={() => setDetailsIndex(null)} aria-label="Закрыть">×</button>
+              <button className="meal-details-arrow left" type="button" disabled={detailsIndex === 0} onClick={() => setDetailsIndex((current) => current === null ? current : Math.max(0, current - 1))} aria-label="Предыдущий день">←</button>
+              <button className="meal-details-arrow right" type="button" disabled={detailsIndex === days.length - 1} onClick={() => setDetailsIndex((current) => current === null ? current : Math.min(days.length - 1, current + 1))} aria-label="Следующий день">→</button>
+
+              <div className="meal-details-content">
+                <div className="meal-details-heading">
+                  <span className="eyebrow">Меню дня</span>
+                  <h2>{formatLongDate(detailsDay)}</h2>
+                  <p>{detailsDay.meal.title}</p>
+                </div>
+
+                <div className="meal-details-courses">
+                  {[{label:"Первое блюдо",data:first},{label:"Второе блюдо",data:second}].map((course) => (
+                    <article className="meal-details-course" key={course.label}>
+                      <img src={course.data.image} alt={course.data.title} />
+                      <div>
+                        <span>{course.label}</span>
+                        <h3>{course.data.title}</h3>
+                        <p>{course.data.description}</p>
+                        <div className="course-nutrition">
+                          <b>{course.data.nutrition.calories} ккал</b>
+                          <small>Б {course.data.nutrition.protein} г</small>
+                          <small>Ж {course.data.nutrition.fat} г</small>
+                          <small>У {course.data.nutrition.carbs} г</small>
+                          <small>{course.data.nutrition.weight} г</small>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+
+                <section className="meal-total-nutrition">
+                  <div><span>Весь обед</span><strong>{totalNutrition.weight} г</strong></div>
+                  <div><span>Калории</span><strong>{totalNutrition.calories} ккал</strong></div>
+                  <div><span>Белки</span><strong>{totalNutrition.protein} г</strong></div>
+                  <div><span>Жиры</span><strong>{totalNutrition.fat} г</strong></div>
+                  <div><span>Углеводы</span><strong>{totalNutrition.carbs} г</strong></div>
+                </section>
+                <p className="nutrition-disclaimer">Калорийность и КБЖУ сейчас указаны ориентировочно. Позже их можно заменить точными технологическими картами блюд.</p>
+              </div>
+
+              <div className="meal-details-footer">
+                <div>
+                  <small>В подписке выбрано</small>
+                  <strong>{selected.length} дней</strong>
+                  {nextDayForButton && <span>Следующий: {formatLongDate(nextDayForButton)}</span>}
+                </div>
+                <button type="button" disabled={!nextDayForButton} onClick={addNextDayFromModal}>
+                  {nextDayForButton
+                    ? selected.length === 0
+                      ? `+ Добавить первый день — ${nextDayForButton.day} ${nextDayForButton.monthLabel}`
+                      : `+ Добавить следующий день — ${nextDayForButton.day} ${nextDayForButton.monthLabel}`
+                    : "Достигнут лимит выбранных дней"}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {fulfillmentOpen && (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
-          <div className="payment-modal package-date-modal">
-            <button className="modal-close" type="button" onClick={() => setPackageDays(null)}>×</button>
-            <span className="eyebrow">Пакет на {packageDays} дней</span><h2>Выберите дату начала</h2>
-            <p>Все следующие {packageDays} дней будут выбраны автоматически и пойдут подряд.</p>
-            <label className="package-date-field">Дата первого обеда<input type="date" min={days[0].id} max={days[days.length - packageDays].id} value={packageStart} onChange={(event) => setPackageStart(event.target.value)} /></label>
-            <div className="package-preview"><span>{packageStart}</span><b>→</b><span>{addDays(packageStart, packageDays - 1)}</span><strong>{(packageDays * getRate(packageDays)).toLocaleString("ru-RU")} ฿</strong></div>
-            <button type="button" onClick={applyPackage}>Выбрать {packageDays} дней</button>
+          <div className="payment-modal fulfillment-choice-modal">
+            <button className="modal-close" type="button" onClick={() => setFulfillmentOpen(false)}>×</button>
+            <span className="eyebrow">Получение подписки</span>
+            <h2>Как вы хотите получать еду?</h2>
+            <div className="fulfillment-switch">
+              <button type="button" className={fulfillmentChoice === "PICKUP" ? "selected" : ""} onClick={() => setFulfillmentChoice("PICKUP")}>Самовывоз</button>
+              <button type="button" className={fulfillmentChoice === "DELIVERY" ? "selected" : ""} onClick={() => setFulfillmentChoice("DELIVERY")}>Доставка</button>
+            </div>
+            {fulfillmentChoice === "PICKUP" && (
+              <label>Точка выдачи
+                <select value={chosenPickupPoint} onChange={(event) => setChosenPickupPoint(event.target.value)}>
+                  {pickupPoints.map((point) => <option key={point.name} value={point.name}>{point.shortName} — {point.address}</option>)}
+                </select>
+              </label>
+            )}
+            <div className="package-preview">
+              <span>{selected.length} дней</span><b>·</b><span>{fulfillmentChoice === "PICKUP" ? "Самовывоз" : "Доставка"}</span><strong>{total.toLocaleString("ru-RU")} ฿</strong>
+            </div>
+            <button type="button" onClick={saveDraftAndOpenAccount}>Перейти в личный кабинет</button>
           </div>
         </div>
       )}
@@ -274,7 +388,7 @@ export default function SubscriptionCalendar() {
             <span className="eyebrow">Повторная подписка</span><h2>Оформить ещё одну?</h2>
             <p>У вас уже есть активная подписка на те же даты. Вы уверены, что хотите оформить ещё одну подписку на этот период?</p>
             <div className="duplicate-confirm-actions">
-              <button type="button" className="confirm-yes" onClick={() => saveDraftAndOpenAccount(true)}>Да, перейти к оплате</button>
+              <button type="button" className="confirm-yes" onClick={() => openFulfillmentChoice(true)}>Да, продолжить</button>
               <button type="button" className="confirm-no" onClick={() => setDuplicateOpen(false)}>Нет, выбрать другие даты</button>
             </div>
           </div>

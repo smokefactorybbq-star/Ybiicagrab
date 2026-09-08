@@ -1,42 +1,25 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-const QR_PREFIX = "mealpoint:v1";
-
-function getSigningSecret() {
-  const secret = process.env.QR_SIGNING_SECRET || process.env.MANAGER_PASSWORD;
-  if (!secret) {
-    throw new Error("QR_SIGNING_SECRET is not configured");
-  }
+const PICKUP_QR_PREFIX = "mealpoint:pickup:v1";
+function getPickupQrSecret() {
+  const secret = (process.env.PICKUP_QR_SECRET || "").trim();
+  if (!secret || secret.length < 24) throw new Error("PICKUP_QR_SECRET is not configured or is too short");
   return secret;
 }
-
-function createSignature(subscriptionId: string, subscriptionCode: string) {
-  return createHmac("sha256", getSigningSecret())
-    .update(`${subscriptionId}|${subscriptionCode}`)
-    .digest("base64url");
+function signatureForPoint(pointCode: string) {
+  return createHmac("sha256", getPickupQrSecret()).update(`${PICKUP_QR_PREFIX}|${pointCode}`).digest("base64url");
 }
-
-export function buildSubscriptionQrPayload(subscriptionId: string, subscriptionCode: string) {
-  const signature = createSignature(subscriptionId, subscriptionCode);
-  return `${QR_PREFIX}:${subscriptionId}:${signature}`;
+export function buildPickupPointQrPayload(pointCode: string) {
+  const normalized = pointCode.trim().toLowerCase();
+  return `${PICKUP_QR_PREFIX}:${normalized}:${signatureForPoint(normalized)}`;
 }
-
-export function parseSubscriptionQrPayload(payload: string) {
-  const trimmed = payload.trim();
-  const match = trimmed.match(/^mealpoint:v1:([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}):([A-Za-z0-9_-]{43})$/i);
-  if (!match) return null;
-
-  return {
-    subscriptionId: match[1],
-    signature: match[2]
-  };
+export function parsePickupPointQrPayload(payload: string) {
+  const match = payload.trim().match(/^mealpoint:pickup:v1:([a-z0-9-]{2,40}):([A-Za-z0-9_-]{43})$/);
+  return match ? { pointCode: match[1], signature: match[2] } : null;
 }
-
-export function verifySubscriptionQrSignature(subscriptionId: string, subscriptionCode: string, signature: string) {
-  const expected = createSignature(subscriptionId, subscriptionCode);
-  const suppliedBuffer = Buffer.from(signature, "utf8");
+export function verifyPickupPointQrSignature(pointCode: string, signature: string) {
+  const expected = signatureForPoint(pointCode);
+  const supplied = Buffer.from(signature, "utf8");
   const expectedBuffer = Buffer.from(expected, "utf8");
-
-  if (suppliedBuffer.length !== expectedBuffer.length) return false;
-  return timingSafeEqual(suppliedBuffer, expectedBuffer);
+  return supplied.length === expectedBuffer.length && timingSafeEqual(supplied, expectedBuffer);
 }

@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { query } from "../../../../lib/db";
 import { getAppClock } from "../../../../lib/app-time";
 import { authorizeManager } from "../../../../lib/manager-auth";
+import { isSameOriginMutation } from "../../../../lib/request-security";
+import { addDaysToIso } from "../../../../lib/subscriptions";
 
+import { processSubscriptionDayClosures } from "../../../../lib/subscription-maintenance";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -22,18 +25,19 @@ type UncollectedRow = {
 };
 
 function getDayEndHour() {
-  const parsed = Number(process.env.PICKUP_POINT_DAY_END_HOUR || "20");
-  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 23 ? parsed : 20;
+  const parsed = Number(process.env.PICKUP_POINT_DAY_END_HOUR || "22");
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 23 ? parsed : 22;
 }
 
 export async function GET(request: Request) {
-  const auth = authorizeManager(request);
+  const auth = await authorizeManager(request);
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
+  await processSubscriptionDayClosures();
 
   try {
     const clock = await getAppClock();
-    const serviceDate = clock.date;
     const dayEndHour = getDayEndHour();
+    const serviceDate = clock.hour >= dayEndHour ? addDaysToIso(clock.date, 1) : clock.date;
 
     const [summaryResult, uncollectedResult] = await Promise.all([
       query<PointSummaryRow>(
@@ -45,6 +49,7 @@ export async function GET(request: Request) {
            JOIN subscriptions s ON s.id = sd.subscription_id
            WHERE s.status IN ('ACTIVE', 'COMPLETED')
              AND sd.service_date = $1::date
+             AND s.fulfillment_type = 'PICKUP'
              AND sd.status IN ('PLANNED', 'AVAILABLE', 'REDEEMED')
          ),
          aggregates AS (
@@ -87,6 +92,7 @@ export async function GET(request: Request) {
          JOIN subscriptions s ON s.id = sd.subscription_id
          JOIN users u ON u.id = s.user_id
          WHERE s.status = 'ACTIVE'
+           AND s.fulfillment_type = 'PICKUP'
            AND sd.service_date = $1::date
            AND sd.status IN ('PLANNED', 'AVAILABLE')
          GROUP BY pickup_point_name, u.id, u.full_name, u.phone
@@ -123,7 +129,7 @@ export async function GET(request: Request) {
       ok: true,
       serviceDate,
       dayEndHour,
-      isEndOfDay: clock.hour >= dayEndHour,
+      isEndOfDay: false,
       testMode: clock.isTestMode,
       points
     }, {
@@ -136,7 +142,8 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const auth = authorizeManager(request);
+  if (!isSameOriginMutation(request)) return NextResponse.json({ ok:false, error:"Недопустимый источник запроса" }, { status:403 });
+  const auth = await authorizeManager(request);
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
 
   try {
@@ -148,7 +155,9 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ ok: false, error: "Некорректное количество доставленных обедов" }, { status: 400 });
     }
 
-    const serviceDate = (await getAppClock()).date;
+    const clock = await getAppClock();
+    const dayEndHour = getDayEndHour();
+    const serviceDate = clock.hour >= dayEndHour ? addDaysToIso(clock.date, 1) : clock.date;
     await query(
       `INSERT INTO pickup_point_daily_inventory (service_date, pickup_point_name, delivered_count)
        VALUES ($1::date, $2, $3)
