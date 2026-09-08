@@ -6,16 +6,16 @@ export default function ContactsPage() {
       <section className="page-intro page-intro-with-action">
         <div>
           <span className="eyebrow">Контакты</span>
-          <h1>MealPoint</h1>
-          <p>MealPoint — отдельный сервис подписки на готовые обеды на Пхукете. Для заказов из меню Smoke Factory используйте отдельный сайт.</p>
+          <h1>Smoke Factory BBQ</h1>
+          <p>Заказы из кафе оформляются на сайте после входа через Telegram. По вопросам заказа напишите нашему боту или менеджеру.</p>
         </div>
         <QuestionLink />
       </section>
       <div className="contact-grid">
-        <article><span>Сервис</span><strong>MealPoint by Smoke Factory BBQ</strong><p>Phuket, Thailand</p></article>
-        <article><span>Аккаунт</span><strong>Вход по SMS-коду</strong><p>Поддерживаются международные номера</p></article>
-        <article><span>Оплата</span><strong>PromptPay / Cash</strong><p>PromptPay подтверждается загрузкой чека</p></article>
-        <article><span>Кафе Smoke Factory</span><strong><a href="https://smokefactorybbq.com">smokefactorybbq.com</a></strong><p>Обычные заказы из кафе оформляются отдельно</p></article>
+        <article><span>Компания</span><strong>Smoke Factory BBQ Co., Ltd.</strong><p>Phuket, Thailand</p></article>
+        <article><span>Координаты кафе</span><strong>7.910335, 98.368771</strong><p>Точка отправления доставки</p></article>
+        <article><span>Заказы</span><strong>Telegram + smokefactorybbq.com</strong><p>Один аккаунт для Mini App и сайта кафе</p></article>
+        <article><span>Подписка на обеды</span><strong>MealPoint</strong><p><a href="https://meal-point.com">meal-point.com</a> — отдельный сервис</p></article>
       </div>
     </main>
   );

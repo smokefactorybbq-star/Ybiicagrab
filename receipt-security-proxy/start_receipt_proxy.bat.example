@@ -1,0 +1,8 @@
+@echo off
+REM Не коммитьте реальный секрет в GitHub. Замените только на Windows-машине.
+set RECEIPT_SECRET=CHANGE_ME_TO_RANDOM_32_PLUS_CHARACTERS
+set UPSTREAM_RECEIPT_URL=http://127.0.0.1:8000
+set RECEIPT_PROXY_HOST=127.0.0.1
+set RECEIPT_PROXY_PORT=8002
+python secure_receipt_proxy.py
+pause

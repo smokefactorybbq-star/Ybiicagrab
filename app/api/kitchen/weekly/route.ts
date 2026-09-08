@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { authorizeStaff } from "../../../../lib/staff-auth";
 import { getMealTemplateForDate } from "../../../../data/meals";
 import { query } from "../../../../lib/db";
 import { getAppClock } from "../../../../lib/app-time";
 import { addDaysToIso } from "../../../../lib/subscriptions";
 
+import { processSubscriptionDayClosures } from "../../../../lib/subscription-maintenance";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -25,26 +27,12 @@ type MealRow = {
   image_url: string | null;
 };
 
-function authorize(request: Request) {
-  const expectedUsername = process.env.KITCHEN_USERNAME || "kitchen";
-  const expectedPassword = process.env.KITCHEN_PASSWORD || process.env.MANAGER_PASSWORD;
-  const username = request.headers.get("x-kitchen-username") || "";
-  const password = request.headers.get("x-kitchen-password") || "";
-
-  if (!expectedPassword) {
-    return { ok: false, error: "KITCHEN_PASSWORD или MANAGER_PASSWORD не задан", status: 503 };
-  }
-  if (username !== expectedUsername || password !== expectedPassword) {
-    return { ok: false, error: "Неверный логин или пароль", status: 401 };
-  }
-  return { ok: true, error: "", status: 200 };
-}
-
 export async function GET(request: Request) {
-  const auth = authorize(request);
+  const auth = await authorizeStaff(request, ["KITCHEN", "MANAGER"]);
   if (!auth.ok) {
     return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
   }
+  await processSubscriptionDayClosures();
 
   try {
     const clock = await getAppClock();

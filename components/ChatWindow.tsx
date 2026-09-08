@@ -15,7 +15,6 @@ type Props = {
   mode: "CUSTOMER" | "MANAGER";
   title: string;
   userId?: string;
-  managerPassword?: string;
   onRead?: () => void;
 };
 
@@ -27,7 +26,7 @@ function messageTime(value: string) {
   }).format(date);
 }
 
-export default function ChatWindow({ open, onClose, mode, title, userId, managerPassword, onRead }: Props) {
+export default function ChatWindow({ open, onClose, mode, title, userId, onRead }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
@@ -38,10 +37,6 @@ export default function ChatWindow({ open, onClose, mode, title, userId, manager
 
   useEffect(() => { onReadRef.current = onRead; }, [onRead]);
 
-  const headers = useCallback((): Record<string, string> => mode === "MANAGER"
-    ? { "x-manager-password": managerPassword || "" }
-    : {}, [mode, managerPassword]);
-
   const loadMessages = useCallback(async (silent = false) => {
     if (!open || (mode === "MANAGER" && !userId)) return;
     if (!silent) setLoading(true);
@@ -49,7 +44,7 @@ export default function ChatWindow({ open, onClose, mode, title, userId, manager
       const url = mode === "MANAGER"
         ? `/api/manager/chat?userId=${encodeURIComponent(userId || "")}&markRead=1`
         : "/api/chat?markRead=1";
-      const response = await fetch(url, { headers: headers(), cache: "no-store" });
+      const response = await fetch(url, { cache: "no-store", credentials: "same-origin" });
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || "Не удалось открыть чат");
       setMessages(data.messages || []);
@@ -60,7 +55,7 @@ export default function ChatWindow({ open, onClose, mode, title, userId, manager
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [open, mode, userId, headers]);
+  }, [open, mode, userId]);
 
   useEffect(() => {
     if (!open) return;
@@ -83,7 +78,8 @@ export default function ChatWindow({ open, onClose, mode, title, userId, manager
     try {
       const response = await fetch(mode === "MANAGER" ? "/api/manager/chat" : "/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...headers() },
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify(mode === "MANAGER" ? { userId, text: clean } : { text: clean })
       });
       const data = await response.json();

@@ -27,8 +27,6 @@ type KitchenPlan = {
   delivery: DeliveryRow[];
 };
 
-const SESSION_KEY = "mealpoint_kitchen_login";
-
 function formatDay(value: string) {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return value;
@@ -47,28 +45,29 @@ export default function KitchenPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  async function loadPlan(event?: FormEvent, credentials?: { username: string; password: string }) {
+  async function loadPlan(event?: FormEvent) {
     event?.preventDefault();
-    const nextUsername = credentials?.username ?? username;
-    const nextPassword = credentials?.password ?? password;
     setLoading(true);
     setError("");
 
     try {
-      const response = await fetch("/api/kitchen/weekly", {
-        headers: {
-          "x-kitchen-username": nextUsername,
-          "x-kitchen-password": nextPassword
-        },
-        cache: "no-store"
-      });
+      if (event) {
+        const loginResponse = await fetch("/api/staff/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ role: "KITCHEN", username, password })
+        });
+        const loginData = await loginResponse.json();
+        if (!loginResponse.ok || !loginData.ok) throw new Error(loginData.error || "Неверный логин или пароль");
+        setPassword("");
+      }
+
+      const response = await fetch("/api/kitchen/weekly", { cache: "no-store", credentials: "same-origin" });
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || "Не удалось открыть кухню");
       setPlan(data as KitchenPlan);
       setAuthorized(true);
-      setUsername(nextUsername);
-      setPassword(nextPassword);
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ username: nextUsername, password: nextPassword }));
     } catch (loadError) {
       setAuthorized(false);
       setPlan(null);
@@ -78,17 +77,15 @@ export default function KitchenPage() {
     }
   }
 
+  async function logout() {
+    await fetch("/api/staff/logout", { method: "POST", credentials: "same-origin" }).catch(() => undefined);
+    setAuthorized(false);
+    setPlan(null);
+    setPassword("");
+  }
+
   useEffect(() => {
-    try {
-      const saved = sessionStorage.getItem(SESSION_KEY);
-      if (!saved) return;
-      const parsed = JSON.parse(saved) as { username?: string; password?: string };
-      if (parsed.username && parsed.password) {
-        void loadPlan(undefined, { username: parsed.username, password: parsed.password });
-      }
-    } catch {
-      sessionStorage.removeItem(SESSION_KEY);
-    }
+    void loadPlan();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -97,7 +94,7 @@ export default function KitchenPage() {
     const timer = window.setInterval(() => void loadPlan(), 60_000);
     return () => window.clearInterval(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authorized, username, password]);
+  }, [authorized]);
 
   const totals = useMemo(() => {
     if (!plan) return { week: 0, byDate: {} as Record<string, number> };
@@ -133,12 +130,7 @@ export default function KitchenPage() {
         <div className="manager-heading-actions">
           <Link className="manager-scanner-link" href="/manager">К менеджеру</Link>
           <button type="button" disabled={loading} onClick={() => void loadPlan()}>{loading ? "Обновляем…" : "Обновить"}</button>
-          <button type="button" className="kitchen-logout" onClick={() => {
-            sessionStorage.removeItem(SESSION_KEY);
-            setAuthorized(false);
-            setPlan(null);
-            setPassword("");
-          }}>Выйти</button>
+          <button type="button" className="kitchen-logout" onClick={() => void logout()}>Выйти</button>
         </div>
       </section>
 

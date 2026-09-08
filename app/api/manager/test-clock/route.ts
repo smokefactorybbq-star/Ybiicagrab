@@ -2,19 +2,21 @@ import { NextResponse } from "next/server";
 import { getAppClock, isValidTestDateTime } from "../../../../lib/app-time";
 import { query } from "../../../../lib/db";
 import { authorizeManager } from "../../../../lib/manager-auth";
+import { isSameOriginMutation } from "../../../../lib/request-security";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const auth = authorizeManager(request);
+  const auth = await authorizeManager(request);
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
   const clock = await getAppClock();
   return NextResponse.json({ ok: true, clock }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function PATCH(request: Request) {
-  const auth = authorizeManager(request);
+  if (!isSameOriginMutation(request)) return NextResponse.json({ ok:false, error:"Недопустимый источник запроса" }, { status:403 });
+  const auth = await authorizeManager(request);
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
 
   const body = await request.json() as { enabled?: unknown; localDateTime?: unknown };

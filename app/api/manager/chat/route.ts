@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query, withTransaction } from "../../../../lib/db";
 import { authorizeManager } from "../../../../lib/manager-auth";
+import { isSameOriginMutation } from "../../../../lib/request-security";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ async function customerExists(userId: string) {
 }
 
 export async function GET(request: Request) {
-  const auth = authorizeManager(request);
+  const auth = await authorizeManager(request);
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
   const url = new URL(request.url);
   const userId = url.searchParams.get("userId")?.trim() || "";
@@ -54,7 +55,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const auth = authorizeManager(request);
+  if (!isSameOriginMutation(request)) return NextResponse.json({ ok:false, error:"Недопустимый источник запроса" }, { status:403 });
+  const auth = await authorizeManager(request);
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
   const body = await request.json() as { userId?: unknown; text?: unknown };
   const userId = typeof body.userId === "string" ? body.userId.trim() : "";

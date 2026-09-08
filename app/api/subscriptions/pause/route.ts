@@ -4,12 +4,14 @@ import { withTransaction } from "../../../../lib/db";
 import { getAppClock } from "../../../../lib/app-time";
 import { addDaysToIso } from "../../../../lib/subscriptions";
 import { notifyManagerTelegram } from "../../../../lib/telegram";
+import { processSubscriptionDayClosures } from "../../../../lib/subscription-maintenance";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
+    await processSubscriptionDayClosures();
     const account = await getAuthenticatedAccount(request);
     if (!account) return NextResponse.json({ ok: false, error: "Требуется вход" }, { status: 401 });
 
@@ -42,8 +44,8 @@ export async function POST(request: NextRequest) {
       if (subscription.pause_limit < 1) throw new Error("NO_PAUSES");
       if (subscription.pauses_used >= subscription.pause_limit) throw new Error("LIMIT_REACHED");
 
-      const dayResult = await client.query<{ id: string; status: string }>(
-        `SELECT id, status FROM subscription_days
+      const dayResult = await client.query<{ id: string; status: string; fulfillment_type: string; requested_time: string | null; customer_name: string | null; customer_phone: string | null; delivery_address: string | null }>(
+        `SELECT id, status, fulfillment_type, requested_time, customer_name, customer_phone, delivery_address FROM subscription_days
          WHERE subscription_id = $1 AND service_date = $2::date
          FOR UPDATE`,
         [id, serviceDate]
@@ -62,9 +64,10 @@ export async function POST(request: NextRequest) {
 
       await client.query(`UPDATE subscription_days SET status = 'PAUSED', pause_requested_at = now() WHERE id = $1`, [day.id]);
       await client.query(
-        `INSERT INTO subscription_days (subscription_id, service_date, status)
-         VALUES ($1, $2::date, 'AVAILABLE')`,
-        [id, replacementDate]
+        `INSERT INTO subscription_days (
+           subscription_id, service_date, status, fulfillment_type, requested_time, customer_name, customer_phone, delivery_address
+         ) VALUES ($1, $2::date, 'AVAILABLE', $3, $4, $5, $6, $7)`,
+        [id, replacementDate, day.fulfillment_type, day.requested_time, day.customer_name, day.customer_phone, day.delivery_address]
       );
       await client.query(
         `UPDATE subscriptions SET pauses_used = pauses_used + 1, ends_on = $2::date, updated_at = now() WHERE id = $1`,

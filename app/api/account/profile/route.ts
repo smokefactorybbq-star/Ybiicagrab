@@ -27,7 +27,7 @@ export async function PATCH(request: NextRequest) {
       if (duplicate.rowCount) throw new Error("PHONE_EXISTS");
 
       await client.query(
-        `UPDATE users SET full_name = $1, phone = $2, address = $3, updated_at = now() WHERE id = $4`,
+        `UPDATE users SET full_name = $1, profile_name = $1, phone = $2, address = $3, updated_at = now() WHERE id = $4`,
         [fullName, phone, address, account.userId]
       );
       await client.query(
