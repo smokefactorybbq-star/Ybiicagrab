@@ -924,3 +924,9 @@ img { display: block; max-width: 100%; }
   .cafe-logo-large { width: 82px; height: 82px; flex-basis: 82px; border-radius: 21px; font-size: 31px; }
   .delete-confirm-actions, .pause-confirm-actions { grid-template-columns: 1fr; }
 }
+
+/* Separate Smoke Factory site shortcut */
+.header-actions{display:flex;align-items:center;gap:10px}
+.smokefactory-header-link{display:inline-flex;align-items:center;gap:7px;padding:6px 9px;border:1px solid rgba(0,0,0,.12);border-radius:12px;text-decoration:none;color:inherit;background:#fff;font-weight:800;font-size:13px}
+.smokefactory-header-link img{width:34px;height:34px;border-radius:9px;object-fit:cover}
+@media(max-width:760px){.smokefactory-header-link span{display:none}.smokefactory-header-link{padding:5px}.smokefactory-header-link img{width:32px;height:32px}}

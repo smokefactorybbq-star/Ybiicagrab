@@ -26,6 +26,7 @@ type ManagerSubscription = {
   total_thb: number;
   paid_at: string | null;
   activated_at: string | null;
+  receipt_received_at: string | null;
   created_at: string;
   manager_unread_count: number;
   dates: ManagerDay[];
@@ -160,6 +161,25 @@ export default function ManagerPage() {
     return () => window.clearInterval(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authorized, password, testDirty]);
+
+  async function openReceipt(id: string) {
+    setError("");
+    try {
+      const response = await fetch(`/api/manager/subscription-receipt?subscriptionId=${encodeURIComponent(id)}`, {
+        headers: { "x-manager-password": password }, cache: "no-store"
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "Не удалось открыть чек");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+    } catch (receiptError) {
+      setError(receiptError instanceof Error ? receiptError.message : "Не удалось открыть чек");
+    }
+  }
 
   async function activateSubscription(id: string) {
     setActivating(id);
@@ -409,7 +429,7 @@ export default function ManagerPage() {
               {subscriptions.map((item) => (
                 <tr key={item.id} className={item.status === "AWAITING_ACTIVATION" ? "needs-activation" : ""}>
                   <td><strong>{item.full_name}</strong><small>{item.phone || "—"}</small>{item.status === "ACTIVE" && <small>Код: {item.code}</small>}</td>
-                  <td><strong>{item.pickup_point_name || "—"}</strong><small>{item.payment_method || "—"}</small></td>
+                  <td><strong>{item.pickup_point_name || "—"}</strong><small>{item.payment_method || "—"}</small>{item.receipt_received_at ? <button type="button" className="manager-message-button" onClick={() => void openReceipt(item.id)}>🧾 Открыть чек</button> : <small>Чек: не получен</small>}</td>
                   <td>
                     <details>
                       <summary>{item.selected_days} оплаченных дней</summary>

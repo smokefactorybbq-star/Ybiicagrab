@@ -43,6 +43,7 @@ type Subscription = {
   payment_method: string | null;
   paid_at: string | null;
   activated_at: string | null;
+  receipt_received_at: string | null;
   full_name: string;
   phone: string | null;
   qrEnabled: boolean;
@@ -63,9 +64,8 @@ type DeliveryRequest = {
 };
 
 const paymentOptions = [
-  { id: "PROMPTPAY", title: "PromptPay / Thai bank", text: "Заглушка для оплаты по QR PromptPay" },
-  { id: "TRUEMONEY", title: "TrueMoney", text: "Заглушка для перевода на TrueMoney" },
-  { id: "CRYPTO", title: "Криптообмен", text: "Заглушка будущего криптообменного сервиса" }
+  { id: "PROMPTPAY", title: "PromptPay / Thai bank", text: "Оплата по QR компании с точной суммой подписки" },
+  { id: "CASH", title: "Cash", text: "Менеджер получит заявку и свяжется с вами" }
 ];
 
 const statusLabels: Record<string, string> = {
@@ -107,10 +107,10 @@ function sameDates(left: string[], right: string[]) {
 export default function AccountPage() {
   const [ready, setReady] = useState(false);
   const [account, setAccount] = useState<Account | null>(null);
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [authPhone, setAuthPhone] = useState("+66");
-  const [authPassword, setAuthPassword] = useState("");
-  const [passwordRepeat, setPasswordRepeat] = useState("");
+  const [otpChallengeId, setOtpChallengeId] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpRefCode, setOtpRefCode] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
   const [termsChecked, setTermsChecked] = useState(false);
@@ -132,6 +132,9 @@ export default function AccountPage() {
   const [duplicatePaymentOpen, setDuplicatePaymentOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState(paymentOptions[0].id);
   const [submittingPayment, setSubmittingPayment] = useState(false);
+  const [paymentQrDataUrl, setPaymentQrDataUrl] = useState("");
+  const [paymentQrLoading, setPaymentQrLoading] = useState(false);
+  const [receiptUploading, setReceiptUploading] = useState("");
   const [pauseLoading, setPauseLoading] = useState("");
   const [pauseConfirm, setPauseConfirm] = useState<{ subscriptionId: string; serviceDate: string } | null>(null);
   const [qrSubscriptionId, setQrSubscriptionId] = useState<string | null>(null);
@@ -288,26 +291,46 @@ export default function AccountPage() {
     setAuthLoading(true);
     setError("");
     try {
-      const endpoint = authMode === "register" ? "/api/account/register" : "/api/account/login";
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: authPhone, password: authPassword, passwordRepeat })
+      if (!otpChallengeId) {
+        const response = await fetch("/api/account/otp/send", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: authPhone })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || "Не удалось отправить SMS-код");
+        setAuthPhone(data.phone || authPhone);
+        setOtpChallengeId(data.challengeId);
+        setOtpRefCode(data.refCode || "");
+        setOtpCode("");
+        return;
+      }
+
+      const response = await fetch("/api/account/otp/verify", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: authPhone, otp: otpCode, challengeId: otpChallengeId })
       });
       const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.error || "Ошибка авторизации");
+      if (!response.ok || !data.ok) throw new Error(data.error || "Неверный SMS-код");
       const nextAccount = data.account as Account;
       setAccount(nextAccount);
       setProfileName(nextAccount.fullName === "Пользователь MealPoint" ? "" : nextAccount.fullName);
       setProfilePhone(nextAccount.phone);
       setProfileAddress(nextAccount.address || "");
       lastSavedProfile.current = JSON.stringify({ fullName: nextAccount.fullName, phone: nextAccount.phone, address: nextAccount.address || "" });
+      setOtpChallengeId("");
+      setOtpCode("");
       if (!nextAccount.termsAcceptedAt) setTermsOpen(true);
     } catch (authError) {
       setError(authError instanceof Error ? authError.message : "Ошибка авторизации");
     } finally {
       setAuthLoading(false);
     }
+  }
+
+  function changeAuthPhone() {
+    setOtpChallengeId("");
+    setOtpCode("");
+    setOtpRefCode("");
+    setError("");
   }
 
   async function acceptTerms() {
@@ -333,6 +356,7 @@ export default function AccountPage() {
     setQrSubscriptionId(null);
     setChatUnread(0);
     setChatOpen(false);
+    changeAuthPhone();
   }
 
   function openPayment() {
@@ -345,6 +369,68 @@ export default function AccountPage() {
     setDraft(null);
     setDuplicatePaymentOpen(false);
     window.location.href = "/#subscription";
+  }
+
+  const loadPaymentQr = useCallback(async () => {
+    if (!draft || paymentMethod !== "PROMPTPAY") return;
+    setPaymentQrLoading(true);
+    setPaymentQrDataUrl("");
+    try {
+      const response = await fetch("/api/promptpay/qr", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount: draft.total })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || "Не удалось создать QR");
+      setPaymentQrDataUrl(data.dataUrl);
+    } catch (qrError) {
+      setError(qrError instanceof Error ? qrError.message : "Не удалось создать QR");
+    } finally {
+      setPaymentQrLoading(false);
+    }
+  }, [draft, paymentMethod]);
+
+  useEffect(() => {
+    if (paymentOpen && draft && paymentMethod === "PROMPTPAY") void loadPaymentQr();
+    if (paymentMethod !== "PROMPTPAY") setPaymentQrDataUrl("");
+  }, [paymentOpen, draft, paymentMethod, loadPaymentQr]);
+
+  async function savePaymentQr() {
+    if (!paymentQrDataUrl || !draft) return;
+    try {
+      const blob = await (await fetch(paymentQrDataUrl)).blob();
+      const file = new File([blob], `MealPoint-PromptPay-${draft.total}.png`, { type: "image/png" });
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: "MealPoint PromptPay" });
+      } else {
+        const link = document.createElement("a");
+        link.href = paymentQrDataUrl;
+        link.download = file.name;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+    } catch {
+      setError("Не удалось сохранить QR");
+    }
+  }
+
+  async function uploadReceipt(subscriptionId: string, file: File | null) {
+    if (!file) return;
+    setReceiptUploading(subscriptionId);
+    setError("");
+    try {
+      const form = new FormData();
+      form.append("subscriptionId", subscriptionId);
+      form.append("file", file);
+      const response = await fetch("/api/subscriptions/receipt", { method: "POST", body: form });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || "Не удалось отправить чек");
+      await loadSubscriptions();
+    } catch (receiptError) {
+      setError(receiptError instanceof Error ? receiptError.message : "Не удалось отправить чек");
+    } finally {
+      setReceiptUploading("");
+    }
   }
 
   async function confirmPayment() {
@@ -437,15 +523,21 @@ export default function AccountPage() {
         <section className="account-login-shell">
           <form className="account-login-card" onSubmit={submitAuth}>
             <span className="eyebrow">Личный кабинет</span>
-            <h1>{authMode === "register" ? "Создайте аккаунт" : "Войдите в MealPoint"}</h1>
-            <p>Номер телефона используется как логин. Аккаунт и все подписки будут доступны на любом устройстве.</p>
+            <h1>Вход в MealPoint по SMS</h1>
+            <p>Введите номер с кодом страны. Если аккаунта ещё нет, он будет создан автоматически после подтверждения SMS-кода.</p>
             {error && <p className="form-error">{error}</p>}
-            <label>Номер телефона<input value={authPhone} onChange={(event) => setAuthPhone(event.target.value)} required minLength={8} placeholder="+66 00 000 0000" autoComplete="tel" /></label>
-            <label>Пароль<input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} required minLength={8} autoComplete={authMode === "register" ? "new-password" : "current-password"} /></label>
-            {authMode === "register" && <label>Повторить пароль<input type="password" value={passwordRepeat} onChange={(event) => setPasswordRepeat(event.target.value)} required minLength={8} autoComplete="new-password" /></label>}
-            <button type="submit" disabled={authLoading}>{authLoading ? "Проверяем…" : authMode === "register" ? "Зарегистрироваться" : "Войти"}</button>
-            <button className="auth-switch-button" type="button" onClick={() => { setAuthMode(authMode === "login" ? "register" : "login"); setError(""); }}>
-              {authMode === "login" ? "Нет аккаунта? Зарегистрироваться" : "Уже зарегистрированы? Войти"}
+            <label>Номер телефона
+              <input value={authPhone} onChange={(event) => setAuthPhone(event.target.value)} disabled={Boolean(otpChallengeId)} required minLength={8} placeholder="+66812345678" autoComplete="tel" />
+            </label>
+            {otpChallengeId && <>
+              <label>Код из SMS
+                <input value={otpCode} onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, "").slice(0, 10))} required inputMode="numeric" autoComplete="one-time-code" placeholder="123456" />
+              </label>
+              <small>Код отправлен{otpRefCode ? ` · Ref: ${otpRefCode}` : ""}.</small>
+              <button className="auth-switch-button" type="button" onClick={changeAuthPhone}>Изменить номер</button>
+            </>}
+            <button type="submit" disabled={authLoading || (Boolean(otpChallengeId) && otpCode.length < 4)}>
+              {authLoading ? "Проверяем…" : otpChallengeId ? "Войти" : "Получить код по SMS"}
             </button>
             <QuestionLink />
           </form>
@@ -499,7 +591,7 @@ export default function AccountPage() {
                     <div className="subscription-status-line" />
                     <div>
                       <span className="eyebrow">Подписка №{subscriptions.length - index}</span>
-                      {isActive ? <><h2>Подписка активирована</h2><p>{formatDate(subscription.starts_on)} — {formatDate(subscription.ends_on)}</p><p>Осталось <strong>{subscription.remaining_portions}</strong> обедов из {subscription.selected_days}.</p><small>Код подписки: <b>{subscription.code}</b></small></> : isWaiting ? <><h2>Спасибо за оплату</h2><p>{formatDate(subscription.starts_on)} — {formatDate(subscription.ends_on)}</p><p>В течение 15 минут ваша подписка будет активирована.</p></> : <><h2>{statusLabels[subscription.status] || subscription.status}</h2><p>{formatDate(subscription.starts_on)} — {formatDate(subscription.ends_on)}</p></>}
+                      {isActive ? <><h2>Подписка активирована</h2><p>{formatDate(subscription.starts_on)} — {formatDate(subscription.ends_on)}</p><p>Осталось <strong>{subscription.remaining_portions}</strong> обедов из {subscription.selected_days}.</p><small>Код подписки: <b>{subscription.code}</b></small></> : isWaiting ? <><h2>{subscription.payment_method === "CASH" ? "Заявка на оплату Cash принята" : "Ожидаем проверку оплаты"}</h2><p>{formatDate(subscription.starts_on)} — {formatDate(subscription.ends_on)}</p>{subscription.payment_method === "CASH" ? <p>Менеджер свяжется с вами для согласования оплаты.</p> : subscription.receipt_received_at ? <p><b>✓ Чек получен.</b> Менеджер проверит его и активирует подписку.</p> : <div style={{display:"grid",gap:8}}><p><b>После оплаты пришлите чек.</b> Можно загрузить фото или PDF прямо здесь.</p><label className="open-qr-button" style={{cursor:"pointer",textAlign:"center"}}>🧾 {receiptUploading === subscription.id ? "Отправляем чек…" : "Отправить чек"}<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden disabled={receiptUploading === subscription.id} onChange={(event) => void uploadReceipt(subscription.id, event.target.files?.[0] || null)} /></label></div>}</> : <><h2>{statusLabels[subscription.status] || subscription.status}</h2><p>{formatDate(subscription.starts_on)} — {formatDate(subscription.ends_on)}</p></>}
                     </div>
                     <div className="subscription-card-actions"><div className="status-badge">{statusLabels[subscription.status] || subscription.status}</div><button type="button" className="open-qr-button" disabled={!isActive || !subscription.qrEnabled} onClick={() => setQrSubscriptionId(subscription.id)}>Открыть QR</button></div>
                   </section>
@@ -594,7 +686,17 @@ export default function AccountPage() {
 
       {duplicatePaymentOpen && draft && <div className="modal-backdrop"><div className="payment-modal duplicate-confirm-modal"><span className="eyebrow">Повторная подписка</span><h2>Оформить ещё одну?</h2><p>У вас уже есть активная подписка на те же даты.</p><div className="duplicate-confirm-actions"><button type="button" className="confirm-yes" onClick={() => { setDuplicatePaymentOpen(false); setPaymentOpen(true); }}>Да, перейти к оплате</button><button type="button" className="confirm-no" onClick={chooseOtherDates}>Нет, выбрать другие даты</button></div></div></div>}
 
-      {paymentOpen && draft && <div className="modal-backdrop"><div className="payment-modal"><button className="modal-close" type="button" onClick={() => setPaymentOpen(false)}>×</button><span className="eyebrow">Оплата подписки</span><h2>Выберите способ оплаты</h2><p>Платёжные страницы пока являются заглушками.</p><div className="payment-options">{paymentOptions.map((option) => <label key={option.id} className={paymentMethod === option.id ? "selected" : ""}><input type="radio" name="payment" value={option.id} checked={paymentMethod === option.id} onChange={() => setPaymentMethod(option.id)} /><span><strong>{option.title}</strong><small>{option.text}</small></span></label>)}</div><div className="payment-placeholder">Здесь появятся реквизиты или платёжный QR.</div><button type="button" disabled={submittingPayment} onClick={confirmPayment}>{submittingPayment ? "Передаём менеджеру…" : `Я оплатил ${draft.total.toLocaleString("ru-RU")} ฿`}</button></div></div>}
+      {paymentOpen && draft && <div className="modal-backdrop"><div className="payment-modal">
+        <button className="modal-close" type="button" onClick={() => setPaymentOpen(false)}>×</button>
+        <span className="eyebrow">Оплата подписки</span><h2>Выберите способ оплаты</h2>
+        <div className="payment-options">{paymentOptions.map((option) => <label key={option.id} className={paymentMethod === option.id ? "selected" : ""}><input type="radio" name="payment" value={option.id} checked={paymentMethod === option.id} onChange={() => setPaymentMethod(option.id)} /><span><strong>{option.title}</strong><small>{option.text}</small></span></label>)}</div>
+        {paymentMethod === "PROMPTPAY" ? <div style={{display:"grid",gap:10,textAlign:"center",justifyItems:"center"}}>
+          <div style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center"}}><strong>{draft.total.toLocaleString("ru-RU")} ฿</strong><button type="button" className="text-button" disabled={!paymentQrDataUrl} onClick={() => void savePaymentQr()}>⬇ Сохранить</button></div>
+          {paymentQrLoading ? <div className="payment-placeholder">Создаём QR…</div> : paymentQrDataUrl ? <img src={paymentQrDataUrl} alt="PromptPay QR" style={{width:"min(340px,75vw)",height:"auto",background:"white",padding:8,borderRadius:14,border:"1px solid #ddd"}} /> : <button type="button" onClick={() => void loadPaymentQr()}>Повторить создание QR</button>}
+          <p><b>После оплаты, пришлите чек.</b></p>
+        </div> : <div className="payment-placeholder"><b>Cash.</b><br/>После оформления менеджер получит ваши данные и свяжется с вами.</div>}
+        <button type="button" disabled={submittingPayment || (paymentMethod === "PROMPTPAY" && !paymentQrDataUrl)} onClick={confirmPayment}>{submittingPayment ? "Передаём менеджеру…" : paymentMethod === "PROMPTPAY" ? `Я оплатил ${draft.total.toLocaleString("ru-RU")} ฿` : "Оформить подписку с оплатой Cash"}</button>
+      </div></div>}
 
       {qrSubscription && <div className="modal-backdrop"><div className="payment-modal qr-display-modal"><button className="modal-close" type="button" onClick={() => setQrSubscriptionId(null)}>×</button><span className="eyebrow">QR этой подписки</span><h2>{qrSubscription.code}</h2><p>{formatDate(qrSubscription.starts_on)} — {formatDate(qrSubscription.ends_on)}</p><div className="qr-display-box"><img src={qrModalUrl} alt={`QR-код ${qrSubscription.code}`} /></div><button className="close-qr-button" type="button" onClick={() => setQrSubscriptionId(null)}>Закрыть QR</button></div></div>}
 

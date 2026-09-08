@@ -323,3 +323,31 @@ CREATE INDEX IF NOT EXISTS customer_messages_manager_unread_idx
 CREATE INDEX IF NOT EXISTS customer_messages_customer_unread_idx
   ON customer_messages(conversation_id, created_at)
   WHERE sender_role = 'MANAGER' AND read_by_customer_at IS NULL;
+
+-- SMSMKT phone-only login.
+ALTER TABLE customer_accounts ALTER COLUMN password_hash DROP NOT NULL;
+ALTER TABLE customer_accounts ALTER COLUMN password_hash SET DEFAULT '';
+CREATE TABLE IF NOT EXISTS sms_otp_challenges (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  phone text NOT NULL,
+  token text NOT NULL,
+  ref_code text,
+  attempts integer NOT NULL DEFAULT 0,
+  expires_at timestamptz NOT NULL,
+  used_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS sms_otp_challenges_phone_idx ON sms_otp_challenges(phone, created_at DESC);
+
+-- PromptPay payment receipts for manual subscription activation.
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS receipt_received_at timestamptz;
+CREATE TABLE IF NOT EXISTS subscription_receipts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  subscription_id uuid UNIQUE NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  file_name text NOT NULL,
+  mime_type text NOT NULL,
+  file_data bytea NOT NULL,
+  uploaded_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS subscription_receipts_user_idx ON subscription_receipts(user_id, uploaded_at DESC);

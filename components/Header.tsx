@@ -14,10 +14,7 @@ export default function Header() {
     <header className="site-header">
       <Link className="brand" href="/#top" aria-label="MealPoint — вернуться наверх">
         <span className="brand-mark">M</span>
-        <span>
-          <strong>MealPoint</strong>
-          <small>Еда близко.</small>
-        </span>
+        <span><strong>MealPoint</strong><small>Еда близко.</small></span>
       </Link>
 
       <nav className="desktop-nav" aria-label="Основная навигация">
@@ -26,10 +23,16 @@ export default function Header() {
         <Link href="/contacts">Контакты</Link>
       </nav>
 
-      <Link className="account-button" href="/account" aria-label="Личный кабинет">
-        <AccountIcon />
-        <span>Личный кабинет</span>
-      </Link>
+      <div className="header-actions">
+        <a className="smokefactory-header-link" href="https://smokefactorybbq.com" aria-label="Smoke Factory BBQ" title="Smoke Factory BBQ">
+          <img src="/smokefactory-logo.jpg" alt="" />
+          <span>Smoke Factory</span>
+        </a>
+        <Link className="account-button" href="/account" aria-label="Личный кабинет">
+          <AccountIcon />
+          <span>Личный кабинет</span>
+        </Link>
+      </div>
     </header>
   );
 }

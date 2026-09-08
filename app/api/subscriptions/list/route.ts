@@ -22,6 +22,7 @@ type SubscriptionRow = {
   payment_method: string | null;
   paid_at: string | null;
   activated_at: string | null;
+  receipt_received_at: string | null;
   full_name: string;
   phone: string | null;
   created_at: string;

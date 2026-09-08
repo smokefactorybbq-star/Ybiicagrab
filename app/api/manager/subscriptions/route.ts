@@ -23,6 +23,7 @@ type ManagerSubscriptionRow = {
   total_thb: number;
   paid_at: string | null;
   activated_at: string | null;
+  receipt_received_at: string | null;
   created_at: string;
   manager_unread_count: number;
   dates: Array<{ service_date: string; status: string }>;
@@ -51,6 +52,7 @@ export async function GET(request: Request) {
          s.total_thb,
          s.paid_at,
          s.activated_at,
+         s.receipt_received_at,
          s.created_at,
          COALESCE((
            SELECT COUNT(*)::int
@@ -100,18 +102,21 @@ export async function PATCH(request: Request) {
     }
 
     const activated = await withTransaction(async (client) => {
-      const current = await client.query<{ id: string; status: string }>(
-        `SELECT id, status FROM subscriptions WHERE id = $1 FOR UPDATE`, [id]
+      const current = await client.query<{ id: string; status: string; payment_method: string | null; receipt_received_at: string | null }>(
+        `SELECT id,status,payment_method,receipt_received_at::text FROM subscriptions WHERE id=$1 FOR UPDATE`, [id]
       );
       const subscription = current.rows[0];
       if (!subscription) throw new Error("NOT_FOUND");
       if (subscription.status === "ACTIVE") return null;
       if (subscription.status !== "AWAITING_ACTIVATION") throw new Error("WRONG_STATUS");
+      if (String(subscription.payment_method || '').toUpperCase() === 'PROMPTPAY' && !subscription.receipt_received_at) {
+        throw new Error('RECEIPT_REQUIRED');
+      }
 
       const code = createSubscriptionCode();
       await client.query(
         `UPDATE subscriptions
-         SET status = 'ACTIVE', code = $1, activated_at = now(), updated_at = now()
+         SET status = 'ACTIVE', code = $1, paid_at = COALESCE(paid_at, now()), activated_at = now(), updated_at = now()
          WHERE id = $2`, [code, id]
       );
       await client.query(
@@ -130,6 +135,7 @@ export async function PATCH(request: Request) {
     const code = error instanceof Error ? error.message : "";
     const message = code === "NOT_FOUND" ? "Подписка не найдена"
       : code === "WRONG_STATUS" ? "Эту подписку нельзя активировать"
+      : code === "RECEIPT_REQUIRED" ? "Сначала клиент должен загрузить чек PromptPay"
       : "Не удалось активировать подписку";
     return NextResponse.json({ ok: false, error: message }, { status: 400 });
   }
