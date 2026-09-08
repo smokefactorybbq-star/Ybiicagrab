@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import type { NextRequest, NextResponse } from "next/server";
 import { query, withTransaction } from "./db";
 
@@ -13,6 +13,25 @@ export type AuthenticatedAccount = {
   photoUrl: string;
   termsAcceptedAt: string | null;
 };
+
+/**
+ * Backward-compatibility only for repositories where an old password route
+ * was not deleted during an overlay deploy. The current customer UI uses
+ * phone + SMS OTP and does not call password registration/login routes.
+ */
+export function hashPassword(password: string) {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(password, salt, 64).toString("hex");
+  return `scrypt$${salt}$${hash}`;
+}
+
+export function verifyPassword(password: string, stored: string) {
+  const [algorithm, salt, expectedHex] = stored.split("$");
+  if (algorithm !== "scrypt" || !salt || !expectedHex || !/^[a-f0-9]+$/i.test(expectedHex)) return false;
+  const actual = scryptSync(password, salt, 64);
+  const expected = Buffer.from(expectedHex, "hex");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
 
 export function createSessionToken() {
   return randomBytes(32).toString("base64url");
