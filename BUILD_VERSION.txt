@@ -1,0 +1,3 @@
+MealPoint v0.8.1
+Phone + SMS subscription-only build
+Old overlay routes disabled explicitly
