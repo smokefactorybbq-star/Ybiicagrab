@@ -11,7 +11,6 @@ import {
   getPauseLimit,
   hashToken,
   normalizeDates,
-  normalizePhone,
   validateConsecutiveDates
 } from "../../../lib/subscriptions";
 
@@ -47,7 +46,7 @@ function validTime(value: string) {
 export async function POST(request: NextRequest) {
   try {
     const account = await getAuthenticatedAccount(request);
-    if (!account) return NextResponse.json({ ok: false, error: "Для оформления подписки войдите через Telegram" }, { status: 401 });
+    if (!account) return NextResponse.json({ ok: false, error: "Для оформления подписки войдите по номеру телефона" }, { status: 401 });
     if (!account.termsAcceptedAt) return NextResponse.json({ ok: false, error: "Сначала примите правила и условия" }, { status: 403 });
 
     const body = await request.json() as CreateSubscriptionBody;
@@ -55,7 +54,7 @@ export async function POST(request: NextRequest) {
     const dates = normalizeDates(body.dates);
     const fulfillmentType = body.fulfillmentType === "DELIVERY" ? "DELIVERY" : "PICKUP";
     const customerName = typeof body.customerName === "string" ? body.customerName.trim() : "";
-    const phone = normalizePhone(typeof body.phone === "string" ? body.phone : "");
+    const phone = account.phone;
     const address = typeof body.address === "string" ? body.address.trim() : "";
     const requestedTime = typeof body.requestedTime === "string" ? body.requestedTime.trim() : "";
     const pickupPointName = typeof body.pickupPointName === "string" ? body.pickupPointName.trim() : "";
@@ -76,7 +75,7 @@ export async function POST(request: NextRequest) {
     const pendingCode = createPendingCode();
     const accountAccess = createAccessToken();
     const accessHash = hashToken(accountAccess);
-    const pickupPoint = fulfillmentType === "PICKUP" ? pickupPointName : "Доставка Grab";
+    const pickupPoint = fulfillmentType === "PICKUP" ? pickupPointName : null;
 
     const created = await withTransaction(async (client) => {
       await client.query(
@@ -126,10 +125,9 @@ export async function POST(request: NextRequest) {
       `Телефон: ${escapeHtml(phone)}`,
       `Дней: ${dates.length}`,
       `Период: ${dates[0]} — ${dates[dates.length-1]}`,
-      `Получение: ${fulfillmentType === "DELIVERY" ? "доставка Grab" : "самовывоз"}`,
+      `Получение: ${fulfillmentType === "DELIVERY" ? "доставка" : "самовывоз"}`,
       fulfillmentType === "DELIVERY" ? `Адрес: ${escapeHtml(address)}` : "",
       `Время: ${requestedTime}`,
-      fulfillmentType === "DELIVERY" ? "Доставка осуществляется курьерами Grab и оплачивается покупателем." : "",
       `Оплата подписки: ${escapeHtml(paymentMethod)}`,
       `Сумма: ${total} ฿`,
       "Статус: ожидает ручной активации менеджером"

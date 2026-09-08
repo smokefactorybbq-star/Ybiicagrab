@@ -82,11 +82,11 @@ export default function CourierPage() {
     <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Логин" autoComplete="username" required />
     <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Пароль" autoComplete="current-password" required />
     {error && <p className="form-error">{error}</p>}<button type="submit" disabled={loading}>{loading ? "Проверяем…" : "Открыть доставки"}</button>
-    <Link className="kitchen-back-link" href="/shop.html">Вернуться на сайт</Link>
+    <Link className="kitchen-back-link" href="/">Вернуться на сайт</Link>
   </form></main>;
 
   return <main className="page-shell kitchen-page">
-    <section className="manager-heading kitchen-heading"><div><span className="eyebrow">MealPoint Courier</span><h1>Доставки на сегодня</h1><p>{data.serviceDate} · {data.rows.length} заказов. Время доставки — 12:00–18:00, стоимость Grab оплачивает покупатель.</p></div>
+    <section className="manager-heading kitchen-heading"><div><span className="eyebrow">MealPoint Courier</span><h1>Доставки на сегодня</h1><p>{data.serviceDate} · {data.rows.length} доставок по подписке. Время доставки — 12:00–18:00.</p></div>
       <div className="manager-heading-actions"><Link className="manager-scanner-link" href="/manager">К менеджеру</Link><Link className="manager-scanner-link" href="/kitchen">Кухня</Link><button type="button" onClick={() => void load()} disabled={loading}>{loading ? "Обновляем…" : "Обновить"}</button><button type="button" className="kitchen-logout" onClick={() => void logout()}>Выйти</button></div>
     </section>
     {data.testMode && <p className="test-mode-banner">Включено тестовое время менеджера.</p>}

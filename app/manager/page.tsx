@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import ChatWindow from "../../components/ChatWindow";
 
 type ManagerDay = {
   service_date: string;
@@ -17,6 +16,7 @@ type ManagerSubscription = {
   full_name: string;
   phone: string | null;
   pickup_point_name: string | null;
+  fulfillment_type: "PICKUP" | "DELIVERY";
   payment_method: string | null;
   selected_days: number;
   remaining_portions: number;
@@ -27,7 +27,6 @@ type ManagerSubscription = {
   paid_at: string | null;
   activated_at: string | null;
   created_at: string;
-  manager_unread_count: number;
   dates: ManagerDay[];
 };
 
@@ -64,7 +63,6 @@ type AppClock = {
   localDateTime: string;
 };
 
-type ChatClient = { userId: string; fullName: string; phone: string | null };
 type FulfillmentClient = {
   subscriptionId: string; code: string; fullName: string; phone: string | null; pickupPointName: string | null;
   address: string | null; requestedTime: string | null; dayStatus: string; pickedUp: boolean; pickedUpAt: string | null;
@@ -115,7 +113,6 @@ export default function ManagerPage() {
   const [testDateTime, setTestDateTime] = useState("");
   const [savingClock, setSavingClock] = useState(false);
   const [testDirty, setTestDirty] = useState(false);
-  const [chatClient, setChatClient] = useState<ChatClient | null>(null);
   const [fulfillmentDashboard, setFulfillmentDashboard] = useState<FulfillmentDashboard | null>(null);
   const [deliveryConfirm, setDeliveryConfirm] = useState<FulfillmentClient | null>(null);
   const [confirmingDelivery, setConfirmingDelivery] = useState("");
@@ -460,14 +457,13 @@ export default function ManagerPage() {
                 <th>Цена</th>
                 <th>Статус</th>
                 <th>Действие</th>
-                <th>Сообщения</th>
               </tr>
             </thead>
             <tbody>
               {subscriptions.map((item) => (
                 <tr key={item.id} className={item.status === "AWAITING_ACTIVATION" ? "needs-activation" : ""}>
                   <td><strong>{item.full_name}</strong><small>{item.phone || "—"}</small>{item.status === "ACTIVE" && <small>Код: {item.code}</small>}</td>
-                  <td><strong>{item.pickup_point_name || "—"}</strong><small>{item.payment_method || "—"}</small></td>
+                  <td><strong>{item.fulfillment_type === "DELIVERY" ? "Доставка" : (item.pickup_point_name || "—")}</strong><small>{item.payment_method || "—"}</small></td>
                   <td>
                     <details>
                       <summary>{item.selected_days} оплаченных дней</summary>
@@ -506,11 +502,10 @@ export default function ManagerPage() {
                       </button>
                     </div>
                   </td>
-                  <td><button type="button" className="manager-message-button" onClick={() => setChatClient({ userId: item.user_id, fullName: item.full_name, phone: item.phone })}>Написать{item.manager_unread_count > 0 && <span className="message-alert">!</span>}</button></td>
                 </tr>
               ))}
               {!subscriptions.length && (
-                <tr><td colSpan={7} className="empty-table">Подписок пока нет.</td></tr>
+                <tr><td colSpan={6} className="empty-table">Подписок пока нет.</td></tr>
               )}
             </tbody>
           </table>
@@ -572,17 +567,6 @@ export default function ManagerPage() {
       )}
       {deliveryConfirm && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && !confirmingDelivery) setDeliveryConfirm(null); }}><section className="payment-modal delivery-confirm-modal" role="dialog" aria-modal="true"><button className="modal-close" type="button" disabled={Boolean(confirmingDelivery)} onClick={() => setDeliveryConfirm(null)}>×</button><span className="eyebrow">Доставка</span><h2>Клиент получил еду?</h2><p><strong>{deliveryConfirm.fullName}</strong><br/>{deliveryConfirm.requestedTime || "—"} · {deliveryConfirm.address || "Адрес не указан"}</p><div className="delivery-confirm-actions"><button type="button" className="confirm-yes" disabled={Boolean(confirmingDelivery)} onClick={() => void confirmDeliveryReceived()}>{confirmingDelivery ? "Сохраняем…" : "Да"}</button><button type="button" className="confirm-no" disabled={Boolean(confirmingDelivery)} onClick={() => setDeliveryConfirm(null)}>Нет</button></div></section></div>}
       {qrPoint && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setQrPoint(null); }}><section className="payment-modal pickup-qr-modal" role="dialog" aria-modal="true"><button className="modal-close" type="button" onClick={() => setQrPoint(null)}>×</button><span className="eyebrow">QR точки выдачи</span><h2>{qrPoint.name}</h2><p>{qrPoint.address}</p><img src={`/api/manager/pickup-qr?point=${encodeURIComponent(qrPoint.code)}`} alt={`QR ${qrPoint.name}`} /><p><small>Распечатайте этот QR и разместите только на соответствующей точке выдачи.</small></p></section></div>}
-      <ChatWindow
-        open={Boolean(chatClient)}
-        onClose={() => setChatClient(null)}
-        mode="MANAGER"
-        title={chatClient ? `${chatClient.fullName}${chatClient.phone ? ` · ${chatClient.phone}` : ""}` : "Чат с клиентом"}
-        userId={chatClient?.userId}
-        onRead={() => {
-          if (!chatClient) return;
-          setSubscriptions((current) => current.map((item) => item.user_id === chatClient.userId ? { ...item, manager_unread_count: 0 } : item));
-        }}
-      />
     </main>
   );
 }

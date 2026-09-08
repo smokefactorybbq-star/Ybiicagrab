@@ -3,8 +3,8 @@ import "./globals.css";
 import Header from "../components/Header";
 
 export const metadata: Metadata = {
-  title: "Smoke Factory BBQ Phuket",
-  description: "Заказ блюд Smoke Factory BBQ на Пхукете. Доставка и самовывоз."
+  title: "MealPoint — подписка на разные обеды на Пхукете",
+  description: "Выбирайте дни подписки и забирайте разные сытные обеды в ближайшем Meal Point."
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -14,8 +14,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <Header />
         {children}
         <footer className="site-footer">
-          <div><strong>Smoke Factory BBQ</strong><span>Phuket, Thailand</span></div>
-          <div><span>© {new Date().getFullYear()}</span></div>
+          <div><strong>MealPoint</strong><span>Мы экономим ваше время и деньги.</span></div>
+          <div><span>Пхукет, Таиланд</span><span>© {new Date().getFullYear()}</span></div>
         </footer>
       </body>
     </html>

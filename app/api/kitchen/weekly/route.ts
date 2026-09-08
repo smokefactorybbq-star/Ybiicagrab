@@ -62,6 +62,7 @@ export async function GET(request: Request) {
          WHERE s.status IN ('ACTIVE', 'COMPLETED')
            AND sd.service_date BETWEEN $1::date AND $2::date
            AND sd.status NOT IN ('PAUSED', 'PAUSE_REQUESTED')
+           AND s.fulfillment_type = 'PICKUP'
          GROUP BY pickup_point_name, sd.service_date
          ORDER BY pickup_point_name, sd.service_date`,
         [startDate, endDate]

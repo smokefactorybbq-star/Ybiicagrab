@@ -62,8 +62,7 @@ export async function POST(request: NextRequest) {
       if (!row || row.fulfillment_type !== "PICKUP" || !["ACTIVE","COMPLETED"].includes(row.subscription_status)) throw new Error("BAD_QR");
       if (!["PLANNED","AVAILABLE"].includes(row.day_status) || row.redeemed_at || row.consumed_at) throw new Error("ALREADY");
 
-      const legacyPoint = !row.pickup_point_name || row.pickup_point_name === "Smoke Factory BBQ";
-      if (!legacyPoint && row.pickup_point_name !== point.name) throw new Error("WRONG_POINT");
+      if (!row.pickup_point_name || row.pickup_point_name !== point.name) throw new Error("WRONG_POINT");
 
       // If this point has an electronic lock configured, do not consume the meal
       // while its controller is offline. This prevents charging a customer who
@@ -83,13 +82,12 @@ export async function POST(request: NextRequest) {
       );
       const updated = await client.query<{ remaining_portions:number }>(
         `UPDATE subscriptions
-         SET pickup_point_name=CASE WHEN pickup_point_name IS NULL OR pickup_point_name='' OR pickup_point_name='Smoke Factory BBQ' THEN $2 ELSE pickup_point_name END,
-             remaining_portions=GREATEST(0,remaining_portions-1),
+         SET remaining_portions=GREATEST(0,remaining_portions-1),
              status=CASE WHEN GREATEST(0,remaining_portions-1)=0 THEN 'COMPLETED'::subscription_status ELSE status END,
              updated_at=now()
          WHERE id=$1
          RETURNING remaining_portions`,
-        [subscriptionId, point.name]
+        [subscriptionId]
       );
       const remaining = Number(updated.rows[0]?.remaining_portions ?? Math.max(0, row.remaining_portions - 1));
       const lockRequested = await requestPickupLockOpen(client, {

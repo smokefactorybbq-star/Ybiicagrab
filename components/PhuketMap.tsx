@@ -145,7 +145,7 @@ export default function PhuketMap() {
   }, [apiKey, location]);
 
   return (
-    <section className="map-section">
+    <section id="pickup-points" className="map-section">
       <div className="section-heading split-heading">
         <div>
           <span className="eyebrow">Пункты выдачи</span>

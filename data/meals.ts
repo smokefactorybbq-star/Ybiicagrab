@@ -161,3 +161,59 @@ export function getMealTemplateForDate(isoDate: string): MealTemplate {
 }
 
 export const mealTemplates = getMenuBlock(0);
+
+export type Nutrition = {
+  calories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+  weight: number;
+};
+
+function stableNumber(text: string) {
+  let value = 2166136261;
+  for (let i = 0; i < text.length; i += 1) value = Math.imul(value ^ text.charCodeAt(i), 16777619);
+  return value >>> 0;
+}
+
+export function getCourseDetails(course: Course, kind: "first" | "second") {
+  const seed = stableNumber(course.title);
+  if (kind === "first") {
+    const nutrition: Nutrition = {
+      calories: 180 + (seed % 121),
+      protein: 9 + (seed % 10),
+      fat: 7 + (seed % 9),
+      carbs: 18 + (seed % 19),
+      weight: 300
+    };
+    return {
+      ...course,
+      description: `${course.title} — горячее первое блюдо MealPoint. Готовим небольшими партиями из свежих продуктов, без лишней тяжести, чтобы обед оставался сытным и комфортным на каждый день.`,
+      nutrition
+    };
+  }
+  const nutrition: Nutrition = {
+    calories: 390 + (seed % 191),
+    protein: 23 + (seed % 17),
+    fat: 13 + (seed % 15),
+    carbs: 34 + (seed % 31),
+    weight: 400
+  };
+  return {
+    ...course,
+    description: `${course.title} — основное блюдо дня. Сбалансированная порция с белком, гарниром и соусом или овощами; рассчитана как полноценная вторая часть ежедневного обеда.`,
+    nutrition
+  };
+}
+
+export function getMealNutrition(meal: MealTemplate): Nutrition {
+  const first = getCourseDetails(meal.firstCourse, "first").nutrition;
+  const second = getCourseDetails(meal.secondCourse, "second").nutrition;
+  return {
+    calories: first.calories + second.calories,
+    protein: first.protein + second.protein,
+    fat: first.fat + second.fat,
+    carbs: first.carbs + second.carbs,
+    weight: first.weight + second.weight
+  };
+}
