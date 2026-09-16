@@ -41,6 +41,14 @@ function TelegramLogin() {
       const data=await response.json();
       if(!response.ok||!data.ok)throw new Error(data.error||"Telegram-вход не настроен");
       if(cancelled||!containerRef.current)return;
+      // Telegram Login validates the origin that embeds the widget. Always use the
+      // canonical MealPoint host so www/Railway preview domains cannot cause
+      // "Bot domain invalid".
+      if(data.publicOrigin && window.location.origin !== data.publicOrigin){
+        const target = new URL(window.location.pathname + window.location.search + window.location.hash, data.publicOrigin);
+        window.location.replace(target.toString());
+        return;
+      }
       containerRef.current.innerHTML="";
       const script=document.createElement("script");
       script.async=true; script.src="https://telegram.org/js/telegram-widget.js?22";
@@ -49,7 +57,7 @@ function TelegramLogin() {
       script.setAttribute("data-radius","12");
       script.setAttribute("data-userpic","false");
       script.setAttribute("data-request-access","write");
-      script.setAttribute("data-auth-url",`${window.location.origin}/api/auth/telegram/callback`);
+      script.setAttribute("data-auth-url",data.authUrl || `${window.location.origin}/api/auth/telegram/callback`);
       containerRef.current.appendChild(script);
       setMessage("");
     }).catch(error=>{if(!cancelled)setMessage(error instanceof Error?error.message:"Не удалось загрузить Telegram-вход")});
