@@ -78,4 +78,4 @@ MANAGER_TELEGRAM_CHAT_ID=...   # необязательно, для уведом
 
 ## Telegram Login domain — v0.9.1
 
-Production login is pinned to `https://meal-point.com`. The Telegram bot username is resolved from `TELEGRAM_BOT_TOKEN` first, so a stale `TELEGRAM_BOT_USERNAME` cannot silently select another bot. Set `MEALPOINT_PUBLIC_URL=https://meal-point.com` in Railway (optional because this is the default). In BotFather configure the same bot linked to the token: legacy `/setdomain` = `meal-point.com`; in Login Widget / Allowed URLs also add `https://meal-point.com` and `https://meal-point.com/api/auth/telegram/callback`.
+Production login is pinned to `https://www.meal-point.com`. The Telegram bot username is resolved from `TELEGRAM_BOT_TOKEN` first, so a stale `TELEGRAM_BOT_USERNAME` cannot silently select another bot. Set `MEALPOINT_PUBLIC_URL=https://www.meal-point.com` in Railway (optional because this is the default). In BotFather configure the same bot linked to the token: legacy `/setdomain` = `www.meal-point.com`; in Login Widget / Allowed URLs also add `https://www.meal-point.com` and `https://www.meal-point.com/api/auth/telegram/callback`.

@@ -4,12 +4,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function publicOrigin() {
-  const raw = (process.env.MEALPOINT_PUBLIC_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://meal-point.com").trim();
+  const raw = (process.env.MEALPOINT_PUBLIC_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://www.meal-point.com").trim();
   try {
     const url = new URL(raw.includes("://") ? raw : `https://${raw}`);
     return url.origin;
   } catch {
-    return "https://meal-point.com";
+    return "https://www.meal-point.com";
   }
 }
 
@@ -47,7 +47,7 @@ export async function GET() {
   return NextResponse.json(
     {
       ok: true,
-      version: "0.9.2",
+      version: "0.9.3",
       botUsername,
       publicOrigin: origin,
       authUrl: `${origin}/api/auth/telegram/callback`
