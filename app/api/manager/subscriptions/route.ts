@@ -27,6 +27,7 @@ type ManagerSubscriptionRow = {
   paid_at: string | null;
   activated_at: string | null;
   created_at: string;
+  manager_unread_count: number;
   dates: Array<{ service_date: string; status: string }>;
 };
 
@@ -56,6 +57,14 @@ export async function GET(request: Request) {
          s.paid_at,
          s.activated_at,
          s.created_at,
+         COALESCE((
+           SELECT COUNT(*)::int
+           FROM customer_conversations cc
+           JOIN customer_messages cm ON cm.conversation_id = cc.id
+           WHERE cc.user_id = u.id
+             AND cm.sender_role = 'CUSTOMER'
+             AND cm.read_by_manager_at IS NULL
+         ), 0)::int AS manager_unread_count,
          COALESCE(
            json_agg(
              json_build_object(

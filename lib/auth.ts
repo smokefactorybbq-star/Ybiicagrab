@@ -1,6 +1,7 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import type { NextRequest, NextResponse } from "next/server";
 import { query, withTransaction } from "./db";
+import type { TelegramLoginData } from "./telegram-login";
 
 export const SESSION_COOKIE = "mealpoint_session";
 const SESSION_DAYS = 30;
@@ -12,12 +13,13 @@ export type AuthenticatedAccount = {
   address: string;
   photoUrl: string;
   termsAcceptedAt: string | null;
+  telegramUsername: string;
 };
 
 /**
  * Backward-compatibility only for repositories where an old password route
  * was not deleted during an overlay deploy. The current customer UI uses
- * phone + SMS OTP and does not call password registration/login routes.
+ * Telegram Login and does not call password registration/login routes.
  */
 export function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
@@ -78,6 +80,73 @@ export async function createBrowserSession(userId: string) {
   return token;
 }
 
+
+export function normalizeContactPhone(value: string) {
+  const compact = String(value || "").trim().replace(/[\s().-]/g, "");
+  const normalized = compact.startsWith("00") ? `+${compact.slice(2)}` : compact;
+  if (!normalized) return "";
+  if (!/^\+?\d{8,15}$/.test(normalized)) return "";
+  return normalized;
+}
+
+export async function getOrCreateTelegramAccount(telegram: TelegramLoginData, preferredUserId?: string | null) {
+  return withTransaction(async (client) => {
+    const telegramId = telegram.id;
+    const displayName = [telegram.first_name, telegram.last_name].filter(Boolean).join(" ").trim() ||
+      (telegram.username ? `@${telegram.username}` : "Пользователь MealPoint");
+
+    const existing = await client.query<{ id: string }>(
+      `SELECT id::text FROM users WHERE telegram_id = $1::bigint LIMIT 1 FOR UPDATE`,
+      [telegramId]
+    );
+
+    let userId = existing.rows[0]?.id || "";
+    if (!userId && preferredUserId) {
+      const preferred = await client.query<{ id: string; telegram_id: string | null }>(
+        `SELECT id::text, telegram_id::text FROM users WHERE id = $1 LIMIT 1 FOR UPDATE`,
+        [preferredUserId]
+      );
+      if (preferred.rows[0] && !preferred.rows[0].telegram_id) userId = preferred.rows[0].id;
+    }
+
+    if (userId) {
+      await client.query(
+        `UPDATE users SET
+           telegram_id = $1::bigint,
+           username = NULLIF($2,''),
+           telegram_username = NULLIF($2,''),
+           telegram_first_name = NULLIF($3,''),
+           telegram_last_name = NULLIF($4,''),
+           photo_url = COALESCE(NULLIF($5,''), photo_url),
+           avatar_url = COALESCE(NULLIF($5,''), avatar_url),
+           full_name = CASE WHEN full_name IS NULL OR trim(full_name) = '' OR full_name = 'Пользователь MealPoint' THEN $6 ELSE full_name END,
+           profile_name = CASE WHEN profile_name IS NULL OR trim(profile_name) = '' OR profile_name = 'Пользователь MealPoint' THEN $6 ELSE profile_name END,
+           updated_at = now(), last_site_visit_at = now()
+         WHERE id = $7`,
+        [telegramId, telegram.username || "", telegram.first_name || "", telegram.last_name || "", telegram.photo_url || "", displayName, userId]
+      );
+    } else {
+      const created = await client.query<{ id: string }>(
+        `INSERT INTO users (telegram_id, username, telegram_username, telegram_first_name, telegram_last_name,
+                            photo_url, avatar_url, profile_name, full_name, role, created_at, updated_at, last_site_visit_at)
+         VALUES ($1::bigint, NULLIF($2,''), NULLIF($2,''), NULLIF($3,''), NULLIF($4,''),
+                 NULLIF($5,''), NULLIF($5,''), $6, $6, 'CUSTOMER', now(), now(), now())
+         RETURNING id::text`,
+        [telegramId, telegram.username || "", telegram.first_name || "", telegram.last_name || "", telegram.photo_url || "", displayName]
+      );
+      userId = created.rows[0].id;
+    }
+
+    const userPhone = await client.query<{ phone: string | null }>(`SELECT phone FROM users WHERE id = $1`, [userId]);
+    await client.query(
+      `INSERT INTO customer_accounts (user_id, phone, password_hash) VALUES ($1, $2, '')
+       ON CONFLICT (user_id) DO UPDATE SET updated_at = now()`,
+      [userId, userPhone.rows[0]?.phone || null]
+    );
+    return userId;
+  });
+}
+
 export async function getOrCreatePhoneAccount(phone: string) {
   return withTransaction(async (client) => {
     const existing = await client.query<{ user_id: string }>(
@@ -127,7 +196,8 @@ export async function getAuthenticatedAccount(request: NextRequest): Promise<Aut
             COALESCE(ca.phone, u.phone, '') AS phone,
             COALESCE(u.address, '') AS address,
             COALESCE(u.photo_url, u.avatar_url, '') AS "photoUrl",
-            ca.terms_accepted_at::text AS "termsAcceptedAt"
+            ca.terms_accepted_at::text AS "termsAcceptedAt",
+            COALESCE(u.telegram_username, u.username, '') AS "telegramUsername"
      FROM customer_sessions cs
      JOIN users u ON u.id = cs.user_id
      LEFT JOIN customer_accounts ca ON ca.user_id = u.id
@@ -144,6 +214,7 @@ export async function getAuthenticatedAccount(request: NextRequest): Promise<Aut
     phone: row.phone,
     address: row.address,
     photoUrl: row.photoUrl,
-    termsAcceptedAt: row.termsAcceptedAt
+    termsAcceptedAt: row.termsAcceptedAt,
+    telegramUsername: row.telegramUsername
   };
 }

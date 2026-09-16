@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthenticatedAccount } from "../../../lib/auth";
+import { getAuthenticatedAccount, normalizeContactPhone } from "../../../lib/auth";
 import { getAppClock } from "../../../lib/app-time";
 import { withTransaction } from "../../../lib/db";
 import { notifyManagerTelegram } from "../../../lib/telegram";
@@ -46,7 +46,7 @@ function validTime(value: string) {
 export async function POST(request: NextRequest) {
   try {
     const account = await getAuthenticatedAccount(request);
-    if (!account) return NextResponse.json({ ok: false, error: "Для оформления подписки войдите по номеру телефона" }, { status: 401 });
+    if (!account) return NextResponse.json({ ok: false, error: "Для оформления подписки войдите через Telegram" }, { status: 401 });
     if (!account.termsAcceptedAt) return NextResponse.json({ ok: false, error: "Сначала примите правила и условия" }, { status: 403 });
 
     const body = await request.json() as CreateSubscriptionBody;
@@ -54,7 +54,8 @@ export async function POST(request: NextRequest) {
     const dates = normalizeDates(body.dates);
     const fulfillmentType = body.fulfillmentType === "DELIVERY" ? "DELIVERY" : "PICKUP";
     const customerName = typeof body.customerName === "string" ? body.customerName.trim() : "";
-    const phone = account.phone;
+    const phoneInput = typeof body.phone === "string" ? body.phone.trim() : account.phone;
+    const phone = normalizeContactPhone(phoneInput);
     const address = typeof body.address === "string" ? body.address.trim() : "";
     const requestedTime = typeof body.requestedTime === "string" ? body.requestedTime.trim() : "";
     const pickupPointName = typeof body.pickupPointName === "string" ? body.pickupPointName.trim() : "";

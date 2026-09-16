@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthenticatedAccount } from "../../../../lib/auth";
+import { getAuthenticatedAccount, normalizeContactPhone } from "../../../../lib/auth";
 import { withTransaction } from "../../../../lib/db";
 
 export const runtime = "nodejs";
@@ -12,11 +12,12 @@ export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json() as { fullName?: unknown; phone?: unknown; address?: unknown };
     const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
-    const phone = account.phone;
+    const rawPhone = typeof body.phone === "string" ? body.phone.trim() : account.phone;
+    const phone = rawPhone ? normalizeContactPhone(rawPhone) : "";
     const address = typeof body.address === "string" ? body.address.trim() : "";
 
     if (fullName.length < 2) return NextResponse.json({ ok: false, error: "Укажите имя" }, { status: 400 });
-    if (phone.length < 8) return NextResponse.json({ ok: false, error: "Телефон аккаунта не подтверждён" }, { status: 400 });
+    if (rawPhone && !phone) return NextResponse.json({ ok: false, error: "Введите корректный телефон" }, { status: 400 });
 
     await withTransaction(async (client) => {
       await client.query(

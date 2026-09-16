@@ -5,7 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getMealTemplateForDate } from "../../data/meals";
 import { pickupPoints } from "../../data/pickupPoints";
 
-type Account = { userId:string; fullName:string; phone:string; address:string; photoUrl:string; termsAcceptedAt:string|null };
+type Account = { userId:string; fullName:string; phone:string; address:string; photoUrl:string; termsAcceptedAt:string|null; telegramUsername:string };
+type ChatMessage = { id:string; senderRole:"CUSTOMER"|"MANAGER"; senderName:string|null; body:string; createdAt:string };
 type Draft = { dates:string[]; selectedDays:number; rate:number; total:number; createdAt:string; fulfillmentType:"PICKUP"|"DELIVERY"; pickupPointName?:string; duplicateConfirmed?:boolean };
 type Day = {
   service_date:string; status:string; fulfillment_type?:"PICKUP"|"DELIVERY"; requested_time?:string|null; delivery_address?:string|null;
@@ -31,47 +32,32 @@ function formatDate(value:string){ const m=value.match(/^(\d{4})-(\d{2})-(\d{2})
 function fallbackClock():Clock { const p=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date()); const g=(t:string)=>p.find(x=>x.type===t)?.value||"0"; return {date:`${g("year")}-${g("month")}-${g("day")}`,hour:+g("hour"),minute:+g("minute")}; }
 function validSubscriptionTime(v:string){ if(!/^\d{2}:\d{2}$/.test(v))return false; const [h,m]=v.split(":").map(Number); const n=h*60+m; return n>=720&&n<=1080; }
 
-function PhoneLogin({onSuccess}:{onSuccess:()=>void}) {
-  const [phone,setPhone]=useState("+66");
-  const [code,setCode]=useState("");
-  const [step,setStep]=useState<"PHONE"|"CODE">("PHONE");
-  const [loading,setLoading]=useState(false);
-  const [message,setMessage]=useState("");
-  const [debugCode,setDebugCode]=useState("");
-
-  async function requestCode(){
-    setLoading(true);setMessage("");setDebugCode("");
-    try{
-      const response=await fetch("/api/auth/phone/request-code",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone})});
+function TelegramLogin() {
+  const containerRef=useRef<HTMLDivElement|null>(null);
+  const [message,setMessage]=useState("Загружаем вход через Telegram…");
+  useEffect(()=>{
+    let cancelled=false;
+    void fetch("/api/auth/telegram/config",{cache:"no-store"}).then(async response=>{
       const data=await response.json();
-      if(!response.ok||!data.ok)throw new Error(data.error||"Не удалось отправить код");
-      setPhone(data.phone||phone);setStep("CODE");setDebugCode(data.debugCode||"");setMessage("Код отправлен на указанный номер.");
-    }catch(e){setMessage(e instanceof Error?e.message:"Не удалось отправить код");}
-    finally{setLoading(false);}
-  }
-
-  async function verifyCode(){
-    setLoading(true);setMessage("");
-    try{
-      const response=await fetch("/api/auth/phone/verify-code",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,code})});
-      const data=await response.json();
-      if(!response.ok||!data.ok)throw new Error(data.error||"Неверный код");
-      onSuccess();
-    }catch(e){setMessage(e instanceof Error?e.message:"Не удалось выполнить вход");}
-    finally{setLoading(false);}
-  }
-
-  return <div className="phone-login-box">
-    <label>Номер телефона<input value={phone} onChange={e=>setPhone(e.target.value)} inputMode="tel" autoComplete="tel" placeholder="+66 81 234 5678" disabled={step==="CODE"}/></label>
-    {step==="CODE"&&<label>Код из SMS<input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,"").slice(0,6))} inputMode="numeric" autoComplete="one-time-code" placeholder="000000" maxLength={6}/></label>}
-    {message&&<p className={message.includes("отправлен")?"phone-login-message":"form-error"}>{message}</p>}
-    {debugCode&&<p className="phone-login-dev-code">Тестовый код: <strong>{debugCode}</strong></p>}
-    {step==="PHONE"?<button type="button" disabled={loading||phone.trim().length<8} onClick={()=>void requestCode()}>{loading?"Отправляем…":"Получить код"}</button>:<>
-      <button type="button" disabled={loading||code.length!==6} onClick={()=>void verifyCode()}>{loading?"Проверяем…":"Войти / зарегистрироваться"}</button>
-      <button type="button" className="phone-change-button" onClick={()=>{setStep("PHONE");setCode("");setMessage("");setDebugCode("")}}>Изменить номер</button>
-    </>}
-  </div>;
+      if(!response.ok||!data.ok)throw new Error(data.error||"Telegram-вход не настроен");
+      if(cancelled||!containerRef.current)return;
+      containerRef.current.innerHTML="";
+      const script=document.createElement("script");
+      script.async=true; script.src="https://telegram.org/js/telegram-widget.js?22";
+      script.setAttribute("data-telegram-login",data.botUsername);
+      script.setAttribute("data-size","large");
+      script.setAttribute("data-radius","12");
+      script.setAttribute("data-userpic","false");
+      script.setAttribute("data-request-access","write");
+      script.setAttribute("data-auth-url",`${window.location.origin}/api/auth/telegram/callback`);
+      containerRef.current.appendChild(script);
+      setMessage("");
+    }).catch(error=>{if(!cancelled)setMessage(error instanceof Error?error.message:"Не удалось загрузить Telegram-вход")});
+    return()=>{cancelled=true;};
+  },[]);
+  return <div className="telegram-login-box"><div ref={containerRef} className="telegram-login-widget" />{message&&<p className="form-error">{message}</p>}<p className="telegram-login-note">Нажмите кнопку Telegram и подтвердите вход. SMS больше не используется.</p></div>;
 }
+
 
 export default function AccountPage(){
   const [ready,setReady]=useState(false); const [account,setAccount]=useState<Account|null>(null); const [error,setError]=useState("");
@@ -83,6 +69,8 @@ export default function AccountPage(){
   const [termsOpen,setTermsOpen]=useState(false); const [termsChecked,setTermsChecked]=useState(false); const [pauseLoading,setPauseLoading]=useState("");
   const [timeLoading,setTimeLoading]=useState("");
   const [scanTarget,setScanTarget]=useState<Subscription|null>(null); const [scanMessage,setScanMessage]=useState(""); const [scanBusy,setScanBusy]=useState(false);
+  const [chatOpen,setChatOpen]=useState(false); const [chatMessages,setChatMessages]=useState<ChatMessage[]>([]); const [chatText,setChatText]=useState("");
+  const [chatUnread,setChatUnread]=useState(0); const [chatLoading,setChatLoading]=useState(false); const [chatError,setChatError]=useState("");
   const scannerRef=useRef<any>(null); const scanLockedRef=useRef(false);
 
   const loadAccount=useCallback(async()=>{
@@ -100,11 +88,41 @@ export default function AccountPage(){
       if(latestPickup?.pickup_point_name)setPickupPointName(latestPickup.pickup_point_name);
     } else setError(data.error||"Ошибка подписок");
   },[account]);
-  const reloadAfterPhone=useCallback(()=>{setReady(false);void loadAccount();},[loadAccount]);
 
-  useEffect(()=>{ const raw=localStorage.getItem("mealpoint_subscription_draft"); if(raw)try{const parsed=JSON.parse(raw) as Draft;setDraft(parsed);setFulfillment(parsed.fulfillmentType||"PICKUP");if(parsed.pickupPointName)setPickupPointName(parsed.pickupPointName);}catch{localStorage.removeItem("mealpoint_subscription_draft");} void loadAccount(); void fetch("/api/app-time",{cache:"no-store"}).then(r=>r.json()).then(d=>d.ok&&setClock(d.clock)); },[loadAccount]);
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.search);
+    const telegramStatus=params.get("telegram");
+    if(telegramStatus&&telegramStatus!=="ok"){
+      const telegramErrors:Record<string,string>={
+        TELEGRAM_NOT_CONFIGURED:"Telegram-вход не настроен на сервере",
+        TELEGRAM_AUTH_EXPIRED:"Подтверждение Telegram устарело. Попробуйте войти ещё раз.",
+        BAD_TELEGRAM_AUTH:"Не удалось проверить подпись Telegram. Попробуйте войти ещё раз."
+      };
+      setError(telegramErrors[telegramStatus]||"Не удалось войти через Telegram");
+    }
+    if(telegramStatus){params.delete("telegram");const query=params.toString();window.history.replaceState({},"",`${window.location.pathname}${query?`?${query}`:""}${window.location.hash}`);}
+    const raw=localStorage.getItem("mealpoint_subscription_draft");
+    if(raw)try{const parsed=JSON.parse(raw) as Draft;setDraft(parsed);setFulfillment(parsed.fulfillmentType||"PICKUP");if(parsed.pickupPointName)setPickupPointName(parsed.pickupPointName);}catch{localStorage.removeItem("mealpoint_subscription_draft");}
+    void loadAccount();
+    void fetch("/api/app-time",{cache:"no-store"}).then(r=>r.json()).then(d=>d.ok&&setClock(d.clock));
+  },[loadAccount]);
   useEffect(()=>{if(account)void loadSubscriptions();},[account,loadSubscriptions]);
-  useEffect(()=>{ if(!account)return; const payload={fullName:name.trim(),phone:phone.trim(),address:address.trim()}; if(payload.fullName.length<2||payload.phone.length<8)return; const timer=setTimeout(()=>{void fetch("/api/account/profile",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}).catch(()=>undefined);},800); return()=>clearTimeout(timer); },[account,name,phone,address]);
+  useEffect(()=>{ if(!account)return; const payload={fullName:name.trim(),phone:phone.trim(),address:address.trim()}; if(payload.fullName.length<2||(payload.phone&&payload.phone.length<8))return; const timer=setTimeout(()=>{void fetch("/api/account/profile",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}).catch(()=>undefined);},800); return()=>clearTimeout(timer); },[account,name,phone,address]);
+
+  const loadChat=useCallback(async(markRead=false)=>{
+    if(!account)return;
+    try{
+      const response=await fetch(`/api/account/chat${markRead?"?markRead=1":""}`,{cache:"no-store",credentials:"same-origin"});
+      const data=await response.json(); if(!response.ok||!data.ok)throw new Error(data.error||"Не удалось загрузить чат");
+      setChatMessages(data.messages||[]); setChatUnread(Number(data.unreadCount||0)); setChatError("");
+    }catch(e){setChatError(e instanceof Error?e.message:"Не удалось загрузить чат");}
+  },[account]);
+  useEffect(()=>{if(!account)return;void loadChat(false);const timer=window.setInterval(()=>void loadChat(chatOpen),chatOpen?5000:15000);return()=>window.clearInterval(timer);},[account,chatOpen,loadChat]);
+  async function openChat(){setChatOpen(true);await loadChat(true);}
+  async function sendChatMessage(){
+    const text=chatText.trim();if(!text||chatLoading)return;setChatLoading(true);setChatError("");
+    try{const response=await fetch("/api/account/chat",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({text})});const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||"Не удалось отправить сообщение");setChatText("");await loadChat(true);}catch(e){setChatError(e instanceof Error?e.message:"Не удалось отправить сообщение");}finally{setChatLoading(false);}
+  }
 
   const stopScanner=useCallback(async()=>{ const scanner=scannerRef.current; scannerRef.current=null; if(scanner){ try{await scanner.stop();}catch{} try{await scanner.clear();}catch{} } },[]);
   const redeemQr=useCallback(async(subscription:Subscription,payload:string)=>{
@@ -149,15 +167,15 @@ export default function AccountPage(){
   function canEditDay(date:string){ if(date>clock.date)return true; if(date<clock.date)return false; return clock.hour<11||(clock.hour===11&&clock.minute<30); }
 
   if(!ready)return <main className="page-shell account-page"><section className="empty-account"><h1>Открываем личный кабинет…</h1></section></main>;
-  if(!account)return <main className="page-shell account-page"><section className="account-login-shell"><div className="account-login-card"><span className="eyebrow">Личный кабинет</span><h1>Вход и регистрация по телефону</h1><p>Введите номер телефона и код из SMS. После входа вы сможете оплатить подписку и использовать QR при получении еды.</p>{error&&<p className="form-error">{error}</p>}<PhoneLogin onSuccess={reloadAfterPhone}/><Link href="/">Вернуться к подписке</Link></div></section></main>;
+  if(!account)return <main className="page-shell account-page"><section className="account-login-shell"><div className="account-login-card"><span className="eyebrow">Личный кабинет</span><h1>Вход и регистрация через Telegram</h1><p>Авторизуйтесь своим Telegram-аккаунтом. После первого входа укажите телефон для связи в профиле.</p>{error&&<p className="form-error">{error}</p>}<TelegramLogin/><Link href="/">Вернуться к подписке</Link></div></section></main>;
 
   return <main className="page-shell account-page">
-    <section className="account-top"><div><span className="eyebrow">Личный кабинет</span><h1>Здравствуйте, {name||"клиент"}</h1><p>{account.phone}</p></div><div className="account-top-actions"><Link className="new-subscription-link" href="/#subscription">Оформить подписку</Link><button type="button" className="text-button muted" onClick={logout}>Выйти</button></div></section>
+    <section className="account-top"><div><span className="eyebrow">Личный кабинет</span><h1>Здравствуйте, {name||"клиент"}</h1><p>{account.telegramUsername?`@${account.telegramUsername}`:"Telegram"}{phone?` · ${phone}`:""}</p></div><div className="account-top-actions"><button type="button" className="account-message-button" aria-label="Чат с менеджером" onClick={()=>void openChat()}>💬{chatUnread>0&&<span className="message-alert">{Math.min(chatUnread,99)}</span>}</button><Link className="new-subscription-link" href="/#subscription">Оформить подписку</Link><button type="button" className="text-button muted" onClick={logout}>Выйти</button></div></section>
     {clock.isTestMode&&<p className="test-mode-banner">Тестовое время: {clock.date} {String(clock.hour).padStart(2,"0")}:{String(clock.minute).padStart(2,"0")}</p>}
     {error&&<p className="form-error account-error">{error}</p>}
-    <section className="account-profile-form"><div className="account-profile-heading"><div><span className="eyebrow">Данные клиента</span><h2>Контакты</h2></div><span className="autosave-status saved">Сохраняются автоматически</span></div><div className="profile-fields-grid"><label>Имя<input value={name} onChange={e=>setName(e.target.value)}/></label><label>Телефон<input value={phone} readOnly aria-readonly="true"/></label><label className="profile-address-field">Адрес доставки<textarea value={address} onChange={e=>setAddress(e.target.value)}/></label></div></section>
+    <section className="account-profile-form"><div className="account-profile-heading"><div><span className="eyebrow">Данные клиента</span><h2>Контакты</h2></div><span className="autosave-status saved">Сохраняются автоматически</span></div><div className="profile-fields-grid"><label>Имя<input value={name} onChange={e=>setName(e.target.value)}/></label><label>Телефон<input value={phone} onChange={e=>setPhone(e.target.value)} inputMode="tel" autoComplete="tel" placeholder="+66 81 234 5678"/></label><label className="profile-address-field">Адрес доставки<textarea value={address} onChange={e=>setAddress(e.target.value)}/></label></div></section>
 
-    {draft&&<section className="purchase-card"><div><span className="eyebrow">Новая подписка</span><h2>{draft.selectedDays} дней неодинаковой еды</h2><p>{formatDate(draft.dates[0])} — {formatDate(draft.dates[draft.dates.length-1])}</p><div className="purchase-numbers"><strong>{draft.total.toLocaleString("ru-RU")} ฿</strong><span>{draft.rate} ฿ за день</span></div></div><div className="subscription-checkout-form"><div className="fulfillment-choice-summary"><strong>{fulfillment==="PICKUP"?"Самовывоз":"Доставка"}</strong><small>{fulfillment==="PICKUP"?(pickupPointName||"Точка не выбрана"):"По адресу клиента"}</small><Link href="/#subscription">Изменить способ получения</Link></div><label>Имя<input value={name} onChange={e=>setName(e.target.value)}/></label><label>Телефон<input value={phone} readOnly aria-readonly="true"/></label>{fulfillment==="DELIVERY"&&<label>Адрес доставки<textarea value={address} onChange={e=>setAddress(e.target.value)}/></label>}<label>Время {fulfillment==="PICKUP"?"самовывоза":"доставки"}<input type="time" min="12:00" max="18:00" step="900" value={requestedTime} onChange={e=>setRequestedTime(e.target.value)}/></label><button type="button" onClick={()=>setPaymentOpen(true)}>{exactDuplicate?"Оформить ещё одну подписку":"Перейти к оплате"}</button></div></section>}
+    {draft&&<section className="purchase-card"><div><span className="eyebrow">Новая подписка</span><h2>{draft.selectedDays} дней неодинаковой еды</h2><p>{formatDate(draft.dates[0])} — {formatDate(draft.dates[draft.dates.length-1])}</p><div className="purchase-numbers"><strong>{draft.total.toLocaleString("ru-RU")} ฿</strong><span>{draft.rate} ฿ за день</span></div></div><div className="subscription-checkout-form"><div className="fulfillment-choice-summary"><strong>{fulfillment==="PICKUP"?"Самовывоз":"Доставка"}</strong><small>{fulfillment==="PICKUP"?(pickupPointName||"Точка не выбрана"):"По адресу клиента"}</small><Link href="/#subscription">Изменить способ получения</Link></div><label>Имя<input value={name} onChange={e=>setName(e.target.value)}/></label><label>Телефон<input value={phone} onChange={e=>setPhone(e.target.value)} inputMode="tel" autoComplete="tel" placeholder="+66 81 234 5678"/></label>{fulfillment==="DELIVERY"&&<label>Адрес доставки<textarea value={address} onChange={e=>setAddress(e.target.value)}/></label>}<label>Время {fulfillment==="PICKUP"?"самовывоза":"доставки"}<input type="time" min="12:00" max="18:00" step="900" value={requestedTime} onChange={e=>setRequestedTime(e.target.value)}/></label><button type="button" onClick={()=>setPaymentOpen(true)}>{exactDuplicate?"Оформить ещё одну подписку":"Перейти к оплате"}</button></div></section>}
 
     {!!subscriptions.length&&<section className="subscriptions-list-section"><div className="subscriptions-list-heading"><div><span className="eyebrow">Мои подписки</span><h2>{subscriptions.length}</h2></div><p>Самовывоз: день списывается после успешного сканирования QR на точке. Доставка: день списывается автоматически после 18:00.</p></div><div className="subscriptions-list">{subscriptions.map((s,index)=>{
       const todayDay=s.days.find(day=>day.service_date===clock.date); const canScan=s.fulfillment_type==="PICKUP"&&s.status==="ACTIVE"&&Boolean(todayDay)&&["PLANNED","AVAILABLE"].includes(todayDay?.status||"")&&clock.hour<22; const pickedToday=Boolean(todayDay?.redeemed_at)||todayDay?.status==="REDEEMED";
@@ -165,6 +183,7 @@ export default function AccountPage(){
 
     {!draft&&!subscriptions.length&&<section className="empty-account"><h1>Подписок пока нет</h1><p>Выберите дни и блюда в разделе меню подписки.</p><Link href="/#subscription">Открыть подписку</Link></section>}
 
+    {chatOpen&&<div className="modal-backdrop chat-backdrop" role="presentation" onMouseDown={e=>{if(e.currentTarget===e.target)setChatOpen(false)}}><section className="chat-window" role="dialog" aria-modal="true"><header className="chat-header"><div><span className="eyebrow">MealPoint</span><h2>Чат с менеджером</h2></div><button type="button" className="chat-close" onClick={()=>setChatOpen(false)}>×</button></header><div className="chat-messages">{!chatMessages.length&&<p className="chat-empty">Напишите менеджеру — история сообщений сохранится здесь.</p>}{chatMessages.map(message=><article key={message.id} className={`chat-bubble ${message.senderRole==="CUSTOMER"?"chat-own":"chat-other"}`}><strong>{message.senderRole==="CUSTOMER"?"Вы":(message.senderName||"Менеджер")}</strong><p>{message.body}</p><time>{new Date(message.createdAt).toLocaleString("ru-RU",{timeZone:"Asia/Bangkok"})}</time></article>)}</div>{chatError&&<p className="form-error chat-error">{chatError}</p>}<div className="chat-composer"><textarea value={chatText} onChange={e=>setChatText(e.target.value)} maxLength={4000} placeholder="Напишите сообщение…" onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();void sendChatMessage();}}}/><button type="button" disabled={chatLoading||!chatText.trim()} onClick={()=>void sendChatMessage()}>{chatLoading?"Отправляем…":"Отправить"}</button></div></section></div>}
     {scanTarget&&<div className="modal-backdrop qr-customer-backdrop"><section className="payment-modal customer-qr-modal" role="dialog" aria-modal="true"><button className="modal-close" type="button" onClick={()=>{void stopScanner();setScanTarget(null)}}>×</button><span className="eyebrow">Самовывоз</span><h2>Сканировать QR точки</h2><p>{scanTarget.pickup_point_name||"MealPoint"}. Сканирование можно выполнить только один раз за сегодняшний день.</p><div id="pickup-qr-reader" className="customer-qr-reader"/><p className={scanMessage==="Ошибка чтения QR"?"form-error qr-scan-message":"qr-scan-message"}>{scanMessage}</p><label className="scanner-file-button customer-file-scan">Выбрать фото QR<input type="file" accept="image/*" capture="environment" disabled={scanBusy} onChange={e=>{const file=e.target.files?.[0];if(file)void scanFile(file);e.currentTarget.value=""}}/></label><button type="button" className="text-button muted" onClick={()=>{void stopScanner();setScanTarget(null)}}>Закрыть</button></section></div>}
     {paymentOpen&&draft&&<div className="modal-backdrop"><div className="payment-modal"><button className="modal-close" onClick={()=>setPaymentOpen(false)}>×</button><span className="eyebrow">Оплата подписки</span><h2>Выберите способ оплаты</h2><div className="payment-options">{paymentOptions.map(o=><label key={o.id} className={paymentMethod===o.id?"selected":""}><input type="radio" checked={paymentMethod===o.id} onChange={()=>setPaymentMethod(o.id)}/><span><strong>{o.title}</strong></span></label>)}</div><button type="button" disabled={submitting} onClick={()=>void createSubscription()}>{submitting?"Передаём менеджеру…":`Я оплатил ${draft.total.toLocaleString("ru-RU")} ฿`}</button></div></div>}
     {termsOpen&&<div className="modal-backdrop terms-backdrop"><div className="payment-modal terms-modal"><span className="eyebrow">Правила</span><h2>Перед использованием подписки</h2><div className="terms-scroll"><p><strong>Подписка.</strong> Первый обед — не раньше следующего дня после оформления.</p><p><strong>Получение.</strong> Самовывоз или доставка с 12:00 до 18:00.</p><p><strong>Самовывоз.</strong> День списывается после успешного сканирования QR-кода выбранной точки выдачи. Повторное сканирование одной подписки в тот же день не допускается.</p><p><strong>Доставка.</strong> Если день не поставлен на паузу, после 18:00 он автоматически считается использованным.</p><p><strong>Изменение времени.</strong> Время на текущий день можно изменить до 11:30.</p></div><label className="terms-checkbox"><input type="checkbox" checked={termsChecked} onChange={e=>setTermsChecked(e.target.checked)}/><span>Я ознакомился с правилами</span></label><button disabled={!termsChecked} onClick={()=>void acceptTerms()}>Продолжить</button></div></div>}

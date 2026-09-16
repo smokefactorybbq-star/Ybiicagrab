@@ -1180,3 +1180,23 @@ img { display: block; max-width: 100%; }
   .meal-details-footer > div { display: none; }
   .meal-details-footer > button { width: 100%; }
 }
+
+/* Telegram auth, restored chat and manual pickup write-off — v0.9.0 */
+.telegram-login-box { display:grid; justify-items:center; gap:14px; margin-top:22px; }
+.telegram-login-widget { min-height:44px; display:grid; place-items:center; }
+.telegram-login-note { margin:0; color:#756b66; font-size:13px; line-height:1.45; text-align:center; }
+.fulfillment-client-row { grid-template-columns: auto minmax(0,1fr) auto; }
+.fulfillment-row-actions { display:flex; align-items:center; justify-content:flex-end; min-width:78px; }
+.pickup-writeoff-button { border:1px solid #d89587; background:#fff5f1; color:#a03929; border-radius:11px; padding:8px 11px; font-weight:900; cursor:pointer; }
+.pickup-writeoff-button:hover { background:#ffe7df; }
+.pickup-status-circle.is-written-off { background:#8a817b; box-shadow:0 0 0 5px rgba(138,129,123,.13); }
+.manual-writeoff-label { color:#8a5146 !important; font-weight:800 !important; }
+.manager-writeoff-done { color:#6d625d; font-size:12px; font-weight:900; }
+.writeoff-confirm-modal { width:min(560px,100%); }
+.manager-message-button { border:1px solid #c6ddd4; background:#f4fbf8; color:#205b49; border-radius:11px; padding:10px 12px; font-weight:900; cursor:pointer; }
+.manager-message-button:hover { background:#e9f7f1; }
+.chat-header small { color:#756b66; }
+@media (max-width:720px) {
+  .fulfillment-client-row { grid-template-columns:auto minmax(0,1fr); }
+  .fulfillment-row-actions { grid-column:2; justify-content:flex-start; }
+}

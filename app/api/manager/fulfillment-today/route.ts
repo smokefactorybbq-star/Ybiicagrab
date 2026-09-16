@@ -23,7 +23,8 @@ export async function GET(request: Request) {
             COALESCE(sd.delivery_address,s.delivery_address) AS delivery_address,
             COALESCE(sd.requested_time,s.default_time) AS requested_time,
             sd.status::text AS day_status, sd.redeemed_at, sd.pickup_redeemed_point_name,
-            sd.delivery_received_at, sd.consumed_at
+            sd.delivery_received_at, sd.consumed_at,
+            sd.manual_writeoff_at, sd.manual_writeoff_by, sd.manual_writeoff_reason
      FROM subscription_days sd
      JOIN subscriptions s ON s.id=sd.subscription_id
      JOIN users u ON u.id=s.user_id
@@ -38,7 +39,9 @@ export async function GET(request: Request) {
     const item={subscriptionId:r.subscription_id,code:r.code,fullName:r.full_name,phone:r.phone||null,pickupPointName:r.pickup_point_name||null,
       address:r.delivery_address||null,requestedTime:r.requested_time||null,dayStatus:r.day_status,
       pickedUp:Boolean(r.redeemed_at),pickedUpAt:r.redeemed_at||null,pickedUpPointName:r.pickup_redeemed_point_name||null,
-      received:Boolean(r.delivery_received_at),receivedAt:r.delivery_received_at||null,consumed:Boolean(r.consumed_at)};
+      received:Boolean(r.delivery_received_at),receivedAt:r.delivery_received_at||null,consumed:Boolean(r.consumed_at),
+      manuallyWrittenOff:Boolean(r.manual_writeoff_at),manualWriteoffAt:r.manual_writeoff_at||null,
+      manualWriteoffBy:r.manual_writeoff_by||null,manualWriteoffReason:r.manual_writeoff_reason||null};
     if (r.fulfillment_type === 'DELIVERY') deliveryClients.push(item); else pickupClients.push(item);
   }
   return NextResponse.json({ok:true,serviceDate,resetHour:22,switchedToNextDay:clock.hour>=22,pickupClients,deliveryClients},{headers:{"Cache-Control":"no-store"}});
@@ -48,24 +51,81 @@ export async function PATCH(request: Request) {
   if (!isSameOriginMutation(request)) return NextResponse.json({ok:false,error:"Недопустимый источник запроса"},{status:403});
   const auth = await authorizeManager(request);
   if (!auth.ok) return NextResponse.json({ok:false,error:auth.error},{status:auth.status});
-  const body=await request.json() as {subscriptionId?:unknown;serviceDate?:unknown;received?:unknown};
+  const body=await request.json() as {subscriptionId?:unknown;serviceDate?:unknown;received?:unknown;action?:unknown;reason?:unknown};
   const subscriptionId=typeof body.subscriptionId==='string'?body.subscriptionId.trim():'';
   const serviceDate=typeof body.serviceDate==='string'?body.serviceDate.trim():'';
-  if (!subscriptionId || !/^\d{4}-\d{2}-\d{2}$/.test(serviceDate) || body.received!==true) return NextResponse.json({ok:false,error:"Некорректная команда"},{status:400});
+  const action=typeof body.action==='string'?body.action.trim():'';
+  const reason=typeof body.reason==='string'?body.reason.trim().slice(0,500):'';
+  if (!subscriptionId || !/^\d{4}-\d{2}-\d{2}$/.test(serviceDate)) return NextResponse.json({ok:false,error:"Некорректная команда"},{status:400});
   const clock=await getAppClock();
   if (serviceDate!==operationalDate(clock.date,clock.hour)) return NextResponse.json({ok:false,error:"Этот день уже закрыт"},{status:409});
-  try {
-    await withTransaction(async client=>{
-      const cur=await client.query<{id:string;fulfillment_type:string;status:string;delivery_received_at:string|null}>(
-        `SELECT sd.id::text, sd.fulfillment_type, sd.status::text, sd.delivery_received_at
-         FROM subscription_days sd JOIN subscriptions s ON s.id=sd.subscription_id
-         WHERE s.id=$1 AND sd.service_date=$2::date FOR UPDATE OF sd`,[subscriptionId,serviceDate]);
-      const day=cur.rows[0];
-      if(!day||day.fulfillment_type!=='DELIVERY'||['PAUSED','PAUSE_REQUESTED'].includes(day.status)) throw new Error('NOT_FOUND');
-      if(day.delivery_received_at) return;
-      await client.query(`UPDATE subscription_days SET delivery_received_at=now(), delivery_received_by=$2 WHERE id=$1`,[day.id,auth.username]);
-      await client.query(`INSERT INTO manager_events(event_type,entity_id,payload) VALUES('DELIVERY_RECEIVED',$1,$2::jsonb)`,[subscriptionId,JSON.stringify({serviceDate,confirmedBy:auth.username})]);
-    });
-    return NextResponse.json({ok:true});
-  } catch { return NextResponse.json({ok:false,error:"Не удалось отметить получение"},{status:400}); }
+
+  if (body.received === true && !action) {
+    try {
+      await withTransaction(async client=>{
+        const cur=await client.query<{id:string;fulfillment_type:string;status:string;delivery_received_at:string|null}>(
+          `SELECT sd.id::text, sd.fulfillment_type, sd.status::text, sd.delivery_received_at
+           FROM subscription_days sd JOIN subscriptions s ON s.id=sd.subscription_id
+           WHERE s.id=$1 AND sd.service_date=$2::date FOR UPDATE OF sd`,[subscriptionId,serviceDate]);
+        const day=cur.rows[0];
+        if(!day||day.fulfillment_type!=='DELIVERY'||['PAUSED','PAUSE_REQUESTED'].includes(day.status)) throw new Error('NOT_FOUND');
+        if(day.delivery_received_at) return;
+        await client.query(`UPDATE subscription_days SET delivery_received_at=now(), delivery_received_by=$2 WHERE id=$1`,[day.id,auth.username]);
+        await client.query(`INSERT INTO manager_events(event_type,entity_id,payload) VALUES('DELIVERY_RECEIVED',$1,$2::jsonb)`,[subscriptionId,JSON.stringify({serviceDate,confirmedBy:auth.username})]);
+      });
+      return NextResponse.json({ok:true});
+    } catch { return NextResponse.json({ok:false,error:"Не удалось отметить получение"},{status:400}); }
+  }
+
+  if (action === "pickup-writeoff") {
+    try {
+      const result = await withTransaction(async client=>{
+        const cur=await client.query<{
+          id:string; fulfillment_type:string; status:string; redeemed_at:string|null; consumed_at:string|null;
+          manual_writeoff_at:string|null; remaining_portions:number; pickup_point_name:string|null; full_name:string;
+        }>(
+          `SELECT sd.id::text, COALESCE(sd.fulfillment_type,s.fulfillment_type) AS fulfillment_type,
+                  sd.status::text, sd.redeemed_at, sd.consumed_at, sd.manual_writeoff_at,
+                  s.remaining_portions, s.pickup_point_name, u.full_name
+           FROM subscription_days sd
+           JOIN subscriptions s ON s.id=sd.subscription_id
+           JOIN users u ON u.id=s.user_id
+           WHERE s.id=$1 AND sd.service_date=$2::date
+           FOR UPDATE OF sd, s`, [subscriptionId,serviceDate]
+        );
+        const day=cur.rows[0];
+        if(!day||day.fulfillment_type!=='PICKUP'||['PAUSED','PAUSE_REQUESTED'].includes(day.status)) throw new Error('NOT_FOUND');
+        if(day.redeemed_at) throw new Error('ALREADY_PICKED_UP');
+        if(day.manual_writeoff_at || day.consumed_at || !['PLANNED','AVAILABLE'].includes(day.status)) throw new Error('ALREADY_WRITTEN_OFF');
+
+        await client.query(
+          `UPDATE subscription_days
+           SET status='MISSED', consumed_at=now(), manual_writeoff_at=now(), manual_writeoff_by=$2,
+               manual_writeoff_reason=COALESCE(NULLIF($3,''),'Клиент не забрал обед')
+           WHERE id=$1`, [day.id,auth.username,reason]
+        );
+        const updated = await client.query<{remaining_portions:number}>(
+          `UPDATE subscriptions
+           SET remaining_portions=GREATEST(0,remaining_portions-1),
+               status=CASE WHEN GREATEST(0,remaining_portions-1)=0 THEN 'COMPLETED'::subscription_status ELSE status END,
+               updated_at=now()
+           WHERE id=$1 RETURNING remaining_portions`, [subscriptionId]
+        );
+        const remaining=Number(updated.rows[0]?.remaining_portions ?? Math.max(0,day.remaining_portions-1));
+        await client.query(
+          `INSERT INTO manager_events(event_type,entity_id,payload)
+           VALUES('PICKUP_MANUAL_WRITEOFF',$1,$2::jsonb)`,
+          [subscriptionId,JSON.stringify({serviceDate,pointName:day.pickup_point_name,customer:day.full_name,reason:reason||"Клиент не забрал обед",writtenOffBy:auth.username,remaining})]
+        );
+        return {remaining};
+      });
+      return NextResponse.json({ok:true,remainingPortions:result.remaining,message:"Обед списан менеджером"});
+    } catch(error) {
+      const code=error instanceof Error?error.message:"";
+      const message=code==='ALREADY_PICKED_UP'?"Обед уже был получен клиентом":code==='ALREADY_WRITTEN_OFF'?"Этот обед уже списан":code==='NOT_FOUND'?"Самовывоз на этот день не найден":"Не удалось списать обед";
+      return NextResponse.json({ok:false,error:message},{status:409});
+    }
+  }
+
+  return NextResponse.json({ok:false,error:"Некорректная команда"},{status:400});
 }

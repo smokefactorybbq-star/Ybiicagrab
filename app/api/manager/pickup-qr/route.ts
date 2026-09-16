@@ -19,6 +19,6 @@ export async function GET(request: Request) {
     return new NextResponse(svg,{headers:{"Content-Type":"image/svg+xml; charset=utf-8","Cache-Control":"no-store","Content-Disposition":`inline; filename="mealpoint-${point.code}.svg"`}});
   } catch(error) {
     console.error('Pickup QR generation failed',error);
-    return new NextResponse('PICKUP_QR_SECRET is not configured',{status:503});
+    return new NextResponse('PICKUP_QR_SECRET / QR_SIGNING_SECRET is not configured',{status:503});
   }
 }

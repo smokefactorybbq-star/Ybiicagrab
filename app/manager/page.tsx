@@ -27,6 +27,7 @@ type ManagerSubscription = {
   paid_at: string | null;
   activated_at: string | null;
   created_at: string;
+  manager_unread_count: number;
   dates: ManagerDay[];
 };
 
@@ -67,7 +68,9 @@ type FulfillmentClient = {
   subscriptionId: string; code: string; fullName: string; phone: string | null; pickupPointName: string | null;
   address: string | null; requestedTime: string | null; dayStatus: string; pickedUp: boolean; pickedUpAt: string | null;
   pickedUpPointName: string | null; received: boolean; receivedAt: string | null; consumed: boolean;
+  manuallyWrittenOff: boolean; manualWriteoffAt: string | null; manualWriteoffBy: string | null; manualWriteoffReason: string | null;
 };
+type ChatMessage = { id:string; senderRole:"CUSTOMER"|"MANAGER"; senderName:string|null; body:string; createdAt:string };
 type FulfillmentDashboard = { serviceDate: string; resetHour: number; switchedToNextDay: boolean; pickupClients: FulfillmentClient[]; deliveryClients: FulfillmentClient[] };
 type PickupQrPoint = { code: string; name: string; address: string };
 
@@ -118,6 +121,13 @@ export default function ManagerPage() {
   const [confirmingDelivery, setConfirmingDelivery] = useState("");
   const [pickupQrPoints, setPickupQrPoints] = useState<PickupQrPoint[]>([]);
   const [qrPoint, setQrPoint] = useState<PickupQrPoint | null>(null);
+  const [writeoffTarget, setWriteoffTarget] = useState<FulfillmentClient | null>(null);
+  const [writingOff, setWritingOff] = useState("");
+  const [chatTarget, setChatTarget] = useState<ManagerSubscription | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatText, setChatText] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState("");
 
   async function loadManagerData(event?: FormEvent) {
     event?.preventDefault();
@@ -196,6 +206,13 @@ export default function ManagerPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authorized, testDirty]);
 
+  useEffect(() => {
+    if (!chatTarget) return;
+    const timer = window.setInterval(() => void loadManagerChat(chatTarget, true), 5000);
+    return () => window.clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatTarget?.user_id]);
+
   async function confirmDeliveryReceived() {
     if (!deliveryConfirm || !fulfillmentDashboard) return;
     setConfirmingDelivery(deliveryConfirm.subscriptionId);
@@ -214,6 +231,43 @@ export default function ManagerPage() {
     } finally {
       setConfirmingDelivery("");
     }
+  }
+
+  async function manualPickupWriteoff() {
+    if (!writeoffTarget || !fulfillmentDashboard) return;
+    setWritingOff(writeoffTarget.subscriptionId); setError("");
+    try {
+      const response = await fetch("/api/manager/fulfillment-today", {
+        method:"PATCH", headers:{"Content-Type":"application/json"}, credentials:"same-origin",
+        body:JSON.stringify({subscriptionId:writeoffTarget.subscriptionId,serviceDate:fulfillmentDashboard.serviceDate,action:"pickup-writeoff",reason:"Клиент не забрал обед"})
+      });
+      const data=await response.json(); if(!response.ok||!data.ok)throw new Error(data.error||"Не удалось списать обед");
+      setWriteoffTarget(null); await loadManagerData();
+    } catch (writeoffError) { setError(writeoffError instanceof Error?writeoffError.message:"Не удалось списать обед"); }
+    finally { setWritingOff(""); }
+  }
+
+  async function loadManagerChat(target: ManagerSubscription, markRead=true) {
+    try {
+      const response=await fetch(`/api/manager/chat?userId=${encodeURIComponent(target.user_id)}${markRead?"&markRead=1":""}`,{cache:"no-store",credentials:"same-origin"});
+      const data=await response.json(); if(!response.ok||!data.ok)throw new Error(data.error||"Не удалось загрузить чат");
+      setChatMessages(data.messages||[]); setChatError("");
+      if(markRead)setSubscriptions(current=>current.map(item=>item.user_id===target.user_id?{...item,manager_unread_count:0}:item));
+    } catch(e) { setChatError(e instanceof Error?e.message:"Не удалось загрузить чат"); }
+  }
+
+  async function openManagerChat(target: ManagerSubscription) {
+    setChatTarget(target); setChatMessages([]); setChatText(""); setChatError(""); await loadManagerChat(target,true);
+  }
+
+  async function sendManagerChatMessage() {
+    if(!chatTarget||!chatText.trim()||chatLoading)return; setChatLoading(true); setChatError("");
+    try {
+      const response=await fetch("/api/manager/chat",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify({userId:chatTarget.user_id,text:chatText.trim()})});
+      const data=await response.json(); if(!response.ok||!data.ok)throw new Error(data.error||"Не удалось отправить сообщение");
+      setChatText(""); await loadManagerChat(chatTarget,true);
+    } catch(e) { setChatError(e instanceof Error?e.message:"Не удалось отправить сообщение"); }
+    finally { setChatLoading(false); }
   }
 
   async function activateSubscription(id: string) {
@@ -360,7 +414,7 @@ export default function ManagerPage() {
         <div className="pickup-today-heading"><div><span className="eyebrow">Клиенты на день</span><h2>{fulfillmentDashboard ? formatDate(fulfillmentDashboard.serviceDate) : "Сегодня"}</h2><p>В 22:00 панель автоматически переключается на следующий день — индикаторы снова становятся пустыми.</p></div>{fulfillmentDashboard?.switchedToNextDay && <small>После 22:00 показан следующий день</small>}</div>
         <div className="fulfillment-columns">
           <section className="fulfillment-column"><div className="fulfillment-column-title"><h3>Самовывоз</h3><span>{fulfillmentDashboard?.pickupClients.length || 0}</span></div><div className="fulfillment-client-list">
-            {fulfillmentDashboard?.pickupClients.map((client) => <article key={`pickup:${client.subscriptionId}`} className="fulfillment-client-row"><span className={`pickup-status-circle ${client.pickedUp ? "is-done" : "is-waiting"}`} /><div><strong>{client.fullName}</strong><small>{client.requestedTime || "—"} · {client.pickupPointName || "Точка не указана"}</small><small>{client.phone || "Телефон не указан"} · {client.code}</small></div></article>)}
+            {fulfillmentDashboard?.pickupClients.map((client) => <article key={`pickup:${client.subscriptionId}`} className="fulfillment-client-row"><span className={`pickup-status-circle ${client.manuallyWrittenOff ? "is-written-off" : client.pickedUp ? "is-done" : "is-waiting"}`} /><div><strong>{client.fullName}</strong><small>{client.requestedTime || "—"} · {client.pickupPointName || "Точка не указана"}</small><small>{client.phone || "Телефон не указан"} · {client.code}</small>{client.manuallyWrittenOff&&<small className="manual-writeoff-label">Списан менеджером · клиент не забрал</small>}</div><div className="fulfillment-row-actions">{!client.pickedUp&&!client.manuallyWrittenOff&&!client.consumed&&<button type="button" className="pickup-writeoff-button" onClick={()=>setWriteoffTarget(client)}>Списать</button>}{client.pickedUp&&<span className="manager-done">Получен</span>}{client.manuallyWrittenOff&&<span className="manager-writeoff-done">Списан</span>}</div></article>)}
             {!fulfillmentDashboard?.pickupClients.length && <p className="empty-table">Самовывоза на этот день нет.</p>}
           </div></section>
           <section className="fulfillment-column"><div className="fulfillment-column-title"><h3>Доставка</h3><span>{fulfillmentDashboard?.deliveryClients.length || 0}</span></div><div className="fulfillment-client-list">
@@ -492,6 +546,9 @@ export default function ManagerPage() {
                       ) : (
                         <span className="manager-done">Готово</span>
                       )}
+                      <button type="button" className="manager-message-button" onClick={() => void openManagerChat(item)}>
+                        Чат{item.manager_unread_count > 0 && <span className="message-alert">{Math.min(item.manager_unread_count,99)}</span>}
+                      </button>
                       <button
                         className="delete-subscription-button"
                         type="button"
@@ -565,6 +622,8 @@ export default function ManagerPage() {
           </section>
         </div>
       )}
+      {writeoffTarget && <div className="modal-backdrop" role="presentation" onMouseDown={event=>{if(event.currentTarget===event.target&&!writingOff)setWriteoffTarget(null)}}><section className="payment-modal writeoff-confirm-modal" role="dialog" aria-modal="true"><button className="modal-close" type="button" disabled={Boolean(writingOff)} onClick={()=>setWriteoffTarget(null)}>×</button><span className="eyebrow">Самовывоз</span><h2>Списать обед вручную?</h2><p><strong>{writeoffTarget.fullName}</strong><br/>{writeoffTarget.pickupPointName||"Точка не указана"} · {writeoffTarget.code}</p><p className="delete-warning">Используйте это, если обед доставили на точку, но клиент его не забрал. День подписки будет уменьшен на 1 и повторно получить этот обед будет нельзя.</p><div className="delivery-confirm-actions"><button type="button" className="confirm-yes" disabled={Boolean(writingOff)} onClick={()=>void manualPickupWriteoff()}>{writingOff?"Списываем…":"Списать обед"}</button><button type="button" className="confirm-no" disabled={Boolean(writingOff)} onClick={()=>setWriteoffTarget(null)}>Отмена</button></div></section></div>}
+      {chatTarget && <div className="modal-backdrop chat-backdrop" role="presentation" onMouseDown={event=>{if(event.currentTarget===event.target)setChatTarget(null)}}><section className="chat-window" role="dialog" aria-modal="true"><header className="chat-header"><div><span className="eyebrow">Чат с клиентом</span><h2>{chatTarget.full_name}</h2><small>{chatTarget.phone||chatTarget.code}</small></div><button type="button" className="chat-close" onClick={()=>setChatTarget(null)}>×</button></header><div className="chat-messages">{!chatMessages.length&&<p className="chat-empty">Сообщений пока нет.</p>}{chatMessages.map(message=><article key={message.id} className={`chat-bubble ${message.senderRole==="MANAGER"?"chat-own":"chat-other"}`}><strong>{message.senderRole==="MANAGER"?"Менеджер":(message.senderName||chatTarget.full_name)}</strong><p>{message.body}</p><time>{new Date(message.createdAt).toLocaleString("ru-RU",{timeZone:"Asia/Bangkok"})}</time></article>)}</div>{chatError&&<p className="form-error chat-error">{chatError}</p>}<div className="chat-composer"><textarea value={chatText} onChange={e=>setChatText(e.target.value)} maxLength={4000} placeholder="Ответ клиенту…" onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();void sendManagerChatMessage();}}}/><button type="button" disabled={chatLoading||!chatText.trim()} onClick={()=>void sendManagerChatMessage()}>{chatLoading?"Отправляем…":"Отправить"}</button></div></section></div>}
       {deliveryConfirm && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && !confirmingDelivery) setDeliveryConfirm(null); }}><section className="payment-modal delivery-confirm-modal" role="dialog" aria-modal="true"><button className="modal-close" type="button" disabled={Boolean(confirmingDelivery)} onClick={() => setDeliveryConfirm(null)}>×</button><span className="eyebrow">Доставка</span><h2>Клиент получил еду?</h2><p><strong>{deliveryConfirm.fullName}</strong><br/>{deliveryConfirm.requestedTime || "—"} · {deliveryConfirm.address || "Адрес не указан"}</p><div className="delivery-confirm-actions"><button type="button" className="confirm-yes" disabled={Boolean(confirmingDelivery)} onClick={() => void confirmDeliveryReceived()}>{confirmingDelivery ? "Сохраняем…" : "Да"}</button><button type="button" className="confirm-no" disabled={Boolean(confirmingDelivery)} onClick={() => setDeliveryConfirm(null)}>Нет</button></div></section></div>}
       {qrPoint && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setQrPoint(null); }}><section className="payment-modal pickup-qr-modal" role="dialog" aria-modal="true"><button className="modal-close" type="button" onClick={() => setQrPoint(null)}>×</button><span className="eyebrow">QR точки выдачи</span><h2>{qrPoint.name}</h2><p>{qrPoint.address}</p><img src={`/api/manager/pickup-qr?point=${encodeURIComponent(qrPoint.code)}`} alt={`QR ${qrPoint.name}`} /><p><small>Распечатайте этот QR и разместите только на соответствующей точке выдачи.</small></p></section></div>}
     </main>

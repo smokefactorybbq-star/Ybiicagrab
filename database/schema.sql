@@ -298,3 +298,58 @@ CREATE TABLE IF NOT EXISTS security_rate_limits (
   PRIMARY KEY (rate_key, window_start)
 );
 CREATE INDEX IF NOT EXISTS security_rate_limits_window_idx ON security_rate_limits(window_start);
+
+-- Permanent customer <-> manager chat.
+CREATE TABLE IF NOT EXISTS customer_conversations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE customer_conversations ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE customer_conversations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE customer_conversations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+CREATE INDEX IF NOT EXISTS customer_conversations_user_idx ON customer_conversations(user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS customer_conversations_updated_idx ON customer_conversations(updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS customer_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID REFERENCES customer_conversations(id) ON DELETE CASCADE,
+  sender_role TEXT,
+  sender_name TEXT,
+  body TEXT,
+  read_by_customer_at TIMESTAMPTZ,
+  read_by_manager_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE customer_messages ADD COLUMN IF NOT EXISTS conversation_id UUID REFERENCES customer_conversations(id) ON DELETE CASCADE;
+ALTER TABLE customer_messages ADD COLUMN IF NOT EXISTS sender_role TEXT;
+ALTER TABLE customer_messages ADD COLUMN IF NOT EXISTS sender_name TEXT;
+ALTER TABLE customer_messages ADD COLUMN IF NOT EXISTS body TEXT;
+ALTER TABLE customer_messages ADD COLUMN IF NOT EXISTS read_by_customer_at TIMESTAMPTZ;
+ALTER TABLE customer_messages ADD COLUMN IF NOT EXISTS read_by_manager_at TIMESTAMPTZ;
+ALTER TABLE customer_messages ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+-- Recover message text from older chat schemas, if one of the previous column
+-- names is still present in the existing Railway database.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='customer_messages' AND column_name='message_text') THEN
+    EXECUTE 'UPDATE customer_messages SET body=COALESCE(body,message_text::text) WHERE body IS NULL';
+  ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='customer_messages' AND column_name='message') THEN
+    EXECUTE 'UPDATE customer_messages SET body=COALESCE(body,message::text) WHERE body IS NULL';
+  ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='customer_messages' AND column_name='content') THEN
+    EXECUTE 'UPDATE customer_messages SET body=COALESCE(body,content::text) WHERE body IS NULL';
+  ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='customer_messages' AND column_name='text') THEN
+    EXECUTE 'UPDATE customer_messages SET body=COALESCE(body,text::text) WHERE body IS NULL';
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS customer_messages_conversation_created_idx ON customer_messages(conversation_id, created_at);
+CREATE INDEX IF NOT EXISTS customer_messages_manager_unread_idx ON customer_messages(conversation_id, created_at) WHERE sender_role='CUSTOMER' AND read_by_manager_at IS NULL;
+CREATE INDEX IF NOT EXISTS customer_messages_customer_unread_idx ON customer_messages(conversation_id, created_at) WHERE sender_role='MANAGER' AND read_by_customer_at IS NULL;
+
+-- Audit trail for a manager manually consuming an uncollected pickup meal.
+ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS manual_writeoff_at TIMESTAMPTZ;
+ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS manual_writeoff_by TEXT;
+ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS manual_writeoff_reason TEXT;

@@ -1,4 +1,5 @@
 export type PickupPoint = {
+  code: string;
   name: string;
   shortName: string;
   address: string;
@@ -8,11 +9,11 @@ export type PickupPoint = {
 };
 
 export const pickupPoints: PickupPoint[] = [
-  { name: "Chalong Meal Point", shortName: "Chalong", address: "Chalong, Mueang Phuket, Phuket", latitude: 7.8471, longitude: 98.3385, hours: "Ежедневно 11:00–21:00" },
-  { name: "Rawai Meal Point", shortName: "Rawai", address: "Rawai, Mueang Phuket, Phuket", latitude: 7.7793, longitude: 98.3258, hours: "Ежедневно 11:00–21:00" },
-  { name: "Phuket Town Meal Point", shortName: "Phuket Town", address: "Phuket Town, Mueang Phuket, Phuket", latitude: 7.8804, longitude: 98.3923, hours: "Ежедневно 11:00–21:00" },
-  { name: "Patong Meal Point", shortName: "Patong", address: "Patong, Kathu, Phuket", latitude: 7.8966, longitude: 98.2964, hours: "Ежедневно 11:00–21:00" },
-  { name: "Bang Tao Meal Point", shortName: "Bang Tao", address: "Bang Tao, Thalang, Phuket", latitude: 7.9943, longitude: 98.3047, hours: "Ежедневно 11:00–21:00" }
+  { code: "chalong", name: "Chalong Meal Point", shortName: "Chalong", address: "Chalong, Mueang Phuket, Phuket", latitude: 7.8471, longitude: 98.3385, hours: "Ежедневно 11:00–21:00" },
+  { code: "rawai", name: "Rawai Meal Point", shortName: "Rawai", address: "Rawai, Mueang Phuket, Phuket", latitude: 7.7793, longitude: 98.3258, hours: "Ежедневно 11:00–21:00" },
+  { code: "phuket-town", name: "Phuket Town Meal Point", shortName: "Phuket Town", address: "Phuket Town, Mueang Phuket, Phuket", latitude: 7.8804, longitude: 98.3923, hours: "Ежедневно 11:00–21:00" },
+  { code: "patong", name: "Patong Meal Point", shortName: "Patong", address: "Patong, Kathu, Phuket", latitude: 7.8966, longitude: 98.2964, hours: "Ежедневно 11:00–21:00" },
+  { code: "bang-tao", name: "Bang Tao Meal Point", shortName: "Bang Tao", address: "Bang Tao, Thalang, Phuket", latitude: 7.9943, longitude: 98.3047, hours: "Ежедневно 11:00–21:00" }
 ];
 
 export function findPickupPoint(name: string | null | undefined) {

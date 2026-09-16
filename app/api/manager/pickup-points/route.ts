@@ -44,19 +44,20 @@ export async function GET(request: Request) {
         `WITH day_rows AS (
            SELECT
              COALESCE(NULLIF(BTRIM(s.pickup_point_name), ''), 'Пункт не указан') AS pickup_point_name,
-             sd.status
+             sd.status,
+             sd.manual_writeoff_at
            FROM subscription_days sd
            JOIN subscriptions s ON s.id = sd.subscription_id
            WHERE s.status IN ('ACTIVE', 'COMPLETED')
              AND sd.service_date = $1::date
              AND s.fulfillment_type = 'PICKUP'
-             AND sd.status IN ('PLANNED', 'AVAILABLE', 'REDEEMED')
+             AND (sd.status IN ('PLANNED', 'AVAILABLE', 'REDEEMED') OR sd.manual_writeoff_at IS NOT NULL)
          ),
          aggregates AS (
            SELECT
              pickup_point_name,
              COUNT(*)::int AS planned_count,
-             COUNT(*) FILTER (WHERE status = 'REDEEMED')::int AS picked_up_count
+             COUNT(*) FILTER (WHERE status = 'REDEEMED' OR manual_writeoff_at IS NOT NULL)::int AS picked_up_count
            FROM day_rows
            GROUP BY pickup_point_name
          ),
