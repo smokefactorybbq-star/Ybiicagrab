@@ -1,2 +1,1 @@
-MealPoint v0.9.0
-Telegram login + restored pickup QR + customer-manager chat + manual pickup write-off
+MealPoint v0.9.1 — Telegram canonical domain fix
