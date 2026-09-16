@@ -1,1 +1,1 @@
-MealPoint v0.9.1 — Telegram canonical domain fix
+MealPoint v0.9.2
