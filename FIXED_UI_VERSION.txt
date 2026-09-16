@@ -1,2 +1,2 @@
-MealPoint PHONE SUBSCRIPTION UI v0.8.0
-Corrected: visible day buttons + full-screen meal modal + SMS phone login.
+MealPoint TELEGRAM + CHAT + PICKUP CONTROL UI v0.9.0
+Telegram login, restored pickup QR, permanent customer chats and manager manual pickup write-off.
