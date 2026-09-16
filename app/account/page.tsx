@@ -115,7 +115,16 @@ export default function AccountPage(){
     void fetch("/api/app-time",{cache:"no-store"}).then(r=>r.json()).then(d=>d.ok&&setClock(d.clock));
   },[loadAccount]);
   useEffect(()=>{if(account)void loadSubscriptions();},[account,loadSubscriptions]);
-  useEffect(()=>{ if(!account)return; const payload={fullName:name.trim(),phone:phone.trim(),address:address.trim()}; if(payload.fullName.length<2||(payload.phone&&payload.phone.length<8))return; const timer=setTimeout(()=>{void fetch("/api/account/profile",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}).catch(()=>undefined);},800); return()=>clearTimeout(timer); },[account,name,phone,address]);
+  useEffect(()=>{ if(!account)return; const payload={fullName:name.trim(),phone:phone.trim(),address:address.trim()}; if(payload.fullName.length<2||(payload.phone&&payload.phone.length<8))return; const timer=setTimeout(()=>{void fetch("/api/account/profile",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
+      .then(async response=>({response,data:await response.json()}))
+      .then(({response,data})=>{
+        if(!response.ok||!data.ok)return;
+        if(data.legacyLinked){
+          setError(`Старый аккаунт найден: восстановлено подписок ${Number(data.movedSubscriptions||0)}${Number(data.movedConversations||0)>0?` · чатов ${Number(data.movedConversations||0)}`:""}.`);
+          setAccount(current=>current?{...current,phone:payload.phone,fullName:payload.fullName,address:payload.address}:current);
+        }
+      })
+      .catch(()=>undefined);},800); return()=>clearTimeout(timer); },[account,name,phone,address]);
 
   const loadChat=useCallback(async(markRead=false)=>{
     if(!account)return;
@@ -158,6 +167,13 @@ export default function AccountPage(){
     catch{setScanMessage("Ошибка чтения QR");setScanBusy(false);}
   }
 
+  const scannablePickupSubscriptions=useMemo(()=>subscriptions.filter(s=>{
+    const todayDay=s.days.find(day=>day.service_date===clock.date);
+    return s.fulfillment_type==="PICKUP"&&s.status==="ACTIVE"&&Boolean(todayDay)&&["PLANNED","AVAILABLE"].includes(todayDay?.status||"")&&clock.hour<22;
+  }),[subscriptions,clock]);
+  const primaryScannablePickup=scannablePickupSubscriptions[0]||null;
+  const hasPickupSubscription=subscriptions.some(s=>s.fulfillment_type==="PICKUP"&&["ACTIVE","COMPLETED","AWAITING_ACTIVATION"].includes(s.status));
+
   const exactDuplicate=useMemo(()=>draft?subscriptions.some(s=>s.status==="ACTIVE"&&s.days.map(d=>d.service_date).join("|")===draft.dates.join("|")):false,[draft,subscriptions]);
   async function acceptTerms(){ if(!termsChecked)return; const r=await fetch("/api/account/terms",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accepted:true})}); const d=await r.json(); if(!r.ok||!d.ok){setError(d.error);return;} setAccount(a=>a?{...a,termsAcceptedAt:d.termsAcceptedAt}:a); setTermsOpen(false); }
   async function logout(){await fetch("/api/account/logout",{method:"POST"});setAccount(null);setSubscriptions([]);}
@@ -182,6 +198,11 @@ export default function AccountPage(){
     {clock.isTestMode&&<p className="test-mode-banner">Тестовое время: {clock.date} {String(clock.hour).padStart(2,"0")}:{String(clock.minute).padStart(2,"0")}</p>}
     {error&&<p className="form-error account-error">{error}</p>}
     <section className="account-profile-form"><div className="account-profile-heading"><div><span className="eyebrow">Данные клиента</span><h2>Контакты</h2></div><span className="autosave-status saved">Сохраняются автоматически</span></div><div className="profile-fields-grid"><label>Имя<input value={name} onChange={e=>setName(e.target.value)}/></label><label>Телефон<input value={phone} onChange={e=>setPhone(e.target.value)} inputMode="tel" autoComplete="tel" placeholder="+66 81 234 5678"/></label><label className="profile-address-field">Адрес доставки<textarea value={address} onChange={e=>setAddress(e.target.value)}/></label></div></section>
+
+    <section className="account-pickup-scanner-card">
+      <div><span className="eyebrow">Самовывоз</span><h2>Сканировать QR</h2><p>{primaryScannablePickup?`Сегодня доступна подписка ${primaryScannablePickup.code?`№ ${primaryScannablePickup.code}`:"на самовывоз"}${primaryScannablePickup.pickup_point_name?` · ${primaryScannablePickup.pickup_point_name}`:""}.`:hasPickupSubscription?"Сегодня по подписке нет активного обеда для самовывоза.":phone?"Активной подписки на самовывоз пока нет.":"Если подписка оформлялась раньше по телефону, укажите тот же номер выше — старые подписки восстановятся автоматически."}</p></div>
+      <button type="button" className="pickup-scan-button account-main-scan-button" disabled={!primaryScannablePickup} onClick={()=>{if(primaryScannablePickup){setScanMessage("");setScanTarget(primaryScannablePickup)}}}>Сканировать QR</button>
+    </section>
 
     {draft&&<section className="purchase-card"><div><span className="eyebrow">Новая подписка</span><h2>{draft.selectedDays} дней неодинаковой еды</h2><p>{formatDate(draft.dates[0])} — {formatDate(draft.dates[draft.dates.length-1])}</p><div className="purchase-numbers"><strong>{draft.total.toLocaleString("ru-RU")} ฿</strong><span>{draft.rate} ฿ за день</span></div></div><div className="subscription-checkout-form"><div className="fulfillment-choice-summary"><strong>{fulfillment==="PICKUP"?"Самовывоз":"Доставка"}</strong><small>{fulfillment==="PICKUP"?(pickupPointName||"Точка не выбрана"):"По адресу клиента"}</small><Link href="/#subscription">Изменить способ получения</Link></div><label>Имя<input value={name} onChange={e=>setName(e.target.value)}/></label><label>Телефон<input value={phone} onChange={e=>setPhone(e.target.value)} inputMode="tel" autoComplete="tel" placeholder="+66 81 234 5678"/></label>{fulfillment==="DELIVERY"&&<label>Адрес доставки<textarea value={address} onChange={e=>setAddress(e.target.value)}/></label>}<label>Время {fulfillment==="PICKUP"?"самовывоза":"доставки"}<input type="time" min="12:00" max="18:00" step="900" value={requestedTime} onChange={e=>setRequestedTime(e.target.value)}/></label><button type="button" onClick={()=>setPaymentOpen(true)}>{exactDuplicate?"Оформить ещё одну подписку":"Перейти к оплате"}</button></div></section>}
 

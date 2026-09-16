@@ -8,7 +8,7 @@ export async function GET() {
     {
       ok: true,
       app: "MealPoint",
-      version: "0.9.3",
+      version: "0.9.4",
       telegramConfigRoute: "/api/auth/telegram/config"
     },
     { headers: { "Cache-Control": "no-store" } }

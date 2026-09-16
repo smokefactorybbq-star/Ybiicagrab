@@ -47,7 +47,7 @@ export async function GET() {
   return NextResponse.json(
     {
       ok: true,
-      version: "0.9.3",
+      version: "0.9.4",
       botUsername,
       publicOrigin: origin,
       authUrl: `${origin}/api/auth/telegram/callback`

@@ -1200,3 +1200,24 @@ img { display: block; max-width: 100%; }
   .fulfillment-client-row { grid-template-columns:auto minmax(0,1fr); }
   .fulfillment-row-actions { grid-column:2; justify-content:flex-start; }
 }
+
+/* v0.9.4 — QR scanner is always visible in the customer account. */
+.account-pickup-scanner-card {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:22px;
+  margin:18px 0 22px;
+  padding:22px 24px;
+  border:1px solid rgba(28,107,75,.18);
+  border-radius:22px;
+  background:linear-gradient(135deg,rgba(240,250,245,.98),rgba(255,255,255,.98));
+  box-shadow:0 10px 30px rgba(35,58,49,.06);
+}
+.account-pickup-scanner-card h2 { margin:4px 0 6px; }
+.account-pickup-scanner-card p { margin:0; color:var(--muted); max-width:720px; }
+.account-main-scan-button { flex:0 0 auto; min-width:180px; }
+@media (max-width:700px) {
+  .account-pickup-scanner-card { align-items:stretch; flex-direction:column; padding:18px; }
+  .account-main-scan-button { width:100%; }
+}
