@@ -15,12 +15,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@types/leaflet": "^1.9.21",
     "@types/node": "22.15.0",
     "@types/pg": "8.11.10",
     "@types/qrcode": "1.5.5",
     "@types/react": "19.0.0",
     "@types/react-dom": "19.0.0",
     "html5-qrcode": "2.3.8",
+    "leaflet": "^1.9.4",
     "next": "16.3.5",
     "pg": "8.13.1",
     "qrcode": "1.5.4",
