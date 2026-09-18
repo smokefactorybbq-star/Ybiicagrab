@@ -71,7 +71,7 @@ export function validateConsecutiveDates(dates: string[], todayIso = getBangkokT
 
 export function calculateSubscriptionPrice(dates: string[]) {
   if (!dates.length) return { rate: 0, total: 0 };
-  const rate = dates.length >= 30 ? 250 : dates.length >= 7 ? 300 : 350;
+  const rate = 350;
   return { rate, total: dates.length * rate };
 }
 

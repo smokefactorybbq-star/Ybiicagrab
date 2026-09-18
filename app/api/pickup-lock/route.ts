@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findPickupQrPointByCode } from "../../../data/pickupQrPoints";
+import { findPickupPointByCode } from "../../../lib/catalog";
 import { query } from "../../../lib/db";
 import { getPickupLockOpenSeconds, verifyPickupLockDeviceKey } from "../../../lib/pickup-lock";
 
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   const pointCode = (request.nextUrl.searchParams.get("point") || "").trim().toLowerCase();
-  const point = findPickupQrPointByCode(pointCode);
+  const point = await findPickupPointByCode(pointCode);
   const deviceKey = (request.headers.get("x-device-key") || "").trim();
 
   if (!point || !verifyPickupLockDeviceKey(pointCode, deviceKey)) {

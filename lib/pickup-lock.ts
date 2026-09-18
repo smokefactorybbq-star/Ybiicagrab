@@ -32,7 +32,7 @@ export function getPickupLockOpenSeconds() {
 }
 
 export async function assertPickupLockOnline(client: PoolClient, pointCode: string) {
-  if (!isPickupLockConfigured(pointCode)) return;
+  if (!isPickupLockConfigured(pointCode)) throw new Error("LOCK_NOT_CONFIGURED");
 
   const result = await client.query<{ online: boolean }>(
     `SELECT EXISTS (

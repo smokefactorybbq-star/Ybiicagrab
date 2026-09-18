@@ -1,4 +1,8 @@
 export type PickupPoint = {
+  id?: string;
+  district?: string;
+  pointNumber?: string;
+  googleMapsUrl?: string;
   code: string;
   name: string;
   shortName: string;

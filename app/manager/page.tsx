@@ -1,6 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import ManagerPickupQr from "../../components/ManagerPickupQr";
+import ManagerPoints from "../../components/ManagerPoints";
+import ManagerDiscounts from "../../components/ManagerDiscounts";
+import ManagerAddDays from "../../components/ManagerAddDays";
 import { FormEvent, useEffect, useState } from "react";
 
 type ManagerDay = {
@@ -72,11 +76,11 @@ type FulfillmentClient = {
 };
 type ChatMessage = { id:string; senderRole:"CUSTOMER"|"MANAGER"; senderName:string|null; body:string; imageUrl?:string|null; createdAt:string };
 type FulfillmentDashboard = { serviceDate: string; resetHour: number; switchedToNextDay: boolean; pickupClients: FulfillmentClient[]; deliveryClients: FulfillmentClient[] };
-type PickupQrPoint = { code: string; name: string; address: string };
+
 
 
 const statusLabels: Record<string, string> = {
-  AWAITING_ACTIVATION: "Оплачено — активировать",
+  AWAITING_ACTIVATION: "Проверить оплату — активировать",
   ACTIVE: "Активна",
   PENDING_PAYMENT: "Ожидает оплаты",
   PAUSED: "Приостановлена",
@@ -119,8 +123,7 @@ export default function ManagerPage() {
   const [fulfillmentDashboard, setFulfillmentDashboard] = useState<FulfillmentDashboard | null>(null);
   const [deliveryConfirm, setDeliveryConfirm] = useState<FulfillmentClient | null>(null);
   const [confirmingDelivery, setConfirmingDelivery] = useState("");
-  const [pickupQrPoints, setPickupQrPoints] = useState<PickupQrPoint[]>([]);
-  const [qrPoint, setQrPoint] = useState<PickupQrPoint | null>(null);
+
   const [writeoffTarget, setWriteoffTarget] = useState<FulfillmentClient | null>(null);
   const [writingOff, setWritingOff] = useState("");
   const [chatTarget, setChatTarget] = useState<ManagerSubscription | null>(null);
@@ -147,27 +150,32 @@ export default function ManagerPage() {
         setPassword("");
       }
 
-      const [subscriptionsResponse, pickupResponse, clockResponse, fulfillmentResponse, qrPointsResponse] = await Promise.all([
+      // Authenticate separately: failures in inventory/clock panels must not hide QR.
+      const sessionResponse=await fetch("/api/manager/pickup-qr",{cache:"no-store",credentials:"same-origin"});
+      if(sessionResponse.status===401||sessionResponse.status===403){setAuthorized(false);throw new Error("Войдите в кабинет менеджера");}
+      if(!sessionResponse.ok)throw new Error("Не удалось проверить сессию менеджера");
+      setAuthorized(true);
+
+      const [subscriptionsResponse, pickupResponse, clockResponse, fulfillmentResponse] = await Promise.all([
         fetch("/api/manager/subscriptions", { cache: "no-store", credentials: "same-origin" }),
         fetch("/api/manager/pickup-points", { cache: "no-store", credentials: "same-origin" }),
         fetch("/api/manager/test-clock", { cache: "no-store", credentials: "same-origin" }),
-        fetch("/api/manager/fulfillment-today", { cache: "no-store", credentials: "same-origin" }),
-        fetch("/api/manager/pickup-qr", { cache: "no-store", credentials: "same-origin" })
+        fetch("/api/manager/fulfillment-today", { cache: "no-store", credentials: "same-origin" })
       ]);
-      const [subscriptionsData, pickupData, clockData, fulfillmentData, qrPointsData] = await Promise.all([
-        subscriptionsResponse.json(), pickupResponse.json(), clockResponse.json(), fulfillmentResponse.json(), qrPointsResponse.json()
+      const [subscriptionsData, pickupData, clockData, fulfillmentData] = await Promise.all([
+        subscriptionsResponse.json(), pickupResponse.json(), clockResponse.json(), fulfillmentResponse.json()
       ]);
 
       if (!subscriptionsResponse.ok || !subscriptionsData.ok) throw new Error(subscriptionsData.error || "Ошибка загрузки подписок");
       if (!pickupResponse.ok || !pickupData.ok) throw new Error(pickupData.error || "Ошибка загрузки пунктов выдачи");
       if (!clockResponse.ok || !clockData.ok) throw new Error(clockData.error || "Ошибка загрузки тестового времени");
       if (!fulfillmentResponse.ok || !fulfillmentData.ok) throw new Error(fulfillmentData.error || "Ошибка загрузки клиентов на сегодня");
-      if (!qrPointsResponse.ok || !qrPointsData.ok) throw new Error(qrPointsData.error || "Ошибка загрузки QR точек");
+
 
       setSubscriptions(subscriptionsData.subscriptions);
       setPickupDashboard(pickupData as PickupDashboard);
       setFulfillmentDashboard(fulfillmentData as FulfillmentDashboard);
-      setPickupQrPoints((qrPointsData.points || []) as PickupQrPoint[]);
+
       setTestClock(clockData.clock as AppClock);
       if (!testDirty) {
         setTestEnabled(Boolean(clockData.clock.isTestMode));
@@ -178,7 +186,6 @@ export default function ManagerPage() {
       ));
       setAuthorized(true);
     } catch (loadError) {
-      setAuthorized(false);
       setError(loadError instanceof Error ? loadError.message : "Ошибка загрузки");
     } finally {
       setLoading(false);
@@ -398,6 +405,9 @@ export default function ManagerPage() {
         </div>
       </section>
 
+      <ManagerPickupQr />
+      <ManagerPoints onChanged={()=>void loadManagerData()}/>
+      <ManagerDiscounts/>
       {error && <p className="form-error">{error}</p>}
 
       <section className={`test-clock-card ${testEnabled ? "is-enabled" : ""}`}>
@@ -423,7 +433,6 @@ export default function ManagerPage() {
           </div></section>
         </div>
       </section>
-      <section className="pickup-qr-points-card"><div className="pickup-today-heading"><div><span className="eyebrow">QR точек выдачи</span><h2>Распечатать QR для каждой точки</h2><p>QR статический и подписан серверным секретом. Клиент может списать только свою подписку и только один раз за день.</p></div></div><div className="pickup-qr-point-grid">{pickupQrPoints.map(point => <button type="button" key={point.code} onClick={() => setQrPoint(point)}><strong>{point.name}</strong><small>{point.address}</small><span>Показать QR</span></button>)}</div></section>
 
       <section className="pickup-today-card">
         <div className="pickup-today-heading">
@@ -520,7 +529,7 @@ export default function ManagerPage() {
                   <td><strong>{item.fulfillment_type === "DELIVERY" ? "Доставка" : (item.pickup_point_name || "—")}</strong><small>{item.payment_method || "—"}</small></td>
                   <td>
                     <details>
-                      <summary>{item.selected_days} оплаченных дней</summary>
+                      <summary>{item.selected_days} дней подписки</summary>
                       <div className="manager-dates">
                         {item.dates.map((day) => {
                           const paused = ["PAUSED", "PAUSE_REQUESTED"].includes(day.status);
@@ -537,6 +546,7 @@ export default function ManagerPage() {
                   <td><span className={`status-pill status-${item.status.toLowerCase()}`}>{statusLabels[item.status] || item.status}</span><small>Пауз: {item.pauses_used}/{item.pause_limit}</small><small>Осталось: {item.remaining_portions}</small></td>
                   <td>
                     <div className="manager-action-stack">
+                      {["ACTIVE","COMPLETED","AWAITING_ACTIVATION"].includes(item.status)&&<ManagerAddDays id={item.id} name={item.full_name} lastDate={item.dates.at(-1)?.service_date||""} onDone={()=>void loadManagerData()}/>}
                       {item.status === "AWAITING_ACTIVATION" ? (
                         <button className="activate-button" type="button" disabled={activating === item.id} onClick={() => void activateSubscription(item.id)}>
                           {activating === item.id ? "Активируем…" : "Активировать"}
@@ -625,7 +635,6 @@ export default function ManagerPage() {
       {writeoffTarget && <div className="modal-backdrop" role="presentation" onMouseDown={event=>{if(event.currentTarget===event.target&&!writingOff)setWriteoffTarget(null)}}><section className="payment-modal writeoff-confirm-modal" role="dialog" aria-modal="true"><button className="modal-close" type="button" disabled={Boolean(writingOff)} onClick={()=>setWriteoffTarget(null)}>×</button><span className="eyebrow">Самовывоз</span><h2>Списать обед вручную?</h2><p><strong>{writeoffTarget.fullName}</strong><br/>{writeoffTarget.pickupPointName||"Точка не указана"} · {writeoffTarget.code}</p><p className="delete-warning">Используйте это, если обед доставили на точку, но клиент его не забрал. День подписки будет уменьшен на 1 и повторно получить этот обед будет нельзя.</p><div className="delivery-confirm-actions"><button type="button" className="confirm-yes" disabled={Boolean(writingOff)} onClick={()=>void manualPickupWriteoff()}>{writingOff?"Списываем…":"Списать обед"}</button><button type="button" className="confirm-no" disabled={Boolean(writingOff)} onClick={()=>setWriteoffTarget(null)}>Отмена</button></div></section></div>}
       {chatTarget && <div className="modal-backdrop chat-backdrop" role="presentation" onMouseDown={event=>{if(event.currentTarget===event.target)setChatTarget(null)}}><section className="chat-window" role="dialog" aria-modal="true"><header className="chat-header"><div><span className="eyebrow">Чат с клиентом</span><h2>{chatTarget.full_name}</h2><small>{chatTarget.phone||chatTarget.code}</small></div><button type="button" className="chat-close" onClick={()=>setChatTarget(null)}>×</button></header><div className="chat-messages">{!chatMessages.length&&<p className="chat-empty">Сообщений пока нет.</p>}{chatMessages.map(message=><article key={message.id} className={`chat-bubble ${message.senderRole==="MANAGER"?"chat-own":"chat-other"}`}><strong>{message.senderRole==="MANAGER"?"Менеджер":(message.senderName||chatTarget.full_name)}</strong><p>{message.body}</p>{message.imageUrl&&<a href={message.imageUrl} target="_blank" rel="noreferrer"><img className="chat-image" src={message.imageUrl} alt="Чек или изображение клиента" loading="lazy"/></a>}<time>{new Date(message.createdAt).toLocaleString("ru-RU",{timeZone:"Asia/Bangkok"})}</time></article>)}</div>{chatError&&<p className="form-error chat-error">{chatError}</p>}<div className="chat-composer"><textarea value={chatText} onChange={e=>setChatText(e.target.value)} maxLength={4000} placeholder="Ответ клиенту…" onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();void sendManagerChatMessage();}}}/><button type="button" disabled={chatLoading||!chatText.trim()} onClick={()=>void sendManagerChatMessage()}>{chatLoading?"Отправляем…":"Отправить"}</button></div></section></div>}
       {deliveryConfirm && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && !confirmingDelivery) setDeliveryConfirm(null); }}><section className="payment-modal delivery-confirm-modal" role="dialog" aria-modal="true"><button className="modal-close" type="button" disabled={Boolean(confirmingDelivery)} onClick={() => setDeliveryConfirm(null)}>×</button><span className="eyebrow">Доставка</span><h2>Клиент получил еду?</h2><p><strong>{deliveryConfirm.fullName}</strong><br/>{deliveryConfirm.requestedTime || "—"} · {deliveryConfirm.address || "Адрес не указан"}</p><div className="delivery-confirm-actions"><button type="button" className="confirm-yes" disabled={Boolean(confirmingDelivery)} onClick={() => void confirmDeliveryReceived()}>{confirmingDelivery ? "Сохраняем…" : "Да"}</button><button type="button" className="confirm-no" disabled={Boolean(confirmingDelivery)} onClick={() => setDeliveryConfirm(null)}>Нет</button></div></section></div>}
-      {qrPoint && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setQrPoint(null); }}><section className="payment-modal pickup-qr-modal" role="dialog" aria-modal="true"><button className="modal-close" type="button" onClick={() => setQrPoint(null)}>×</button><span className="eyebrow">QR точки выдачи</span><h2>{qrPoint.name}</h2><p>{qrPoint.address}</p><img src={`/api/manager/pickup-qr?point=${encodeURIComponent(qrPoint.code)}`} alt={`QR ${qrPoint.name}`} /><p><small>Распечатайте этот QR и разместите только на соответствующей точке выдачи.</small></p></section></div>}
     </main>
   );
 }

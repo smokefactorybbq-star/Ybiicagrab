@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getCourseDetails, getMealNutrition, getMealTemplateForDate, type MealTemplate } from "../data/meals";
 import QuestionLink from "./QuestionLink";
-import { pickupPoints } from "../data/pickupPoints";
+import {useCatalog} from "./useCatalog";
+import DiscountBadge from "./DiscountBadge";
+import {priceForDates,priceForDay} from "../lib/meal-prices";
 
 type CalendarDay = {
   id: string;
@@ -22,6 +24,7 @@ type SubscriptionDraft = {
   createdAt: string;
   fulfillmentType: "PICKUP" | "DELIVERY";
   pickupPointName?: string;
+  pickupPointCode?: string;
   duplicateConfirmed?: boolean;
 };
 
@@ -55,8 +58,6 @@ function makeDays(today: string): CalendarDay[] {
 
 function getRate(selectedCount: number) {
   if (selectedCount === 0) return 0;
-  if (selectedCount >= 30) return 250;
-  if (selectedCount >= 7) return 300;
   return 350;
 }
 
@@ -70,6 +71,7 @@ function formatLongDate(item: CalendarDay) {
 
 export default function SubscriptionCalendar() {
   const router = useRouter();
+  const {points:pickupPoints,discounts,ready:catalogReady,error:catalogError}=useCatalog();
   const [todayIso, setTodayIso] = useState(bangkokTodayIso());
   const [testMode, setTestMode] = useState(false);
   const days = useMemo(() => makeDays(todayIso), [todayIso]);
@@ -79,15 +81,16 @@ export default function SubscriptionCalendar() {
   const [checkoutError, setCheckoutError] = useState("");
   const [fulfillmentOpen, setFulfillmentOpen] = useState(false);
   const [fulfillmentChoice, setFulfillmentChoice] = useState<"PICKUP" | "DELIVERY">("PICKUP");
-  const [chosenPickupPoint, setChosenPickupPoint] = useState(pickupPoints[0]?.name || "");
+  const [chosenPickupPoint, setChosenPickupPoint] = useState("");
   const [duplicateConfirmed, setDuplicateConfirmed] = useState(false);
   const [showFirstCourse, setShowFirstCourse] = useState(true);
   const [scrollPosition, setScrollPosition] = useState(0);
   const [detailsIndex, setDetailsIndex] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const rate = getRate(selected.length);
-  const total = selected.length * rate;
+  const {rate,total}=priceForDates(selected,discounts);
+  useEffect(()=>{if(!pickupPoints.some(p=>p.code===chosenPickupPoint))setChosenPickupPoint(pickupPoints[0]?.code||"");},[pickupPoints,chosenPickupPoint]);
+  useEffect(()=>{const select=(e:Event)=>setChosenPickupPoint((e as CustomEvent<string>).detail);window.addEventListener("mealpoint-pickup-selected",select);return()=>window.removeEventListener("mealpoint-pickup-selected",select);},[]);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
   const nextIndex = selected.length;
   const detailsDay = detailsIndex === null ? null : days[detailsIndex];
@@ -161,7 +164,7 @@ export default function SubscriptionCalendar() {
   }
 
   function saveDraftAndOpenAccount() {
-    if (!selected.length) return;
+    if (!selected.length||!catalogReady) return;
     if (fulfillmentChoice === "PICKUP" && !chosenPickupPoint) {
       setCheckoutError("Выберите точку самовывоза");
       return;
@@ -173,7 +176,8 @@ export default function SubscriptionCalendar() {
       total,
       createdAt: new Date().toISOString(),
       fulfillmentType: fulfillmentChoice,
-      pickupPointName: fulfillmentChoice === "PICKUP" ? chosenPickupPoint : undefined,
+      pickupPointName: fulfillmentChoice === "PICKUP" ? pickupPoints.find(p=>p.code===chosenPickupPoint)?.name : undefined,
+      pickupPointCode: fulfillmentChoice === "PICKUP" ? chosenPickupPoint : undefined,
       duplicateConfirmed
     };
     localStorage.setItem("mealpoint_subscription_draft", JSON.stringify(draft));
@@ -181,7 +185,7 @@ export default function SubscriptionCalendar() {
   }
 
   async function goToCheckout() {
-    if (!selected.length) return;
+    if (!selected.length||!catalogReady) return;
     setCheckoutError("");
     setCheckingDuplicate(true);
     try {
@@ -248,12 +252,14 @@ export default function SubscriptionCalendar() {
                   {isSelected && <b>✓</b>}
                 </span>
                 <span className="meal-image-frame">
+                  <DiscountBadge percent={discounts[item.id]}/>
                   <img key={`${item.id}-${showFirstCourse ? "first" : "second"}`} src={visibleCourse.image} alt={visibleCourse.title} loading="lazy" />
                   <span className="meal-course-badge">{showFirstCourse ? "Первое блюдо" : "Второе блюдо"}</span>
                   <span className="meal-open-overlay">Открыть меню и КБЖУ</span>
                 </span>
                 <span className="meal-tag">{item.id === days[0].id ? "Можно начать завтра" : item.meal.tag}</span>
                 <span className="meal-title">{visibleCourse.title}</span>
+                <span className="day-price">{discounts[item.id]&&<del>350 ฿</del>} {priceForDay(item.id,discounts).price} ฿</span>
                 <span className="meal-details-hint">Нажмите на дату или блюдо — откроется подробное меню на весь экран</span>
               </button>
 
@@ -282,12 +288,13 @@ export default function SubscriptionCalendar() {
         <input type="range" min="0" max="1000" value={scrollPosition} onChange={(event) => moveCalendar(Number(event.target.value))} aria-label="Горизонтальная прокрутка календаря" />
       </div>
 
+      {catalogError&&<p className="form-error">{catalogError}</p>}
       {checkoutError && <p className="form-error calendar-checkout-error">{checkoutError}</p>}
       <div className="subscription-summary" aria-live="polite">
         <div><small>Выбрано дней</small><strong>{selected.length}</strong></div>
-        <div><small>Цена за день</small><strong>{rate ? `${rate} ฿` : "—"}</strong></div>
+        <div><small>Базовая цена за день</small><strong>{rate ? `${rate} ฿` : "—"}</strong></div>
         <div className="summary-total"><small>Итого</small><strong>{total.toLocaleString("ru-RU")} ฿</strong></div>
-        <button type="button" disabled={!selected.length || checkingDuplicate} onClick={goToCheckout}>{checkingDuplicate ? "Проверяем…" : "Оформить подписку"}</button>
+        <button type="button" disabled={!selected.length || checkingDuplicate || !catalogReady} onClick={goToCheckout}>{checkingDuplicate ? "Проверяем…" : "Оформить подписку"}</button>
       </div>
 
       {detailsDay && detailsIndex !== null && (() => {
@@ -311,7 +318,7 @@ export default function SubscriptionCalendar() {
                 <div className="meal-details-courses">
                   {[{label:"Первое блюдо",data:first},{label:"Второе блюдо",data:second}].map((course) => (
                     <article className="meal-details-course" key={course.label}>
-                      <img src={course.data.image} alt={course.data.title} />
+                      <div className="course-image-wrap"><img src={course.data.image} alt={course.data.title} /><DiscountBadge percent={discounts[detailsDay.id]}/></div>
                       <div>
                         <span>{course.label}</span>
                         <h3>{course.data.title}</h3>
@@ -370,14 +377,14 @@ export default function SubscriptionCalendar() {
             {fulfillmentChoice === "PICKUP" && (
               <label>Точка выдачи
                 <select value={chosenPickupPoint} onChange={(event) => setChosenPickupPoint(event.target.value)}>
-                  {pickupPoints.map((point) => <option key={point.name} value={point.name}>{point.shortName} — {point.address}</option>)}
+                  {pickupPoints.map((point) => <option key={point.code} value={point.code}>{point.shortName} — {point.address}</option>)}
                 </select>
               </label>
             )}
             <div className="package-preview">
               <span>{selected.length} дней</span><b>·</b><span>{fulfillmentChoice === "PICKUP" ? "Самовывоз" : "Доставка"}</span><strong>{total.toLocaleString("ru-RU")} ฿</strong>
             </div>
-            <button type="button" onClick={saveDraftAndOpenAccount}>Перейти в личный кабинет</button>
+            <button type="button" disabled={!catalogReady||(fulfillmentChoice==="PICKUP"&&!chosenPickupPoint)} onClick={saveDraftAndOpenAccount}>Перейти в личный кабинет</button>
           </div>
         </div>
       )}

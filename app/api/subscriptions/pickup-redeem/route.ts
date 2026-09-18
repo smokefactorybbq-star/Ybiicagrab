@@ -7,7 +7,7 @@ import { consumeRateLimit } from "../../../../lib/rate-limit";
 import { isSameOriginMutation } from "../../../../lib/request-security";
 import { notifyManagerTelegram } from "../../../../lib/telegram";
 import { parsePickupPointQrPayload, verifyPickupPointQrSignature } from "../../../../lib/qr";
-import { findPickupQrPointByCode } from "../../../../data/pickupQrPoints";
+import { findPickupPointByCode } from "../../../../lib/catalog";
 import { assertPickupLockOnline, requestPickupLockOpen } from "../../../../lib/pickup-lock";
 
 import { isUuid } from "../../../../lib/validation";
@@ -37,20 +37,21 @@ export async function POST(request: NextRequest) {
     if (!isUuid(subscriptionId) || !parsed || !verifyPickupPointQrSignature(parsed.pointCode, parsed.signature)) {
       return NextResponse.json({ ok:false, error:GENERIC_ERROR }, { status:400 });
     }
-    const point = findPickupQrPointByCode(parsed.pointCode);
+    const point = await findPickupPointByCode(parsed.pointCode);
     if (!point) return NextResponse.json({ ok:false, error:GENERIC_ERROR }, { status:400 });
 
     const clock = await getAppClock();
-    if (clock.hour >= 22) return NextResponse.json({ ok:false, error:GENERIC_ERROR }, { status:409 });
 
     const redeemed = await withTransaction(async (client) => {
+      const activePoint=await client.query(`SELECT code FROM pickup_points WHERE code=$1 AND is_active=true FOR SHARE`,[point.code]);
+      if(!activePoint.rows[0])throw new Error("BAD_QR");
       const current = await client.query<{
         subscription_id:string; code:string; subscription_status:string; fulfillment_type:string;
-        pickup_point_name:string|null; remaining_portions:number; day_id:string; day_status:string;
+        pickup_point_code:string|null; pickup_point_name:string|null; remaining_portions:number; day_id:string; day_status:string;
         redeemed_at:string|null; consumed_at:string|null; full_name:string; phone:string|null;
       }>(
         `SELECT s.id::text AS subscription_id, s.code, s.status::text AS subscription_status,
-                s.fulfillment_type, s.pickup_point_name, s.remaining_portions,
+                s.fulfillment_type, s.pickup_point_name, s.pickup_point_code, s.remaining_portions,
                 sd.id::text AS day_id, sd.status::text AS day_status, sd.redeemed_at, sd.consumed_at,
                 u.full_name, u.phone
          FROM subscriptions s
@@ -61,10 +62,14 @@ export async function POST(request: NextRequest) {
         [subscriptionId, account.userId, clock.date]
       );
       const row = current.rows[0];
-      if (!row || row.fulfillment_type !== "PICKUP" || (row.subscription_status !== "ACTIVE" || row.remaining_portions < 1)) throw new Error("BAD_QR");
-      if (!["PLANNED","AVAILABLE"].includes(row.day_status) || row.redeemed_at || row.consumed_at) throw new Error("ALREADY");
-
-      if (!row.pickup_point_name || row.pickup_point_name !== point.name) throw new Error("WRONG_POINT");
+      if (!row || row.fulfillment_type !== "PICKUP") throw new Error("BAD_QR");
+      if (!row.pickup_point_code || row.pickup_point_code !== point.code) throw new Error("WRONG_POINT");
+      if (row.redeemed_at) {
+        const time=new Intl.DateTimeFormat("ru-RU",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(new Date(row.redeemed_at));
+        throw new Error(`ALREADY_AT:${time}`);
+      }
+      if (row.subscription_status !== "ACTIVE" || row.remaining_portions < 1 || clock.hour >= 22) throw new Error("BAD_QR");
+      if (!["PLANNED","AVAILABLE"].includes(row.day_status) || row.consumed_at) throw new Error("BAD_QR");
 
       // If this point has an electronic lock configured, do not consume the meal
       // while its controller is offline. This prevents charging a customer who
@@ -122,15 +127,17 @@ export async function POST(request: NextRequest) {
         : "Обед получен. Один день подписки списан.",
       remainingPortions:redeemed.remaining,
       pickupPointName:redeemed.pointName,
-      lockOpened:redeemed.lockRequested
+      lockRequested:redeemed.lockRequested
     });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
+    if (code === "LOCK_NOT_CONFIGURED") return NextResponse.json({ok:false,error:"Замок этой точки ещё не настроен. День не списан. Свяжитесь с менеджером."},{status:503});
     if (code === "LOCK_OFFLINE") {
       return NextResponse.json({ ok:false, error:"Замок точки сейчас не на связи. Обед не списан. Позовите сотрудника." }, { status:503 });
     }
+    if (code.startsWith("ALREADY_AT:")) return NextResponse.json({ok:false,error:`Уважаемый клиент, повторное сканирование кода невозможно. Сегодня вы уже получили свой обед в ${code.slice(11)}.`},{status:409});
     if (["ALREADY","WRONG_POINT","BAD_QR"].includes(code) || (error instanceof Error && /duplicate key/i.test(error.message))) {
-      return NextResponse.json({ ok:false, error:code==="ALREADY"?"Сегодняшний обед уже получен.":code==="WRONG_POINT"?"Это QR другой точки. Используйте QR выбранного пункта самовывоза.":"На сегодня нет доступного обеда по этой подписке." }, { status:409 });
+      return NextResponse.json({ ok:false, error:code==="WRONG_POINT"?"Извините, получить обед на этой точке выбора невозможно, отсканируйте QR выбранной вами точки самовывоза.":"На сегодня нет доступного обеда по этой подписке." }, { status:409 });
     }
     console.error("Pickup QR redemption failed", error);
     return NextResponse.json({ ok:false, error:GENERIC_ERROR }, { status:400 });

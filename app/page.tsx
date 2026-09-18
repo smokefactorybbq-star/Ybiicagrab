@@ -12,7 +12,7 @@ export default function HomePage() {
           <div className="hero-facts">
             <div><strong>350 ฿</strong><span>за полноценный обед</span></div>
             <div><strong>60+ блюд</strong><span>разное меню по дням</span></div>
-            <div><strong>5 точек</strong><span>самовывоза на Пхукете</span></div>
+            <div><strong>Самовывоз</strong><span>из удобной точки на Пхукете</span></div>
           </div>
         </div>
         <div className="hero-visual" aria-label="Пример обеда MealPoint">

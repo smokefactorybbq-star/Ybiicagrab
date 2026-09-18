@@ -361,3 +361,43 @@ ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS rub_rate NUMERIC(12,6);
 CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_checkout_idx ON subscriptions(user_id,checkout_key) WHERE checkout_key IS NOT NULL;
 UPDATE subscriptions SET default_time=NULL WHERE fulfillment_type='PICKUP' AND default_time IS NOT NULL;
 UPDATE subscription_days SET requested_time=NULL WHERE fulfillment_type='PICKUP' AND requested_time IS NOT NULL;
+
+-- Managed pickup directory and date-specific promotions.
+CREATE TABLE IF NOT EXISTS app_migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now());
+ALTER TABLE pickup_points ADD COLUMN IF NOT EXISTS code TEXT;
+ALTER TABLE pickup_points ADD COLUMN IF NOT EXISTS district TEXT NOT NULL DEFAULT '';
+ALTER TABLE pickup_points ADD COLUMN IF NOT EXISTS point_number TEXT NOT NULL DEFAULT '';
+ALTER TABLE pickup_points ADD COLUMN IF NOT EXISTS google_maps_url TEXT NOT NULL DEFAULT '';
+CREATE UNIQUE INDEX IF NOT EXISTS pickup_points_code_unique ON pickup_points(code);
+INSERT INTO pickup_points(code,name,district,point_number,address,latitude,longitude,google_maps_url)
+SELECT v.code,v.name,v.district,v.num,v.address,v.lat,v.lng,'https://www.google.com/maps/search/?api=1&query='||v.lat||','||v.lng
+FROM (VALUES
+ ('chalong','Chalong Meal Point','Chalong','1','Chalong, Mueang Phuket, Phuket',7.8471,98.3385),
+ ('rawai','Rawai Meal Point','Rawai','2','Rawai, Mueang Phuket, Phuket',7.7793,98.3258),
+ ('phuket-town','Phuket Town Meal Point','Phuket Town','3','Phuket Town, Mueang Phuket, Phuket',7.8804,98.3923),
+ ('patong','Patong Meal Point','Patong','4','Patong, Kathu, Phuket',7.8966,98.2964),
+ ('bang-tao','Bang Tao Meal Point','Bang Tao','5','Bang Tao, Thalang, Phuket',7.9943,98.3047)
+) AS v(code,name,district,num,address,lat,lng)
+WHERE NOT EXISTS(SELECT 1 FROM app_migrations WHERE name='managed-pickup-directory-v1')
+ON CONFLICT(code) DO NOTHING;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS pickup_point_code TEXT;
+UPDATE subscriptions s SET pickup_point_code=p.code FROM pickup_points p
+WHERE s.pickup_point_name=p.name AND s.pickup_point_code IS NULL AND p.code IS NOT NULL
+AND NOT EXISTS(SELECT 1 FROM app_migrations WHERE name='managed-pickup-directory-v1');
+INSERT INTO app_migrations(name) VALUES('managed-pickup-directory-v1') ON CONFLICT DO NOTHING;
+CREATE UNIQUE INDEX IF NOT EXISTS pickup_points_district_number_unique ON pickup_points(lower(district),point_number) WHERE code IS NOT NULL;
+CREATE TABLE IF NOT EXISTS meal_date_discounts (
+ service_date DATE PRIMARY KEY,
+ percent INTEGER NOT NULL CHECK (percent IN (20,30,50)),
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS price_thb INTEGER;
+ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS discount_percent INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS subscription_day_extensions (
+ request_key UUID PRIMARY KEY,
+ subscription_id UUID NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+ days INTEGER NOT NULL CHECK(days BETWEEN 1 AND 365),
+ first_date DATE NOT NULL,
+ last_date DATE NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

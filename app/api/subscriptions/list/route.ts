@@ -18,12 +18,12 @@ export async function GET(request: NextRequest) {
     const account = await getAuthenticatedAccount(request);
     if (!account) return NextResponse.json({ok:false,error:"Требуется вход"},{status:401});
     const subscriptionsResult = await query<any>(
-      `SELECT s.id,s.code,s.status,s.selected_days,s.remaining_portions,s.pause_limit,s.pauses_used,s.rate_thb,s.total_thb,s.starts_on::text,s.ends_on::text,s.payment_method,s.rub_rate,s.fulfillment_type,s.pickup_point_name,s.customer_name,s.customer_phone,s.delivery_address,s.default_time,u.full_name,u.phone FROM subscriptions s JOIN users u ON u.id=s.user_id
+      `SELECT s.id,s.code,s.status,s.selected_days,s.remaining_portions,s.pause_limit,s.pauses_used,s.rate_thb,s.total_thb,s.starts_on::text,s.ends_on::text,s.payment_method,s.rub_rate,s.fulfillment_type,s.pickup_point_code,s.pickup_point_name,s.customer_name,s.customer_phone,s.delivery_address,s.default_time,u.full_name,u.phone FROM subscriptions s JOIN users u ON u.id=s.user_id
        WHERE s.user_id=$1 ORDER BY s.created_at DESC LIMIT 300`, [account.userId]
     );
     const ids = subscriptionsResult.rows.map((x:any)=>x.id);
     const daysResult = ids.length ? await query<any>(
-      `SELECT subscription_id::text,service_date::text,status,fulfillment_type,requested_time,customer_name,customer_phone,delivery_address,redeemed_at,consumed_at,delivery_received_at,pickup_redeemed_point_name
+      `SELECT subscription_id::text,service_date::text,status,fulfillment_type,requested_time,customer_name,customer_phone,delivery_address,redeemed_at,consumed_at,delivery_received_at,pickup_redeemed_point_name,price_thb,discount_percent
        FROM subscription_days WHERE subscription_id=ANY($1::uuid[]) ORDER BY service_date ASC`, [ids]
     ) : {rows:[]};
     const daysBy = new Map<string,any[]>();

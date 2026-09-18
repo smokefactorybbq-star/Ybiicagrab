@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { buildGoogleMapsRouteUrl, findPickupPoint } from "../data/pickupPoints";
+import {useCatalog} from "./useCatalog";
+import { buildGoogleMapsRouteUrl } from "../data/pickupPoints";
 
 type Props = {
   pickupPointName: string;
@@ -11,7 +12,8 @@ type Props = {
 
 export default function PickupRouteButton({ pickupPointName, className = "route-button", label = "Построить маршрут" }: Props) {
   const [loading, setLoading] = useState(false);
-  const point = findPickupPoint(pickupPointName);
+  const {points}=useCatalog();
+  const point = points.find(p=>p.name===pickupPointName);
 
   function openRoute() {
     if (!point) return;

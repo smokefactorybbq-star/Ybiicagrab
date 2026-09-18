@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 const PICKUP_QR_PREFIX = "mealpoint:pickup:v1";
 function getPickupQrSecret() {
-  const secret = (process.env.PICKUP_QR_SECRET || process.env.QR_SIGNING_SECRET || process.env.SUBSCRIPTION_QR_SECRET || "").trim();
+  const secret = (process.env.QR_SIGNING_SECRET || process.env.PICKUP_QR_SECRET || process.env.SUBSCRIPTION_QR_SECRET || "").trim();
   if (!secret || secret.length < 24) throw new Error("PICKUP_QR_SECRET/QR_SIGNING_SECRET is not configured or is too short");
   return secret;
 }

@@ -3,7 +3,8 @@ import { getAuthenticatedAccount, normalizeContactPhone } from "../../../lib/aut
 import { getAppClock } from "../../../lib/app-time";
 import { query, withTransaction } from "../../../lib/db";
 import { notifyManagerTelegram } from "../../../lib/telegram";
-import { findPickupPoint } from "../../../data/pickupPoints";
+import { findPickupPointByCode,findPickupPointByName,getDateDiscounts } from "../../../lib/catalog";
+import { priceForDates } from "../../../lib/meal-prices";
 import {
   calculateSubscriptionPrice,
   createAccessToken,
@@ -32,6 +33,8 @@ type CreateSubscriptionBody = {
   requestedTime?: unknown;
   pickupPointName?: unknown;
   checkoutKey?: unknown;
+  pickupPointCode?: unknown;
+  expectedTotal?: unknown;
 };
 
 function badRequest(message: string) {
@@ -79,42 +82,46 @@ export async function POST(request: NextRequest) {
     if (phone.length < 8) return badRequest("Введите корректный телефон");
     if (fulfillmentType === "DELIVERY" && !validDeliveryTime(requestedTime || "")) return badRequest("Выберите время с 12:00 до 18:00");
     if (fulfillmentType === "DELIVERY" && (address.length < 5 || address.length > 1000)) return badRequest("Введите адрес доставки");
-    if (fulfillmentType === "PICKUP" && !findPickupPoint(pickupPointName)) return badRequest("Выберите пункт самовывоза");
+    const resolvedPoint=fulfillmentType==="PICKUP"?(typeof body.pickupPointCode==="string"?await findPickupPointByCode(body.pickupPointCode):await findPickupPointByName(pickupPointName)):null;
+    if (fulfillmentType === "PICKUP" && !resolvedPoint) return badRequest("Выберите пункт самовывоза");
 
     const clock = await getAppClock();
     const dateValidation = validateConsecutiveDates(dates, clock.date);
     if (!dateValidation.valid) return badRequest(dateValidation.error);
 
-    const { rate, total } = calculateSubscriptionPrice(dates);
+    const quote = priceForDates(dates,await getDateDiscounts());
+    const {rate,total}=quote;
     const pauseLimit = getPauseLimit(dates.length);
     const pendingCode = createPendingCode();
     const accountAccess = createAccessToken();
     const accessHash = hashToken(accountAccess);
-    const pickupPoint = fulfillmentType === "PICKUP" ? pickupPointName : null;
+    let pickupPoint = resolvedPoint?.name||null;
 
     const created = await withTransaction(async (client) => {
+      if(resolvedPoint){const current=await client.query<{name:string}>(`SELECT name FROM pickup_points WHERE code=$1 AND is_active=true FOR SHARE`,[resolvedPoint.code]);if(!current.rows[0])throw new Error("POINT_REMOVED");pickupPoint=current.rows[0].name;}
       await client.query(`SELECT id FROM users WHERE id=$1 FOR UPDATE`,[account.userId]);
       const existing = await client.query<{id:string}>(`SELECT id::text FROM subscriptions WHERE user_id=$1 AND checkout_key=$2`,[account.userId,checkoutKey]);
       if (existing.rows[0]) return existing.rows[0].id;
+      if(typeof body.expectedTotal==="number"&&body.expectedTotal!==total)throw new Error("PRICE_CHANGED");
       const subscription = await client.query<{ id: string }>(
         `INSERT INTO subscriptions (
           code, user_id, status, selected_days, remaining_portions,
           pause_limit, pauses_used, rate_thb, total_thb,
           starts_on, ends_on, qr_secret_hash, account_access_hash,
           pickup_point_name, payment_method, paid_at,
-          fulfillment_type, customer_name, customer_phone, delivery_address, default_time, checkout_key, rub_rate
-        ) VALUES ($1,$2,'AWAITING_ACTIVATION',$3,$3,$4,0,$5,$6,$7,$8,$9,$9,$10,$11,NULL,$12,$13,$14,$15,$16,$17,$18)
+          fulfillment_type, customer_name, customer_phone, delivery_address, default_time, checkout_key, rub_rate, pickup_point_code
+        ) VALUES ($1,$2,'AWAITING_ACTIVATION',$3,$3,$4,0,$5,$6,$7,$8,$9,$9,$10,$11,NULL,$12,$13,$14,$15,$16,$17,$18,$19)
         RETURNING id::text`,
         [pendingCode,account.userId,dates.length,pauseLimit,rate,total,dates[0],dates[dates.length-1],accessHash,pickupPoint,paymentMethod,
-         fulfillmentType,customerName,phone,fulfillmentType === "DELIVERY" ? address : null,requestedTime,checkoutKey,paymentMethod === "BANK_RU" ? config.rubRate : null]
+         fulfillmentType,customerName,phone,fulfillmentType === "DELIVERY" ? address : null,requestedTime,checkoutKey,paymentMethod === "BANK_RU" ? config.rubRate : null,resolvedPoint?.code||null]
       );
       const subscriptionId = subscription.rows[0].id;
       for (const serviceDate of dates) {
         await client.query(
           `INSERT INTO subscription_days (
-             subscription_id,service_date,status,fulfillment_type,requested_time,customer_name,customer_phone,delivery_address
-           ) VALUES ($1,$2,'PLANNED',$3,$4,$5,$6,$7)`,
-          [subscriptionId,serviceDate,fulfillmentType,requestedTime,customerName,phone,fulfillmentType === "DELIVERY" ? address : null]
+             subscription_id,service_date,status,fulfillment_type,requested_time,customer_name,customer_phone,delivery_address,price_thb,discount_percent
+           ) VALUES ($1,$2,'PLANNED',$3,$4,$5,$6,$7,$8,$9)`,
+          [subscriptionId,serviceDate,fulfillmentType,requestedTime,customerName,phone,fulfillmentType === "DELIVERY" ? address : null,quote.days.find(d=>d.date===serviceDate)!.price,quote.days.find(d=>d.date===serviceDate)!.percent]
         );
       }
       await client.query(
@@ -146,6 +153,8 @@ export async function POST(request: NextRequest) {
       subscription:{id:created,selectedDays:dates.length,remainingPortions:dates.length,pauseLimit,rate:saved.rate_thb,total:saved.total_thb,dates,pickupPoint,paymentMethod:saved.payment_method,status:"AWAITING_ACTIVATION",fulfillmentType,requestedTime,rubRate:saved.rub_rate?Number(saved.rub_rate):null}
     }, {status:201});
   } catch (error) {
+    if(error instanceof Error&&error.message==="PRICE_CHANGED")return NextResponse.json({ok:false,error:"Скидки изменились. Проверьте обновлённую сумму и нажмите оплатить ещё раз.",priceChanged:true},{status:409});
+    if(error instanceof Error&&error.message==="POINT_REMOVED")return badRequest("Точка удалена. Выберите другой пункт самовывоза.");
     console.error("Create paid subscription failed", error);
     return NextResponse.json({ok:false,error:"Не удалось оформить подписку"},{status:500});
   }
