@@ -4,18 +4,24 @@ import { query, withTransaction } from "../../../../lib/db";
 import { isSameOriginMutation } from "../../../../lib/request-security";
 import { notifyManagerTelegram } from "../../../../lib/telegram";
 
+import { readChatInput } from "../../../../lib/chat-upload";
+import { consumeRateLimit } from "../../../../lib/rate-limit";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function ensureConversation(userId: string) {
-  const existing = await query<{ id: string }>(
+  return withTransaction(async(client)=>{
+  await client.query(`SELECT id FROM users WHERE id=$1 FOR UPDATE`,[userId]);
+  const existing = await client.query<{ id: string }>(
     `SELECT id::text FROM customer_conversations WHERE user_id = $1 ORDER BY updated_at DESC, created_at ASC LIMIT 1`, [userId]
   );
   if (existing.rows[0]?.id) return existing.rows[0].id;
-  const result = await query<{ id: string }>(
+  const result = await client.query<{ id: string }>(
     `INSERT INTO customer_conversations (user_id) VALUES ($1) RETURNING id::text`, [userId]
   );
   return result.rows[0].id;
+  });
 }
 
 export async function GET(request: NextRequest) {
@@ -31,10 +37,10 @@ export async function GET(request: NextRequest) {
     );
   }
   const messages = await query(
-    `SELECT id::text, sender_role AS "senderRole", sender_name AS "senderName", body,
+    `SELECT id::text, sender_role AS "senderRole", sender_name AS "senderName", body, CASE WHEN image_data IS NOT NULL THEN '/api/chat/images/' || id::text ELSE NULL END AS "imageUrl",
             created_at::text AS "createdAt"
      FROM customer_messages WHERE conversation_id = $1
-     ORDER BY created_at ASC, id ASC LIMIT 400`,
+     ORDER BY created_at DESC, id DESC LIMIT 400`,
     [conversationId]
   );
   const unread = await query<{ count: number }>(
@@ -42,7 +48,7 @@ export async function GET(request: NextRequest) {
      WHERE conversation_id = $1 AND sender_role = 'MANAGER' AND read_by_customer_at IS NULL`,
     [conversationId]
   );
-  return NextResponse.json({ ok: true, messages: messages.rows, unreadCount: unread.rows[0]?.count || 0 }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ ok: true, messages: messages.rows.reverse(), unreadCount: unread.rows[0]?.count || 0 }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: NextRequest) {
@@ -50,10 +56,11 @@ export async function POST(request: NextRequest) {
   const account = await getAuthenticatedAccount(request);
   if (!account) return NextResponse.json({ ok: false, error: "Требуется вход" }, { status: 401 });
   try {
-    const body = await request.json() as { text?: unknown };
-    const text = typeof body.text === "string" ? body.text.trim() : "";
-    if (!text || text.length > 4000) return NextResponse.json({ ok: false, error: "Сообщение должно содержать от 1 до 4000 символов" }, { status: 400 });
+    const limit=await consumeRateLimit(`chat:${account.userId}`,30,60);
+    if(!limit.allowed)return NextResponse.json({ok:false,error:"Слишком много сообщений. Подождите минуту."},{status:429});
+    const {text,image}=await readChatInput(request);
     const conversationId = await withTransaction(async (client) => {
+      await client.query(`SELECT id FROM users WHERE id=$1 FOR UPDATE`,[account.userId]);
       let conversation = await client.query<{ id: string }>(
         `SELECT id::text FROM customer_conversations WHERE user_id = $1 ORDER BY updated_at DESC, created_at ASC LIMIT 1 FOR UPDATE`, [account.userId]
       );
@@ -62,8 +69,8 @@ export async function POST(request: NextRequest) {
       }
       const id = conversation.rows[0].id;
       await client.query(
-        `INSERT INTO customer_messages (conversation_id, sender_role, sender_name, body, read_by_customer_at)
-         VALUES ($1, 'CUSTOMER', $2, $3, now())`, [id, account.fullName, text]
+        `INSERT INTO customer_messages (conversation_id, sender_role, sender_name, body, read_by_customer_at, image_data)
+         VALUES ($1, 'CUSTOMER', $2, $3, now(), $4)`, [id, account.fullName, text, image]
       );
       await client.query(`UPDATE customer_conversations SET updated_at = now() WHERE id = $1`, [id]);
       return id;
@@ -71,6 +78,7 @@ export async function POST(request: NextRequest) {
     void notifyManagerTelegram({ text: `<b>💬 MealPoint: сообщение клиента</b>\nКлиент: ${escapeHtml(account.fullName)}\n${escapeHtml(text)}` });
     return NextResponse.json({ ok: true, conversationId });
   } catch (error) {
+    if(error instanceof Error && ["IMAGE_TOO_LARGE","BAD_MESSAGE","BAD_IMAGE","EMPTY_BODY"].includes(error.message))return NextResponse.json({ok:false,error:"Добавьте текст до 4000 символов или изображение JPG, PNG, WebP до 5 МБ (до 16 мегапикселей)."},{status:400});
     console.error("Customer chat send failed", error);
     return NextResponse.json({ ok: false, error: "Не удалось отправить сообщение" }, { status: 500 });
   }

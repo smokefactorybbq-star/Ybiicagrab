@@ -4,6 +4,9 @@ import { getAppClock } from "../../../../lib/app-time";
 import { query } from "../../../../lib/db";
 import { processSubscriptionDayClosures } from "../../../../lib/subscription-maintenance";
 
+import { isSameOriginMutation } from "../../../../lib/request-security";
+import { validDeliveryTime, isUuid, validDate } from "../../../../lib/validation";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -15,6 +18,7 @@ function validTime(value: string) {
 }
 
 export async function PATCH(request: NextRequest) {
+  if (!isSameOriginMutation(request)) return NextResponse.json({ok:false,error:"Недопустимый источник запроса"},{status:403});
   await processSubscriptionDayClosures();
   const account = await getAuthenticatedAccount(request);
   if (!account) return NextResponse.json({ok:false,error:"Требуется вход"},{status:401});
@@ -22,7 +26,7 @@ export async function PATCH(request: NextRequest) {
   const subscriptionId = typeof body.subscriptionId === "string" ? body.subscriptionId.trim() : "";
   const serviceDate = typeof body.serviceDate === "string" ? body.serviceDate.trim() : "";
   const requestedTime = typeof body.requestedTime === "string" ? body.requestedTime.trim() : "";
-  if (!subscriptionId || !/^\d{4}-\d{2}-\d{2}$/.test(serviceDate) || !validTime(requestedTime)) {
+  if (!isUuid(subscriptionId) || !validDate(serviceDate) || !validDeliveryTime(requestedTime)) {
     return NextResponse.json({ok:false,error:"Выберите время с 12:00 до 18:00"},{status:400});
   }
   const clock = await getAppClock();
@@ -35,6 +39,7 @@ export async function PATCH(request: NextRequest) {
      SET requested_time=$4
      FROM subscriptions s
      WHERE sd.subscription_id=s.id AND s.id=$1 AND s.user_id=$2 AND sd.service_date=$3::date
+       AND s.status='ACTIVE' AND s.fulfillment_type='DELIVERY' AND sd.fulfillment_type='DELIVERY'
        AND sd.status IN ('PLANNED','AVAILABLE')
      RETURNING sd.id::text`,
     [subscriptionId,account.userId,serviceDate,requestedTime]

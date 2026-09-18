@@ -31,6 +31,9 @@ export function isSameOriginMutation(request: Request) {
     return false;
   }
 
+  const configured=(process.env.MEALPOINT_PUBLIC_URL||process.env.NEXT_PUBLIC_SITE_URL||"").trim();
+  if(configured){try{return origin.origin===new URL(configured.includes("://")?configured:`https://${configured}`).origin;}catch{return false;}}
+  if(process.env.NODE_ENV==="production")return false;
   const forwardedHost = firstForwardedValue(
     request.headers.get("x-forwarded-host")
   );

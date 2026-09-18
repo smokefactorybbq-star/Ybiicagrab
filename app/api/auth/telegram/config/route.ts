@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -44,14 +45,17 @@ export async function GET() {
   }
 
   const origin = publicOrigin();
-  return NextResponse.json(
+  const state=randomBytes(32).toString("base64url");
+  const response=NextResponse.json(
     {
       ok: true,
       version: "0.9.4",
       botUsername,
       publicOrigin: origin,
-      authUrl: `${origin}/api/auth/telegram/callback`
+      authUrl: `${origin}/api/auth/telegram/callback?state=${state}`
     },
     { headers: { "Cache-Control": "no-store" } }
   );
+  response.cookies.set("mealpoint_login_state",state,{httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"lax",path:"/",maxAge:900});
+  return response;
 }

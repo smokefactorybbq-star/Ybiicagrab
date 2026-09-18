@@ -21,7 +21,8 @@ export function parseAndVerifyTelegramLogin(url: URL): TelegramLoginData {
   // the data-check-string too, so authentication remains valid if Telegram adds
   // optional callback fields (for example allows_write_to_pm).
   for (const [key, value] of url.searchParams.entries()) {
-    if (key === "hash") continue;
+    if (key === "hash" || key === "state") continue;
+    if (key in data) throw new Error("BAD_TELEGRAM_AUTH");
     data[key] = value;
   }
 

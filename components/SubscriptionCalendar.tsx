@@ -335,7 +335,7 @@ export default function SubscriptionCalendar() {
                   <div><span>Жиры</span><strong>{totalNutrition.fat} г</strong></div>
                   <div><span>Углеводы</span><strong>{totalNutrition.carbs} г</strong></div>
                 </section>
-                <p className="nutrition-disclaimer">Калорийность и КБЖУ сейчас указаны ориентировочно. Позже их можно заменить точными технологическими картами блюд.</p>
+                <p className="nutrition-disclaimer">Пищевая ценность указана ориентировочно. Состав и вес готового блюда могут немного отличаться.</p>
               </div>
 
               <div className="meal-details-footer">

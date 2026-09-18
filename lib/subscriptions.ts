@@ -1,5 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 
+import { validDate } from "./validation";
+
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const BANGKOK_TIME_ZONE = "Asia/Bangkok";
 
@@ -52,6 +54,7 @@ export function validateConsecutiveDates(dates: string[], todayIso = getBangkokT
   if (!dates.length) return { valid: false, error: "Выберите хотя бы один день" };
   if (dates.length > 30) return { valid: false, error: "Можно выбрать не более 30 дней" };
 
+  if (dates.some(date => !validDate(date))) return {valid:false,error:"Некорректная дата"};
   const tomorrow = addDaysToIso(todayIso, 1);
   if (dates[0] < tomorrow) {
     return { valid: false, error: "Подписка должна начинаться не раньше завтрашнего дня" };

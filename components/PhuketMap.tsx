@@ -159,8 +159,8 @@ export default function PhuketMap() {
         <div className="map-shell google-map-shell">
           {apiKey ? <div ref={mapNode} className="google-map-canvas" /> : (
             <div className="map-key-warning">
-              <strong>Добавьте ключ Google Maps</strong>
-              <span>В Railway нужна переменная NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.</span>
+              <strong>Карта временно недоступна</strong>
+              <span>Выберите точку ниже и откройте маршрут.</span>
             </div>
           )}
           {mapError && <div className="map-error-banner">{mapError}</div>}

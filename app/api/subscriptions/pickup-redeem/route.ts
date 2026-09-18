@@ -10,6 +10,8 @@ import { parsePickupPointQrPayload, verifyPickupPointQrSignature } from "../../.
 import { findPickupQrPointByCode } from "../../../../data/pickupQrPoints";
 import { assertPickupLockOnline, requestPickupLockOpen } from "../../../../lib/pickup-lock";
 
+import { isUuid } from "../../../../lib/validation";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -32,7 +34,7 @@ export async function POST(request: NextRequest) {
     const subscriptionId = typeof body.subscriptionId === "string" ? body.subscriptionId.trim() : "";
     const qrPayload = typeof body.qrPayload === "string" ? body.qrPayload.trim() : "";
     const parsed = parsePickupPointQrPayload(qrPayload);
-    if (!subscriptionId || !parsed || !verifyPickupPointQrSignature(parsed.pointCode, parsed.signature)) {
+    if (!isUuid(subscriptionId) || !parsed || !verifyPickupPointQrSignature(parsed.pointCode, parsed.signature)) {
       return NextResponse.json({ ok:false, error:GENERIC_ERROR }, { status:400 });
     }
     const point = findPickupQrPointByCode(parsed.pointCode);
@@ -59,7 +61,7 @@ export async function POST(request: NextRequest) {
         [subscriptionId, account.userId, clock.date]
       );
       const row = current.rows[0];
-      if (!row || row.fulfillment_type !== "PICKUP" || !["ACTIVE","COMPLETED"].includes(row.subscription_status)) throw new Error("BAD_QR");
+      if (!row || row.fulfillment_type !== "PICKUP" || (row.subscription_status !== "ACTIVE" || row.remaining_portions < 1)) throw new Error("BAD_QR");
       if (!["PLANNED","AVAILABLE"].includes(row.day_status) || row.redeemed_at || row.consumed_at) throw new Error("ALREADY");
 
       if (!row.pickup_point_name || row.pickup_point_name !== point.name) throw new Error("WRONG_POINT");
@@ -116,7 +118,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       ok:true,
       message: redeemed.lockRequested
-        ? "Доступ разрешён. Замок открыт, заберите обед."
+        ? "Обед списан. Команда открытия отправлена замку. Если он не открылся, обратитесь к сотруднику."
         : "Обед получен. Один день подписки списан.",
       remainingPortions:redeemed.remaining,
       pickupPointName:redeemed.pointName,
@@ -128,7 +130,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok:false, error:"Замок точки сейчас не на связи. Обед не списан. Позовите сотрудника." }, { status:503 });
     }
     if (["ALREADY","WRONG_POINT","BAD_QR"].includes(code) || (error instanceof Error && /duplicate key/i.test(error.message))) {
-      return NextResponse.json({ ok:false, error:GENERIC_ERROR }, { status:409 });
+      return NextResponse.json({ ok:false, error:code==="ALREADY"?"Сегодняшний обед уже получен.":code==="WRONG_POINT"?"Это QR другой точки. Используйте QR выбранного пункта самовывоза.":"На сегодня нет доступного обеда по этой подписке." }, { status:409 });
     }
     console.error("Pickup QR redemption failed", error);
     return NextResponse.json({ ok:false, error:GENERIC_ERROR }, { status:400 });

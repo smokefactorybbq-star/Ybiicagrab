@@ -353,3 +353,11 @@ CREATE INDEX IF NOT EXISTS customer_messages_customer_unread_idx ON customer_mes
 ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS manual_writeoff_at TIMESTAMPTZ;
 ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS manual_writeoff_by TEXT;
 ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS manual_writeoff_reason TEXT;
+
+-- 2026-09: private receipt images, idempotent checkout, pickup without time.
+ALTER TABLE customer_messages ADD COLUMN IF NOT EXISTS image_data BYTEA CHECK (octet_length(image_data) <= 5242880);
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS checkout_key TEXT;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS rub_rate NUMERIC(12,6);
+CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_checkout_idx ON subscriptions(user_id,checkout_key) WHERE checkout_key IS NOT NULL;
+UPDATE subscriptions SET default_time=NULL WHERE fulfillment_type='PICKUP' AND default_time IS NOT NULL;
+UPDATE subscription_days SET requested_time=NULL WHERE fulfillment_type='PICKUP' AND requested_time IS NOT NULL;

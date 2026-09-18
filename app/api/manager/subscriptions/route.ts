@@ -117,7 +117,7 @@ export async function PATCH(request: Request) {
       const code = createSubscriptionCode();
       await client.query(
         `UPDATE subscriptions
-         SET status = 'ACTIVE', code = $1, activated_at = now(), updated_at = now()
+         SET status = 'ACTIVE', code = $1, activated_at = now(), paid_at = COALESCE(paid_at, now()), updated_at = now()
          WHERE id = $2`, [code, id]
       );
       await client.query(

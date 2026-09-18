@@ -6,10 +6,14 @@ import { addDaysToIso } from "../../../../lib/subscriptions";
 import { notifyManagerTelegram } from "../../../../lib/telegram";
 import { processSubscriptionDayClosures } from "../../../../lib/subscription-maintenance";
 
+import { isSameOriginMutation } from "../../../../lib/request-security";
+import { validDeliveryTime, isUuid, validDate } from "../../../../lib/validation";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
+  if (!isSameOriginMutation(request)) return NextResponse.json({ok:false,error:"Недопустимый источник запроса"},{status:403});
   try {
     await processSubscriptionDayClosures();
     const account = await getAuthenticatedAccount(request);
@@ -18,7 +22,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as { id?: unknown; serviceDate?: unknown };
     const id = typeof body.id === "string" ? body.id.trim() : "";
     const serviceDate = typeof body.serviceDate === "string" ? body.serviceDate.trim() : "";
-    if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(serviceDate)) {
+    if (!isUuid(id) || !validDate(serviceDate)) {
       return NextResponse.json({ ok: false, error: "Не хватает данных для паузы" }, { status: 400 });
     }
     const clock = await getAppClock();

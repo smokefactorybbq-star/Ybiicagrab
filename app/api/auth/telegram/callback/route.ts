@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createBrowserSession, getAuthenticatedAccount, getOrCreateTelegramAccount, setSessionCookie } from "../../../../../lib/auth";
 import { parseAndVerifyTelegramLogin } from "../../../../../lib/telegram-login";
@@ -38,16 +39,19 @@ export async function GET(request: NextRequest) {
     NextResponse.redirect(`${publicOrigin}/account?telegram=${encodeURIComponent(status)}`, 303);
 
   try {
+    const supplied=Buffer.from(request.nextUrl.searchParams.get("state")||"");
+    const expected=Buffer.from(request.cookies.get("mealpoint_login_state")?.value||"");
+    if(expected.length!==43||supplied.length!==expected.length||!timingSafeEqual(supplied,expected))throw new Error("BAD_TELEGRAM_AUTH");
     const telegram = parseAndVerifyTelegramLogin(new URL(request.url));
-    const current = await getAuthenticatedAccount(request);
-    const userId = await getOrCreateTelegramAccount(telegram, current?.userId || null);
+    const userId = await getOrCreateTelegramAccount(telegram);
     const token = await createBrowserSession(userId);
     const response = redirect("ok");
+    response.cookies.delete("mealpoint_login_state");
     setSessionCookie(response, token);
     return response;
   } catch (error) {
     const code = error instanceof Error ? error.message : "TELEGRAM_LOGIN_FAILED";
     console.error("Telegram login callback failed", error);
-    return redirect(code);
+    return redirect(["TELEGRAM_NOT_CONFIGURED","TELEGRAM_AUTH_EXPIRED","BAD_TELEGRAM_AUTH"].includes(code)?code:"TELEGRAM_LOGIN_FAILED");
   }
 }

@@ -21,7 +21,8 @@ export function isPickupLockConfigured(pointCode: string) {
 export function verifyPickupLockDeviceKey(pointCode: string, suppliedKey: string) {
   const expected = getPickupLockDeviceKey(pointCode);
   if (expected.length < 24 || suppliedKey.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(suppliedKey, "utf8"), Buffer.from(expected, "utf8"));
+  const a=Buffer.from(suppliedKey,"utf8"),b=Buffer.from(expected,"utf8");
+  return a.length===b.length && timingSafeEqual(a,b);
 }
 
 export function getPickupLockOpenSeconds() {

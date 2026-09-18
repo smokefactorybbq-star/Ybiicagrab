@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedAccount } from "../../../../lib/auth";
 import { query } from "../../../../lib/db";
 
+import { isSameOriginMutation } from "../../../../lib/request-security";
+import { validDeliveryTime, isUuid, validDate } from "../../../../lib/validation";
+
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
+  if (!isSameOriginMutation(request)) return NextResponse.json({ok:false,error:"Недопустимый источник запроса"},{status:403});
   const account = await getAuthenticatedAccount(request);
   if (!account) return NextResponse.json({ ok: false, error: "Требуется вход" }, { status: 401 });
 
