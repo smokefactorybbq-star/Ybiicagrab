@@ -79,7 +79,8 @@ const secondCourses: Course[] = [
 ];
 
 const MENU_ANCHOR_UTC = Date.UTC(2026, 6, 31);
-const blockCache = new Map<number, MealTemplate[]>();
+const MENU_CYCLE_DAYS = firstCourses.length;
+let cachedMenuCycle: MealTemplate[] | undefined;
 
 function shuffled<T>(items: T[], seed: number) {
   const result = [...items];
@@ -98,14 +99,12 @@ function shuffled<T>(items: T[], seed: number) {
   return result;
 }
 
-function getMenuBlock(blockIndex: number) {
-  const cached = blockCache.get(blockIndex);
+function getMenuCycle() {
+  if (cachedMenuCycle) return cachedMenuCycle;
 
-  if (cached) {
-    return cached;
-  }
-
-  const normalizedBlock = blockIndex >>> 0;
+  // Repeat one fixed permutation: any 30 consecutive dates must contain
+  // all 30 soups and all 30 mains, including across cycle boundaries.
+  const normalizedBlock = 0;
 
   const soups = shuffled(
     firstCourses,
@@ -130,7 +129,7 @@ function getMenuBlock(blockIndex: number) {
     };
   });
 
-  blockCache.set(blockIndex, block);
+  cachedMenuCycle = block;
 
   return block;
 }
@@ -139,7 +138,7 @@ export function getMealTemplateForDate(isoDate: string): MealTemplate {
   const match = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
 
   if (!match) {
-    return getMenuBlock(0)[0];
+    return getMenuCycle()[0];
   }
 
   const [, year, month, day] = match;
@@ -154,13 +153,12 @@ export function getMealTemplateForDate(isoDate: string): MealTemplate {
     (value - MENU_ANCHOR_UTC) / 86_400_000
   );
 
-  const blockIndex = Math.floor(dayIndex / 30);
-  const dayInBlock = ((dayIndex % 30) + 30) % 30;
+  const dayInCycle = ((dayIndex % MENU_CYCLE_DAYS) + MENU_CYCLE_DAYS) % MENU_CYCLE_DAYS;
 
-  return getMenuBlock(blockIndex)[dayInBlock];
+  return getMenuCycle()[dayInCycle];
 }
 
-export const mealTemplates = getMenuBlock(0);
+export const mealTemplates = getMenuCycle();
 
 export type Nutrition = {
   calories: number;
