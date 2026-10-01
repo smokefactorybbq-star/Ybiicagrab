@@ -32,7 +32,7 @@ function formatBangkok(value?:string|null) {
   }).format(date);
 }
 
-export default function ManagerPickupLock({point="chalong"}:{point?:string}) {
+export default function ManagerPickupLock({point="patong"}:{point?:string}) {
   const [status,setStatus]=useState<LockStatus|null>(null);
   const [loading,setLoading]=useState(true);
   const [opening,setOpening]=useState(false);
