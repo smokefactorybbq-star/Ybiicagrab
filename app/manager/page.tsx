@@ -407,7 +407,7 @@ export default function ManagerPage() {
       </section>
 
       <ManagerPickupQr />
-      <ManagerPickupLock point="chalong" />
+      <ManagerPickupLock point="patong" />
       <ManagerPoints onChanged={()=>void loadManagerData()}/>
       <ManagerDiscounts/>
       {error && <p className="form-error">{error}</p>}
