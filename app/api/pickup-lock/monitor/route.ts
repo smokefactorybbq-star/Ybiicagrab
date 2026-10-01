@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ok:false,error:"UNAUTHORIZED"},{status:401});
   }
 
-  const pointCode = (request.nextUrl.searchParams.get("point") || "chalong").trim().toLowerCase();
+  const pointCode = (request.nextUrl.searchParams.get("point") || "patong").trim().toLowerCase();
   const point = await findPickupPointByCode(pointCode);
   if (!point) return NextResponse.json({ok:false,error:"POINT_NOT_FOUND"},{status:404});
 
