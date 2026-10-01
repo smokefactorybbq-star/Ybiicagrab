@@ -3,6 +3,7 @@
 import Link from "next/link";
 import ManagerPickupQr from "../../components/ManagerPickupQr";
 import ManagerPoints from "../../components/ManagerPoints";
+import ManagerPickupLock from "../../components/ManagerPickupLock";
 import ManagerDiscounts from "../../components/ManagerDiscounts";
 import ManagerAddDays from "../../components/ManagerAddDays";
 import { FormEvent, useEffect, useState } from "react";
@@ -406,6 +407,7 @@ export default function ManagerPage() {
       </section>
 
       <ManagerPickupQr />
+      <ManagerPickupLock point="chalong" />
       <ManagerPoints onChanged={()=>void loadManagerData()}/>
       <ManagerDiscounts/>
       {error && <p className="form-error">{error}</p>}

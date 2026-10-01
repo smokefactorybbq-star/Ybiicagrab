@@ -1317,3 +1317,19 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:3px solid #bc
 @media(max-width:650px){.manager-feature-card{padding:18px}.manager-point-list article{flex-direction:column}.map-view-tabs{flex-wrap:wrap}.course-image-wrap>img.discount-badge{width:78px;height:78px}.interactive-pickup-map{height:380px}.manager-calendar-modal{padding:24px 14px}.discount-calendar{gap:3px}}
 
 .pickup-map-pin>span{transform:rotate(45deg)}
+
+
+/* MealPoint Chalong ESP32 / lock status */
+.pickup-lock-card{border-color:#d9e3dc}
+.pickup-lock-status{display:inline-flex;align-items:center;padding:9px 13px;border-radius:999px;font-size:13px;font-weight:900;white-space:nowrap}
+.pickup-lock-status.is-online{background:#e6f7ec;color:#176b38}
+.pickup-lock-status.is-offline{background:#fff0ee;color:#a52b20}
+.pickup-lock-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}
+.pickup-lock-grid>div{padding:14px 15px;border:1px solid #e1e8e2;border-radius:14px;background:#f8faf8}
+.pickup-lock-grid small{display:block;color:#718078;margin-bottom:5px}
+.pickup-lock-grid strong{display:block;color:#17382b;overflow-wrap:anywhere}
+.pickup-lock-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.pickup-lock-success{color:#176b38;font-weight:800}
+.pickup-lock-meta{font-size:13px;color:#718078}
+@media(max-width:760px){.pickup-lock-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:480px){.pickup-lock-grid{grid-template-columns:1fr}}

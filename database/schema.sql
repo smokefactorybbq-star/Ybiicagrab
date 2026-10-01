@@ -249,6 +249,14 @@ CREATE TABLE IF NOT EXISTS pickup_lock_states (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS pickup_lock_states_seen_idx ON pickup_lock_states(last_seen_at DESC);
+ALTER TABLE pickup_lock_states ADD COLUMN IF NOT EXISTS temperature_c NUMERIC(6,2);
+ALTER TABLE pickup_lock_states ADD COLUMN IF NOT EXISTS humidity_pct NUMERIC(6,2);
+ALTER TABLE pickup_lock_states ADD COLUMN IF NOT EXISTS last_telemetry_at TIMESTAMPTZ;
+ALTER TABLE pickup_lock_states ADD COLUMN IF NOT EXISTS rssi INTEGER;
+ALTER TABLE pickup_lock_states ADD COLUMN IF NOT EXISTS firmware_version TEXT;
+ALTER TABLE pickup_lock_states ADD COLUMN IF NOT EXISTS last_event TEXT;
+ALTER TABLE pickup_lock_states ADD COLUMN IF NOT EXISTS last_event_at TIMESTAMPTZ;
+ALTER TABLE pickup_lock_states ADD COLUMN IF NOT EXISTS last_boot_reason TEXT;
 
 CREATE TABLE IF NOT EXISTS pickup_point_daily_inventory (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

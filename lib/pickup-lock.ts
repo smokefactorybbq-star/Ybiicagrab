@@ -31,6 +31,10 @@ export function getPickupLockOpenSeconds() {
   return Math.min(MAX_OPEN_SECONDS, Math.max(MIN_OPEN_SECONDS, parsed));
 }
 
+export function getPickupLockOnlineTtlSeconds() {
+  return ONLINE_TTL_SECONDS;
+}
+
 export async function assertPickupLockOnline(client: PoolClient, pointCode: string) {
   if (!isPickupLockConfigured(pointCode)) throw new Error("LOCK_NOT_CONFIGURED");
 
@@ -68,4 +72,23 @@ export async function requestPickupLockOpen(
     [input.pointCode, input.subscriptionId, input.subscriptionDayId, seconds]
   );
   return true;
+}
+
+
+export async function requestPickupLockManualOpen(
+  client: PoolClient,
+  pointCode: string
+) {
+  if (!isPickupLockConfigured(pointCode)) throw new Error("LOCK_NOT_CONFIGURED");
+
+  const seconds = getPickupLockOpenSeconds();
+  await client.query(
+    `INSERT INTO pickup_lock_states (point_code, open_until, updated_at)
+     VALUES ($1, now() + ($2::int * interval '1 second'), now())
+     ON CONFLICT (point_code) DO UPDATE SET
+       open_until = GREATEST(COALESCE(pickup_lock_states.open_until, now()), EXCLUDED.open_until),
+       updated_at = now()`,
+    [pointCode, seconds]
+  );
+  return seconds;
 }
