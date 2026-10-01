@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   const auth = await authorizeManager(request);
   if (!auth.ok) return NextResponse.json(auth, { status:auth.status });
 
-  const pointCode = (request.nextUrl.searchParams.get("point") || "chalong").trim().toLowerCase();
+  const pointCode = (request.nextUrl.searchParams.get("point") || "patong").trim().toLowerCase();
   const point = await findPickupPointByCode(pointCode);
   if (!point) return NextResponse.json({ok:false,error:"Точка не найдена"},{status:404});
 
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
   if (!auth.ok) return NextResponse.json(auth,{status:auth.status});
 
   const body = await request.json().catch(() => ({})) as {point?:unknown;action?:unknown};
-  const pointCode = typeof body.point === "string" ? body.point.trim().toLowerCase() : "chalong";
+  const pointCode = typeof body.point === "string" ? body.point.trim().toLowerCase() : "patong";
   const action = typeof body.action === "string" ? body.action : "";
 
   if (action !== "open") return NextResponse.json({ok:false,error:"Неизвестная команда"},{status:400});
