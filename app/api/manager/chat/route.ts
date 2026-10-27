@@ -34,7 +34,8 @@ export async function GET(request: Request) {
     );
   }
   const messages = await query(
-    `SELECT id::text, sender_role AS "senderRole", sender_name AS "senderName", body,
+    `SELECT id::text, sender_role AS "senderRole", sender_name AS "senderName",
+            CASE WHEN image_data IS NOT NULL AND body = '__MEALPOINT_ATTACHMENT_ONLY__' THEN '' ELSE COALESCE(body,'') END AS body,
             CASE WHEN image_data IS NOT NULL THEN '/api/chat/images/' || id::text ELSE NULL END AS "imageUrl",
             CASE WHEN image_data IS NULL THEN NULL
                  WHEN substring(image_data from 1 for 5) = decode('255044462d','hex') THEN 'pdf'

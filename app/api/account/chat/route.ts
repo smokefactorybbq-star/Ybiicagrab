@@ -10,6 +10,8 @@ import { consumeRateLimit } from "../../../../lib/rate-limit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const ATTACHMENT_ONLY_BODY = "__MEALPOINT_ATTACHMENT_ONLY__";
+
 async function ensureConversation(userId: string) {
   return withTransaction(async(client)=>{
   await client.query(`SELECT id FROM users WHERE id=$1 FOR UPDATE`,[userId]);
@@ -37,7 +39,8 @@ export async function GET(request: NextRequest) {
     );
   }
   const messages = await query(
-    `SELECT id::text, sender_role AS "senderRole", sender_name AS "senderName", body,
+    `SELECT id::text, sender_role AS "senderRole", sender_name AS "senderName",
+            CASE WHEN image_data IS NOT NULL AND body = '__MEALPOINT_ATTACHMENT_ONLY__' THEN '' ELSE COALESCE(body,'') END AS body,
             CASE WHEN image_data IS NOT NULL THEN '/api/chat/images/' || id::text ELSE NULL END AS "imageUrl",
             CASE WHEN image_data IS NULL THEN NULL
                  WHEN substring(image_data from 1 for 5) = decode('255044462d','hex') THEN 'pdf'
@@ -63,6 +66,9 @@ export async function POST(request: NextRequest) {
     const limit=await consumeRateLimit(`chat:${account.userId}`,30,60);
     if(!limit.allowed)return NextResponse.json({ok:false,error:"Слишком много сообщений. Подождите минуту."},{status:429});
     const {text,image,attachmentType}=await readChatInput(request);
+    // Some existing databases still enforce a non-empty chat body.
+    // Use an internal marker for attachment-only messages and hide it in GET responses.
+    const storedBody = text || (attachmentType ? ATTACHMENT_ONLY_BODY : text);
     const conversationId = await withTransaction(async (client) => {
       await client.query(`SELECT id FROM users WHERE id=$1 FOR UPDATE`,[account.userId]);
       let conversation = await client.query<{ id: string }>(
@@ -74,7 +80,7 @@ export async function POST(request: NextRequest) {
       const id = conversation.rows[0].id;
       await client.query(
         `INSERT INTO customer_messages (conversation_id, sender_role, sender_name, body, read_by_customer_at, image_data)
-         VALUES ($1, 'CUSTOMER', $2, $3, now(), $4)`, [id, account.fullName, text, image]
+         VALUES ($1, 'CUSTOMER', $2, $3, now(), $4)`, [id, account.fullName, storedBody, image]
       );
       await client.query(`UPDATE customer_conversations SET updated_at = now() WHERE id = $1`, [id]);
       return id;
