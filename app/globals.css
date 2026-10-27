@@ -1503,3 +1503,70 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:3px solid #bc
 }
 .chat-file-link { display:inline-flex; align-items:center; gap:8px; margin:10px 0; padding:11px 14px; border:1px solid #cbd8cf; border-radius:10px; background:#fff; color:#17382b; font-weight:700; text-decoration:none; }
 .chat-file-link:hover { background:#f4f8f4; }
+
+/* "Что входит в обед?" — compact two-column layout */
+.meal-includes-course {
+  display: grid;
+  grid-template-columns: minmax(0, 1.18fr) minmax(280px, .82fr);
+  gap: 28px;
+  align-items: stretch;
+  padding: 26px 28px;
+  overflow: hidden;
+}
+.meal-includes-course > .meal-includes-copy {
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+.meal-includes-course > .meal-includes-copy > span {
+  display: block;
+  color: #85704b;
+  font-size: 10px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.meal-includes-course > .meal-includes-copy h3 {
+  margin: 10px 0 14px;
+}
+.meal-includes-course > .meal-includes-copy p {
+  margin: 0 0 12px;
+  line-height: 1.55;
+}
+.meal-includes-course > .meal-includes-copy p:last-child {
+  margin-bottom: 0;
+}
+.meal-details-course > .meal-includes-image {
+  padding: 0;
+  height: auto;
+  min-height: 0;
+  align-self: stretch;
+  border-radius: 4px;
+  background: #f7f4ed;
+}
+.meal-includes-image > img:not(.discount-badge) {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+@media(max-width:720px){
+  .meal-includes-course {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    padding: 22px;
+  }
+  .meal-includes-course > .meal-includes-copy {
+    order: 1;
+  }
+  .meal-details-course > .meal-includes-image {
+    order: 2;
+    width: 100%;
+    height: min(320px, 44vh);
+    min-height: 220px;
+  }
+}
