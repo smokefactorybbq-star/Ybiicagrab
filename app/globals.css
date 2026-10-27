@@ -1570,3 +1570,99 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:3px solid #bc
     min-height: 220px;
   }
 }
+
+/* Mobile subscription day rows — stable alignment for date, meal, fulfillment and actions. */
+@media (max-width: 720px) {
+  .subscription-meal-history > div {
+    display: grid;
+    grid-template-columns: 88px minmax(0, 1fr);
+    column-gap: 16px;
+    row-gap: 12px;
+    align-items: start;
+    padding: 18px 4px;
+  }
+
+  .subscription-meal-history > div > time {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    align-self: start;
+    margin: 0;
+    line-height: 1.35;
+    text-align: left;
+  }
+
+  .subscription-meal-history > div > .history-meal-name {
+    grid-column: 2;
+    grid-row: 1;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    text-align: left;
+  }
+
+  .subscription-meal-history > div > .history-meal-name strong,
+  .subscription-meal-history > div > .history-meal-name small {
+    display: block;
+    width: 100%;
+    text-align: left;
+  }
+
+  .subscription-meal-history > div > .meal-day-actions {
+    grid-column: 2;
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    min-width: 0;
+    gap: 10px;
+    justify-items: stretch;
+    align-items: stretch;
+  }
+
+  .subscription-meal-history .day-fulfillment-summary {
+    grid-column: 1 / -1;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    justify-items: start;
+    margin: 0;
+    text-align: left;
+  }
+
+  .subscription-meal-history .day-fulfillment-summary strong,
+  .subscription-meal-history .day-fulfillment-summary small {
+    display: block;
+    width: 100%;
+    text-align: left;
+  }
+
+  .subscription-meal-history .meal-day-actions > button {
+    width: 100%;
+    min-height: 54px;
+    margin: 0;
+    padding: 10px 8px;
+    line-height: 1.25;
+    text-align: center;
+  }
+
+  .subscription-meal-history .meal-day-actions > button:only-of-type {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 390px) {
+  .subscription-meal-history > div {
+    grid-template-columns: 74px minmax(0, 1fr);
+    column-gap: 12px;
+  }
+
+  .subscription-meal-history > div > .meal-day-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .subscription-meal-history .day-fulfillment-summary,
+  .subscription-meal-history .meal-day-actions > button,
+  .subscription-meal-history .meal-day-actions > button:only-of-type {
+    grid-column: 1;
+  }
+}
