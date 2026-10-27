@@ -69,12 +69,8 @@ export default function Header() {
   return (
     <>
       <header className="site-header">
-        <Link className="brand" href="/#top" aria-label="MealPoint — наверх страницы">
-          <span className="brand-mark">M</span>
-          <span>
-            <strong>MealPoint</strong>
-            <small>Еда по подписке.</small>
-          </span>
+        <Link className="brand" href="/#top" aria-label="MealPoint — Еда по подписке">
+          <img className="brand-logo" src="/mealpoint-logo.png" alt="MealPoint — Еда по подписке" />
         </Link>
 
         <nav className="desktop-nav" aria-label="Основная навигация">
