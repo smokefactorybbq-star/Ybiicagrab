@@ -76,10 +76,7 @@ export function calculateSubscriptionPrice(dates: string[]) {
 }
 
 export function getPauseLimit(selectedDays: number) {
-  if (selectedDays >= 30) return 3;
-  if (selectedDays >= 14) return 2;
-  if (selectedDays >= 7) return 1;
-  return 0;
+  return Math.floor(Math.max(0, selectedDays) / 5);
 }
 
 export function createSubscriptionCode() {

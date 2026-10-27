@@ -2,6 +2,7 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 import type { NextRequest, NextResponse } from "next/server";
 import { query, withTransaction } from "./db";
 import type { TelegramLoginData } from "./telegram-login";
+import { CURRENT_TERMS_VERSION } from "./terms";
 
 export const SESSION_COOKIE = "mealpoint_session";
 const SESSION_DAYS = 30;
@@ -196,14 +197,14 @@ export async function getAuthenticatedAccount(request: NextRequest): Promise<Aut
             COALESCE(ca.phone, u.phone, '') AS phone,
             COALESCE(u.address, '') AS address,
             COALESCE(u.photo_url, u.avatar_url, '') AS "photoUrl",
-            ca.terms_accepted_at::text AS "termsAcceptedAt",
+            CASE WHEN ca.terms_version = $2 THEN ca.terms_accepted_at::text ELSE NULL END AS "termsAcceptedAt",
             COALESCE(u.telegram_username, u.username, '') AS "telegramUsername"
      FROM customer_sessions cs
      JOIN users u ON u.id = cs.user_id
      LEFT JOIN customer_accounts ca ON ca.user_id = u.id
      WHERE cs.token_hash = $1 AND cs.expires_at > now()
      LIMIT 1`,
-    [hashSessionToken(token)]
+    [hashSessionToken(token), CURRENT_TERMS_VERSION]
   );
   const row = result.rows[0];
   if (!row) return null;

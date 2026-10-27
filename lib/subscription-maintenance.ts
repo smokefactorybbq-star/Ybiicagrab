@@ -4,32 +4,40 @@ import { getAppClock } from "./app-time";
 let running = false;
 
 /**
- * DELIVERY: consumed automatically at 18:00 Phuket time unless paused.
- * PICKUP: consumed only after a successful customer QR scan.
- * Manager delivery confirmation is informational and does not itself decrement a day.
+ * DELIVERY: remains open through the service date because a customer may agree
+ * a time after 18:00 with the manager. It is consumed when the date becomes past.
+ * PICKUP: consumed immediately after a successful QR scan, or automatically
+ * at 21:00 if the meal was not collected.
  */
 export async function processSubscriptionDayClosures() {
   if (running) return { processed: 0 };
   running = true;
   try {
     const clock = await getAppClock();
-    const canCloseToday = clock.hour > 18 || (clock.hour === 18 && clock.minute >= 0);
+    const canClosePickupToday = clock.hour >= 21;
     const result = await withTransaction(async (client) => {
       const changed = await client.query<{ subscription_id: string }>(
         `UPDATE subscription_days sd
-         SET status=CASE WHEN sd.delivery_received_at IS NOT NULL THEN 'REDEEMED'::subscription_day_status ELSE 'MISSED'::subscription_day_status END,
+         SET status=CASE
+               WHEN COALESCE(sd.fulfillment_type,s.fulfillment_type)='DELIVERY' AND sd.delivery_received_at IS NOT NULL
+                 THEN 'REDEEMED'::subscription_day_status
+               ELSE 'MISSED'::subscription_day_status
+             END,
              consumed_at=COALESCE(consumed_at,now())
          FROM subscriptions s
          WHERE sd.subscription_id=s.id
            AND s.status='ACTIVE'
-           AND COALESCE(sd.fulfillment_type,s.fulfillment_type)='DELIVERY'
            AND sd.status IN ('PLANNED','AVAILABLE')
            AND (
              sd.service_date < $1::date
-             OR (sd.service_date = $1::date AND $2::boolean)
+             OR (
+               sd.service_date = $1::date
+               AND COALESCE(sd.fulfillment_type,s.fulfillment_type)='PICKUP'
+               AND $2::boolean
+             )
            )
          RETURNING sd.subscription_id::text`,
-        [clock.date, canCloseToday]
+        [clock.date, canClosePickupToday]
       );
       const counts = new Map<string, number>();
       for (const row of changed.rows) counts.set(row.subscription_id, (counts.get(row.subscription_id) || 0) + 1);
