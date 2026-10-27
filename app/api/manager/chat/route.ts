@@ -34,7 +34,12 @@ export async function GET(request: Request) {
     );
   }
   const messages = await query(
-    `SELECT id::text, sender_role AS "senderRole", sender_name AS "senderName", body, CASE WHEN image_data IS NOT NULL THEN '/api/chat/images/' || id::text ELSE NULL END AS "imageUrl", created_at::text AS "createdAt"
+    `SELECT id::text, sender_role AS "senderRole", sender_name AS "senderName", body,
+            CASE WHEN image_data IS NOT NULL THEN '/api/chat/images/' || id::text ELSE NULL END AS "imageUrl",
+            CASE WHEN image_data IS NULL THEN NULL
+                 WHEN substring(image_data from 1 for 5) = decode('255044462d','hex') THEN 'pdf'
+                 ELSE 'image' END AS "attachmentType",
+            created_at::text AS "createdAt"
      FROM customer_messages WHERE conversation_id = $1 ORDER BY created_at DESC, id DESC LIMIT 400`, [conversationId]
   );
   return NextResponse.json({ ok: true, customer: user.rows[0], messages: messages.rows.reverse() }, { headers: { "Cache-Control": "no-store" } });

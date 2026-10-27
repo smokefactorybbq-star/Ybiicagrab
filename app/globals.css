@@ -1474,3 +1474,5 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:3px solid #bc
     bottom: calc(90px + env(safe-area-inset-bottom));
   }
 }
+.chat-file-link { display:inline-flex; align-items:center; gap:8px; margin:10px 0; padding:11px 14px; border:1px solid #cbd8cf; border-radius:10px; background:#fff; color:#17382b; font-weight:700; text-decoration:none; }
+.chat-file-link:hover { background:#f4f8f4; }
