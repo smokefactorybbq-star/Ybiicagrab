@@ -78,7 +78,11 @@ export async function POST(request: NextRequest) {
     void notifyManagerTelegram({ text: `<b>💬 MealPoint: сообщение клиента</b>\nКлиент: ${escapeHtml(account.fullName)}\n${escapeHtml(text)}` });
     return NextResponse.json({ ok: true, conversationId });
   } catch (error) {
-    if(error instanceof Error && ["IMAGE_TOO_LARGE","BAD_MESSAGE","BAD_IMAGE","EMPTY_BODY"].includes(error.message))return NextResponse.json({ok:false,error:"Добавьте текст до 4000 символов или изображение JPG, PNG, WebP до 5 МБ (до 16 мегапикселей)."},{status:400});
+    if (error instanceof Error) {
+      if (error.message === "IMAGE_TOO_LARGE") return NextResponse.json({ ok: false, error: "Изображение должно быть не больше 5 МБ." }, { status: 400 });
+      if (error.message === "IMAGE_PIXELS_TOO_LARGE") return NextResponse.json({ ok: false, error: "Слишком большое разрешение изображения. Выберите другое фото." }, { status: 400 });
+      if (["BAD_MESSAGE", "BAD_IMAGE", "EMPTY_BODY"].includes(error.message)) return NextResponse.json({ ok: false, error: "Можно отправить текст до 4000 символов или изображение JPG, PNG, WebP/AVIF до 5 МБ." }, { status: 400 });
+    }
     console.error("Customer chat send failed", error);
     return NextResponse.json({ ok: false, error: "Не удалось отправить сообщение" }, { status: 500 });
   }
