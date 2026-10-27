@@ -1334,3 +1334,32 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:3px solid #bc
 .pickup-lock-meta{font-size:13px;color:#718078}
 @media(max-width:760px){.pickup-lock-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:480px){.pickup-lock-grid{grid-template-columns:1fr}}
+
+/* Account checkout flow — customer details before payment */
+.purchase-card.purchase-card-top { grid-template-columns:minmax(0,1fr) minmax(320px,.72fr); align-items:stretch; margin-top:22px; margin-bottom:24px; }
+.purchase-card-top .subscription-checkout-form { display:grid; align-content:start; gap:13px; }
+.purchase-card-top .subscription-checkout-form > label { display:grid; gap:7px; }
+.purchase-card-top .subscription-checkout-form input[type="time"] { width:100%; border:1px solid var(--line); padding:13px; border-radius:12px; background:var(--paper); outline:none; font:inherit; }
+.checkout-customer-summary { display:grid; gap:4px; padding:14px 15px; border:1px solid var(--line); border-radius:14px; background:#faf9f5; }
+.checkout-customer-summary > span { color:#61706b; font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:.04em; }
+.checkout-customer-summary > strong { font-size:16px; }
+.checkout-customer-summary > small { color:#687671; overflow-wrap:anywhere; }
+.purchase-pay-button { width:100%; min-height:58px; border:0; padding:17px 22px; border-radius:15px; color:#fff; background:#219653; box-shadow:0 10px 24px rgba(33,150,83,.22); cursor:pointer; font-size:19px; font-weight:900; }
+.purchase-pay-button:hover:not(:disabled) { background:#187a42; transform:translateY(-1px); }
+.purchase-pay-button:disabled { opacity:.48; cursor:not-allowed; box-shadow:none; }
+.duplicate-checkout-note { color:#687671; line-height:1.45; }
+.checkout-profile-modal { width:min(620px,100%); }
+.checkout-profile-modal > label { display:grid; gap:7px; margin-top:15px; color:#61706b; font-size:12px; font-weight:900; text-align:left; }
+.checkout-profile-modal > label input,.checkout-profile-modal > label textarea { width:100%; border:1px solid var(--line); padding:13px; border-radius:12px; background:var(--paper); outline:none; font:inherit; }
+.checkout-profile-modal > label textarea { min-height:96px; resize:vertical; }
+.checkout-pickup-summary { display:grid; gap:5px; margin-top:15px; padding:15px; border:1px solid var(--line); border-radius:14px; background:var(--cream); }
+.checkout-pickup-summary span { color:#61706b; font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:.04em; }
+.checkout-pickup-summary small { color:#687671; }
+.payment-modal > button.checkout-profile-pay-button { width:100%; margin-top:20px; border:0; padding:16px 20px; border-radius:14px; color:#fff; background:#219653; cursor:pointer; font-weight:900; }
+.payment-modal > button.checkout-profile-pay-button:hover:not(:disabled) { background:#187a42; }
+.payment-modal > button.checkout-profile-pay-button:disabled { opacity:.55; cursor:wait; }
+
+@media (max-width:900px){
+  .purchase-card.purchase-card-top { grid-template-columns:1fr; }
+  .purchase-card.purchase-card-top > div { grid-column:1; }
+}
