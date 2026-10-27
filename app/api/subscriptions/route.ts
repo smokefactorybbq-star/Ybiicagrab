@@ -75,8 +75,8 @@ export async function POST(request: NextRequest) {
     if (phone.length < 8) return badRequest("Введите корректный телефон");
     if (fulfillmentType === "DELIVERY" && !validDeliveryTime(requestedTime || "")) return badRequest("Выберите время с 13:30 до 18:00");
     if (fulfillmentType === "DELIVERY" && (address.length < 5 || address.length > 1000)) return badRequest("Введите адрес доставки");
-    const resolvedPoint=fulfillmentType==="PICKUP"?(typeof body.pickupPointCode==="string"?await findPickupPointByCode(body.pickupPointCode):await findPickupPointByName(pickupPointName)):null;
-    if (fulfillmentType === "PICKUP" && !resolvedPoint) return badRequest("Выберите пункт самовывоза");
+    const resolvedPoint=typeof body.pickupPointCode==="string"?await findPickupPointByCode(body.pickupPointCode):await findPickupPointByName(pickupPointName);
+    if (!resolvedPoint) return badRequest("Выберите пункт выдачи");
 
     const clock = await getAppClock();
     const dateValidation = validateConsecutiveDates(dates, clock.date);
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
           `INSERT INTO subscription_days (
              subscription_id,service_date,status,fulfillment_type,pickup_point_id,requested_time,customer_name,customer_phone,delivery_address,price_thb,discount_percent
            ) VALUES ($1,$2,'PLANNED',$3,$4,$5,$6,$7,$8,$9,$10)`,
-          [subscriptionId,serviceDate,fulfillmentType,fulfillmentType === "PICKUP" ? resolvedPoint?.id || null : null,requestedTime,customerName,phone,fulfillmentType === "DELIVERY" ? address : null,quote.days.find(d=>d.date===serviceDate)!.price,quote.days.find(d=>d.date===serviceDate)!.percent]
+          [subscriptionId,serviceDate,fulfillmentType,resolvedPoint?.id || null,requestedTime,customerName,phone,fulfillmentType === "DELIVERY" ? address : null,quote.days.find(d=>d.date===serviceDate)!.price,quote.days.find(d=>d.date===serviceDate)!.percent]
         );
       }
       await client.query(
@@ -132,6 +132,7 @@ export async function POST(request: NextRequest) {
       `Дней: ${dates.length}`,
       `Период: ${dates[0]} — ${dates[dates.length-1]}`,
       `Получение: ${fulfillmentType === "DELIVERY" ? "доставка" : "самовывоз"}`,
+      `Пункт выдачи: ${escapeHtml(pickupPoint || "не указан")}`,
       fulfillmentType === "DELIVERY" ? `Адрес: ${escapeHtml(address)}` : "",
       requestedTime ? `Время доставки: ${requestedTime}` : "",
       `Оплата подписки: ${escapeHtml(paymentMethod)}`,

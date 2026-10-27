@@ -165,8 +165,8 @@ export default function SubscriptionCalendar() {
 
   function saveDraftAndOpenAccount() {
     if (!selected.length||!catalogReady) return;
-    if (fulfillmentChoice === "PICKUP" && !chosenPickupPoint) {
-      setCheckoutError("Выберите точку самовывоза");
+    if (!chosenPickupPoint) {
+      setCheckoutError("Выберите пункт выдачи");
       return;
     }
     const draft: SubscriptionDraft = {
@@ -176,12 +176,12 @@ export default function SubscriptionCalendar() {
       total,
       createdAt: new Date().toISOString(),
       fulfillmentType: fulfillmentChoice,
-      pickupPointName: fulfillmentChoice === "PICKUP" ? pickupPoints.find(p=>p.code===chosenPickupPoint)?.name : undefined,
-      pickupPointCode: fulfillmentChoice === "PICKUP" ? chosenPickupPoint : undefined,
+      pickupPointName: pickupPoints.find(p=>p.code===chosenPickupPoint)?.name,
+      pickupPointCode: chosenPickupPoint,
       duplicateConfirmed
     };
     localStorage.setItem("mealpoint_subscription_draft", JSON.stringify(draft));
-    router.push("/account?checkout=1");
+    router.push("/account?checkout=1#new-subscription");
   }
 
   async function goToCheckout() {
@@ -374,17 +374,15 @@ export default function SubscriptionCalendar() {
               <button type="button" className={fulfillmentChoice === "PICKUP" ? "selected" : ""} onClick={() => setFulfillmentChoice("PICKUP")}>Самовывоз</button>
               <button type="button" className={fulfillmentChoice === "DELIVERY" ? "selected" : ""} onClick={() => setFulfillmentChoice("DELIVERY")}>Доставка</button>
             </div>
-            {fulfillmentChoice === "PICKUP" && (
-              <label>Точка выдачи
-                <select value={chosenPickupPoint} onChange={(event) => setChosenPickupPoint(event.target.value)}>
-                  {pickupPoints.map((point) => <option key={point.code} value={point.code}>{point.shortName} — {point.address}</option>)}
-                </select>
-              </label>
-            )}
+            <label>Пункт выдачи {fulfillmentChoice === "DELIVERY" ? "(откуда будет доставка)" : "(где забирать)"}
+              <select value={chosenPickupPoint} onChange={(event) => setChosenPickupPoint(event.target.value)}>
+                {pickupPoints.map((point) => <option key={point.code} value={point.code}>{point.shortName} — {point.address}</option>)}
+              </select>
+            </label>
             <div className="package-preview">
               <span>{selected.length} дней</span><b>·</b><span>{fulfillmentChoice === "PICKUP" ? "Самовывоз" : "Доставка"}</span><strong>{total.toLocaleString("ru-RU")} ฿</strong>
             </div>
-            <button type="button" disabled={!catalogReady||(fulfillmentChoice==="PICKUP"&&!chosenPickupPoint)} onClick={saveDraftAndOpenAccount}>Перейти в личный кабинет</button>
+            <button type="button" disabled={!catalogReady||!chosenPickupPoint} onClick={saveDraftAndOpenAccount}>Оформить подписку</button>
           </div>
         </div>
       )}

@@ -23,6 +23,7 @@ type Subscription = {
   rub_rate?:number|null; pickup_point_name?:string|null; pickup_point_code?:string|null; customer_name?:string; customer_phone?:string; delivery_address?:string|null; default_time?:string|null; days:Day[];
 };
 type Clock = { date:string; hour:number; minute:number; isTestMode?:boolean };
+type FulfillmentEditor = { subscriptionId:string; serviceDate:string; fulfillmentType:"PICKUP"|"DELIVERY"; pickupPointCode:string; requestedTime:string };
 
 const paymentOptions = [
   {id:"PROMPTPAY",title:"PromptPay / Thai bank"},
@@ -85,6 +86,7 @@ export default function AccountPage(){
   const [termsOpen,setTermsOpen]=useState(false); const [termsChecked,setTermsChecked]=useState(false); const [pauseLoading,setPauseLoading]=useState("");
   const [timeLoading,setTimeLoading]=useState(""); const [fulfillmentLoading,setFulfillmentLoading]=useState("");
   const [pickupChoices,setPickupChoices]=useState<Record<string,string>>({});
+  const [fulfillmentEditor,setFulfillmentEditor]=useState<FulfillmentEditor|null>(null);
   const [scanTarget,setScanTarget]=useState<Subscription|null>(null); const [scanMessage,setScanMessage]=useState(""); const [scanBusy,setScanBusy]=useState(false);
   const [chatOpen,setChatOpen]=useState(false); const [chatMessages,setChatMessages]=useState<ChatMessage[]>([]); const [chatText,setChatText]=useState("");
   const [chatUnread,setChatUnread]=useState(0); const [chatLoading,setChatLoading]=useState(false); const [chatError,setChatError]=useState("");
@@ -140,6 +142,13 @@ export default function AccountPage(){
   },[loadAccount]);
   useEffect(()=>{if(account)void loadSubscriptions();},[account,loadSubscriptions]);
   useEffect(()=>{
+    if(!draft)return;
+    const params=new URLSearchParams(window.location.search);
+    if(params.get("checkout")!=="1")return;
+    const timer=window.setTimeout(()=>document.getElementById("new-subscription")?.scrollIntoView({behavior:"smooth",block:"start"}),80);
+    return()=>window.clearTimeout(timer);
+  },[draft]);
+  useEffect(()=>{
     if(!account)return;
     const payload={fullName:name.trim(),phone:phone.trim(),address:address.trim()};
     if(payload.fullName===account.fullName&&payload.phone===account.phone&&payload.address===account.address){setProfileStatus("Сохранено");return;}
@@ -194,14 +203,6 @@ export default function AccountPage(){
     catch{setScanMessage("Ошибка чтения QR");setScanBusy(false);}
   }
 
-  const scannablePickupSubscriptions=useMemo(()=>subscriptions.filter(s=>{
-    const todayDay=s.days.find(day=>day.service_date===clock.date);
-    return (todayDay?.fulfillment_type||s.fulfillment_type)==="PICKUP"&&s.status==="ACTIVE"&&Boolean(todayDay)&&!todayDay?.redeemed_at&&["PLANNED","AVAILABLE"].includes(todayDay?.status||"")&&clock.hour>=13&&clock.hour<21;
-  }),[subscriptions,clock]);
-  const primaryScannablePickup=scannablePickupSubscriptions[0]||null;
-  const todaysPickupSubscription=subscriptions.find(s=>{const day=s.days.find(item=>item.service_date===clock.date);return s.status==="ACTIVE"&&Boolean(day)&&(day?.fulfillment_type||s.fulfillment_type)==="PICKUP"&&["PLANNED","AVAILABLE"].includes(day?.status||"");})||null;
-  const hasPickupSubscription=subscriptions.some(s=>s.days.some(day=>(day.fulfillment_type||s.fulfillment_type)==="PICKUP")&&["ACTIVE","COMPLETED","AWAITING_ACTIVATION"].includes(s.status));
-
   const exactDuplicate=useMemo(()=>draft?subscriptions.some(s=>s.status==="ACTIVE"&&s.days.map(d=>d.service_date).join("|")===draft.dates.join("|")):false,[draft,subscriptions]);
   async function acceptTerms(){ if(!termsChecked)return; const r=await fetch("/api/account/terms",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accepted:true})}); const d=await r.json(); if(!r.ok||!d.ok){setError(d.error);return;} setAccount(a=>a?{...a,termsAcceptedAt:d.termsAcceptedAt}:a); setTermsOpen(false); }
   async function logout(){await fetch("/api/account/logout",{method:"POST"});setAccount(null);setSubscriptions([]);}
@@ -225,7 +226,7 @@ export default function AccountPage(){
     if(!draft||(fulfillment==="DELIVERY"&&!validSubscriptionTime(requestedTime)))return setError("Выберите время с 13:30 до 18:00");
     if(!account||account.fullName.trim().length<2||account.phone.trim().length<8)return setError("Заполните имя и телефон");
     if(fulfillment==="DELIVERY"&&address.trim().length<5)return setError("Введите адрес доставки");
-    if(fulfillment==="PICKUP"&&!pickupPoints.some(p=>draft.pickupPointCode?p.code===draft.pickupPointCode:p.name===pickupPointName))return setError("Выберите пункт самовывоза");
+    if(!pickupPoints.some(p=>draft.pickupPointCode?p.code===draft.pickupPointCode:p.name===pickupPointName))return setError("Выберите пункт выдачи");
     if(profileStatus!=="Сохранено")return setError("Дождитесь сохранения данных клиента");
     setSubmitting(true);setError("");
     try{ const r=await fetch("/api/subscriptions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({dates:draft.dates,paymentMethod,fulfillmentType:fulfillment,address,requestedTime:fulfillment==="DELIVERY"?requestedTime:null,pickupPointName,pickupPointCode:draft.pickupPointCode,expectedTotal:draft.total,checkoutKey:draft.checkoutKey})}); const d=await r.json(); if(!r.ok||!d.ok){if(d.priceChanged)await reloadCatalog();throw new Error(d.error||"Ошибка оформления");} localStorage.removeItem("mealpoint_subscription_draft"); setReceipt({method:d.subscription.paymentMethod,total:d.subscription.total,rubRate:d.subscription.rubRate});setDraft(null);setPaymentOpen(false);await loadSubscriptions(); }
@@ -234,12 +235,17 @@ export default function AccountPage(){
   async function pause(id:string,date:string){setPauseLoading(`${id}:${date}`);const r=await fetch("/api/subscriptions/pause",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,serviceDate:date})});const d=await r.json();if(!r.ok||!d.ok)setError(d.error||"Ошибка паузы");else await loadSubscriptions();setPauseLoading("");}
   async function changeTime(id:string,date:string,time:string){ if(!validSubscriptionTime(time))return setError("Время должно быть с 13:30 до 18:00"); setTimeLoading(`${id}:${date}`); const r=await fetch("/api/subscriptions/schedule",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({subscriptionId:id,serviceDate:date,requestedTime:time})});const d=await r.json();if(!r.ok||!d.ok)setError(d.error||"Не удалось изменить время");else await loadSubscriptions();setTimeLoading(""); }
   async function changeFulfillment(id:string,date:string,type:"PICKUP"|"DELIVERY",pickupPointCode:string,time:string){
-    if(type==="DELIVERY"&&address.trim().length<5)return setError("Укажите адрес доставки в блоке «Данные клиента»");
-    if(type==="DELIVERY"&&!validSubscriptionTime(time))return setError("Время доставки должно быть с 13:30 до 18:00");
-    if(type==="PICKUP"&&!pickupPointCode)return setError("Выберите точку самовывоза");
+    if(type==="DELIVERY"&&address.trim().length<5){setError("Укажите адрес доставки в блоке «Данные клиента»");return false;}
+    if(type==="DELIVERY"&&!validSubscriptionTime(time)){setError("Время доставки должно быть с 13:30 до 18:00");return false;}
+    if(!pickupPointCode){setError("Выберите пункт выдачи");return false;}
     const key=`${id}:${date}`;setFulfillmentLoading(key);setError("");
-    try{const r=await fetch("/api/subscriptions/fulfillment",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({subscriptionId:id,serviceDate:date,fulfillmentType:type,pickupPointCode,requestedTime:type==="DELIVERY"?time:null,deliveryAddress:type==="DELIVERY"?address.trim():null})});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||"Не удалось изменить способ получения");await loadSubscriptions();}
-    catch(e){setError(e instanceof Error?e.message:"Не удалось изменить способ получения");}finally{setFulfillmentLoading("");}
+    try{const r=await fetch("/api/subscriptions/fulfillment",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({subscriptionId:id,serviceDate:date,fulfillmentType:type,pickupPointCode,requestedTime:type==="DELIVERY"?time:null,deliveryAddress:type==="DELIVERY"?address.trim():null})});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||"Не удалось изменить способ получения");await loadSubscriptions();return true;}
+    catch(e){setError(e instanceof Error?e.message:"Не удалось изменить способ получения");return false;}finally{setFulfillmentLoading("");}
+  }
+  async function saveFulfillmentEditor(){
+    if(!fulfillmentEditor)return;
+    const saved=await changeFulfillment(fulfillmentEditor.subscriptionId,fulfillmentEditor.serviceDate,fulfillmentEditor.fulfillmentType,fulfillmentEditor.pickupPointCode,fulfillmentEditor.requestedTime);
+    if(saved)setFulfillmentEditor(null);
   }
   function canEditDay(date:string){ if(date>clock.date)return true; if(date<clock.date)return false; return clock.hour<11; }
 
@@ -251,14 +257,10 @@ export default function AccountPage(){
     {clock.isTestMode&&<p className="test-mode-banner">Тестовое время: {clock.date} {String(clock.hour).padStart(2,"0")}:{String(clock.minute).padStart(2,"0")}</p>}
     {catalogError&&<p className="form-error">{catalogError}</p>}
     {error&&<p className="form-error account-error">{error}</p>}
-    {draft&&<section className="purchase-card purchase-card-top"><div><span className="eyebrow">Новая подписка</span><h2>{draft.selectedDays} дней неодинаковой еды</h2><p>{formatDate(draft.dates[0])} — {formatDate(draft.dates[draft.dates.length-1])}</p><div className="purchase-numbers"><strong>{draft.total.toLocaleString("ru-RU")} ฿</strong><span>{draft.rate} ฿ базовая цена за день</span></div></div><div className="subscription-checkout-form"><div className="fulfillment-choice-summary"><strong>{fulfillment==="PICKUP"?"Самовывоз":"Доставка"}</strong><small>{fulfillment==="PICKUP"?(pickupPointName||"Точка не выбрана"):"По адресу клиента"}</small><Link href="/#subscription">Изменить способ получения</Link></div>{fulfillment==="DELIVERY"&&<label>Время доставки<input type="time" min="13:30" max="18:00" step="900" value={requestedTime} onChange={e=>setRequestedTime(e.target.value)}/></label>}<div className="checkout-customer-summary"><span>Данные клиента</span><strong>{name.trim()||"Имя не указано"}</strong><small>{phone.trim()||"Телефон не указан"}</small>{fulfillment==="DELIVERY"&&<small>{address.trim()||"Адрес доставки не указан"}</small>}</div><button type="button" className="purchase-pay-button" disabled={!catalogReady} onClick={()=>{setError("");setCheckoutProfileOpen(true)}}>Оплатить</button>{exactDuplicate&&<small className="duplicate-checkout-note">Будет оформлена ещё одна подписка на выбранные даты.</small>}</div></section>}
+    {draft&&<section id="new-subscription" className="purchase-card purchase-card-top"><div><span className="eyebrow">Новая подписка</span><h2>{draft.selectedDays} дней неодинаковой еды</h2><p>{formatDate(draft.dates[0])} — {formatDate(draft.dates[draft.dates.length-1])}</p><div className="purchase-numbers"><strong>{draft.total.toLocaleString("ru-RU")} ฿</strong><span>{draft.rate} ฿ базовая цена за день</span></div></div><div className="subscription-checkout-form"><div className="fulfillment-choice-summary"><strong>{fulfillment==="PICKUP"?"Самовывоз":"Доставка"}</strong><small>{fulfillment==="PICKUP"?`Самовывоз из пункта выдачи «${pickupPointName||"точка не выбрана"}»`:`Доставка с пункта выдачи «${pickupPointName||"точка не выбрана"}»`}</small><Link href="/#subscription">Изменить способ получения</Link></div>{fulfillment==="DELIVERY"&&<label>Время доставки<input type="time" min="13:30" max="18:00" step="900" value={requestedTime} onChange={e=>setRequestedTime(e.target.value)}/></label>}<div className="checkout-customer-summary"><span>Данные клиента</span><strong>{name.trim()||"Имя не указано"}</strong><small>{phone.trim()||"Телефон не указан"}</small>{fulfillment==="DELIVERY"&&<small>{address.trim()||"Адрес доставки не указан"}</small>}</div><button type="button" className="purchase-pay-button" disabled={!catalogReady} onClick={()=>{setError("");setCheckoutProfileOpen(true)}}>Оплатить</button>{exactDuplicate&&<small className="duplicate-checkout-note">Будет оформлена ещё одна подписка на выбранные даты.</small>}</div></section>}
 
     <section className="account-profile-form"><div className="account-profile-heading"><div><span className="eyebrow">Данные клиента</span><h2>Контакты</h2></div><span className={`autosave-status ${profileStatus==="Сохранено"?"saved":profileStatus==="Сохраняем…"?"saving":"error"}`}>{profileStatus}</span></div><div className="profile-fields-grid"><label>Имя<input value={name} onChange={e=>setName(e.target.value)}/></label><label>Телефон<input value={phone} onChange={e=>setPhone(e.target.value)} inputMode="tel" autoComplete="tel" placeholder="+66 81 234 5678"/></label><label className="profile-address-field">Адрес доставки<textarea value={address} onChange={e=>setAddress(e.target.value)}/></label></div></section>
 
-    <section className="account-pickup-scanner-card">
-      <div><span className="eyebrow">Самовывоз</span><h2>Сканировать QR</h2><p>{primaryScannablePickup?`Подписка на сегодня ${primaryScannablePickup.code?`№ ${primaryScannablePickup.code}`:"на самовывоз"}${primaryScannablePickup.days.find(day=>day.service_date===clock.date)?.pickup_point_name||primaryScannablePickup.pickup_point_name?` · ${primaryScannablePickup.days.find(day=>day.service_date===clock.date)?.pickup_point_name||primaryScannablePickup.pickup_point_name}`:""}.`:todaysPickupSubscription?(clock.hour<13?"QR для сегодняшнего самовывоза будет доступен с 13:00 до 21:00.":"Время самовывоза на сегодня завершено. Невыданный обед считается использованным после 21:00."):hasPickupSubscription?"Сегодня по подписке нет активного обеда для самовывоза.":phone?"Активной подписки на самовывоз пока нет.":"Заполните контактный телефон в блоке «Данные клиента»."}</p></div>
-      <button type="button" className="pickup-scan-button account-main-scan-button" disabled={!primaryScannablePickup} onClick={()=>{if(primaryScannablePickup){setScanMessage("");setScanTarget(primaryScannablePickup)}}}>Сканировать QR</button>
-    </section>
 
     {!!subscriptions.length&&<section className="subscriptions-list-section">
       <div className="subscriptions-list-heading">
@@ -273,6 +275,7 @@ export default function AccountPage(){
         const activeMethods=new Set(s.days.filter(day=>["PLANNED","AVAILABLE"].includes(day.status)).map(day=>day.fulfillment_type||s.fulfillment_type));
         const mixedMethods=activeMethods.size>1;
         const todayPoint=todayDay?.pickup_point_name||s.pickup_point_name||"точка не выбрана";
+        const scanHint=pickedToday?"✓ Сегодня получено":s.status!=="ACTIVE"?"QR будет доступен после активации подписки":!todayDay?"Сегодня нет выбранного дня":todayFulfillment!=="PICKUP"?"Сегодня выбрана доставка":clock.hour<13?"QR будет доступен с 13:00":clock.hour>=21?"Время самовывоза завершено":"QR готов к сканированию";
         return <article className="subscription-instance" key={s.id}>
           <section className={`active-subscription-card ${s.status==="ACTIVE"?"is-active":"is-waiting"}`}>
             <div>
@@ -283,7 +286,7 @@ export default function AccountPage(){
               <small>Пауз использовано: {s.pauses_used} из {s.pause_limit}</small>
               {s.status==="AWAITING_ACTIVATION"&&<button type="button" onClick={()=>setReceipt({method:s.payment_method||"CASH",total:s.total_thb,rubRate:s.rub_rate?Number(s.rub_rate):null})}>Реквизиты для оплаты</button>}
             </div>
-            {todayFulfillment==="PICKUP"&&<div className="subscription-pickup-scan-actions">{pickedToday&&<span className="pickup-today-success">✓ Сегодня получено</span>}<small>{todayPoint}</small><button type="button" className="pickup-scan-button" disabled={!canScan} onClick={()=>{setScanMessage("");setScanTarget(s)}}>Сканировать QR</button>{!todayDay&&s.status==="ACTIVE"&&<small>QR активен только в выбранный день</small>}</div>}
+            <div className="subscription-pickup-scan-actions"><small>{todayFulfillment==="PICKUP"?todayPoint:"QR самовывоза"}</small><span className={pickedToday?"pickup-today-success":"subscription-scan-hint"}>{scanHint}</span><button type="button" className="pickup-scan-button" disabled={!canScan} onClick={()=>{setScanMessage("");setScanTarget(s)}}>Сканировать QR</button></div>
           </section>
           {s.status==="ACTIVE"&&<details className="subscription-details" open={index===0}>
             <summary>Дни, получение, время и пауза</summary>
@@ -292,19 +295,14 @@ export default function AccountPage(){
               const editable=canEditDay(day.service_date)&&["PLANNED","AVAILABLE"].includes(day.status);
               const loading=`${s.id}:${day.service_date}`;
               const dayFulfillment=day.fulfillment_type||s.fulfillment_type;
-              const selectedPointCode=pickupChoices[loading]||day.pickup_point_code||s.pickup_point_code||pickupPoints[0]?.code||"";
-              const selectedPointName=day.pickup_point_name||s.pickup_point_name||pickupPoints.find(p=>p.code===selectedPointCode)?.name||"Самовывоз";
+              const selectedPointCode=day.pickup_point_code||s.pickup_point_code||"";
+              const selectedPointName=day.pickup_point_name||s.pickup_point_name||pickupPoints.find(p=>p.code===selectedPointCode)?.name||"точка не выбрана";
               const dayTime=day.requested_time||s.default_time||"13:30";
               const canPause=day.service_date===addIsoDays(clock.date,1)&&clock.hour<20&&s.pause_limit>s.pauses_used&&["PLANNED","AVAILABLE"].includes(day.status);
               return <div key={day.service_date}>
                 <time>{formatDate(day.service_date)}</time>
                 <span className="history-meal-name"><strong>{meal.title}</strong><small>{statusLabels[day.status]||day.status}{day.pickup_redeemed_point_name?` · ${day.pickup_redeemed_point_name}`:""}</small></span>
-                <span className="meal-day-actions">{editable?<>
-                  <select aria-label={`Способ получения ${formatDate(day.service_date)}`} value={dayFulfillment} disabled={fulfillmentLoading===loading} onChange={e=>{const type=e.target.value as "PICKUP"|"DELIVERY";void changeFulfillment(s.id,day.service_date,type,selectedPointCode,dayTime)}}><option value="PICKUP">Самовывоз</option><option value="DELIVERY">Доставка</option></select>
-                  <select aria-label={`Точка самовывоза ${formatDate(day.service_date)}`} title="Точка самовывоза" value={selectedPointCode} disabled={fulfillmentLoading===loading||!pickupPoints.length} onChange={e=>{const code=e.target.value;setPickupChoices(prev=>({...prev,[loading]:code}));if(dayFulfillment==="PICKUP")void changeFulfillment(s.id,day.service_date,"PICKUP",code,dayTime)}}>{pickupPoints.map(point=><option key={point.code} value={point.code}>{`Самовывоз: ${point.shortName}`}</option>)}</select>
-                  {dayFulfillment==="DELIVERY"&&<input aria-label={`Время доставки ${formatDate(day.service_date)}`} type="time" min="13:30" max="18:00" step="900" defaultValue={dayTime} onBlur={e=>{if(e.target.value&&e.target.value!==dayTime)void changeTime(s.id,day.service_date,e.target.value)}} disabled={timeLoading===loading||fulfillmentLoading===loading}/>} 
-                  {canPause&&<button type="button" disabled={pauseLoading===loading} onClick={()=>void pause(s.id,day.service_date)}>{pauseLoading===loading?"Пауза…":"Поставить на паузу"}</button>}
-                </>:<em>{dayFulfillment==="DELIVERY"?(day.requested_time||s.default_time||"Доставка"):`Самовывоз · ${selectedPointName}`}</em>}</span>
+                <span className="meal-day-actions"><span className="day-fulfillment-summary"><strong>{dayFulfillment==="DELIVERY"?`Доставка с пункта выдачи «${selectedPointName}»`:`Самовывоз из пункта выдачи «${selectedPointName}»`}</strong>{dayFulfillment==="DELIVERY"&&<small>Время: {dayTime}</small>}</span>{editable&&<button type="button" className="day-edit-button" disabled={fulfillmentLoading===loading} onClick={()=>setFulfillmentEditor({subscriptionId:s.id,serviceDate:day.service_date,fulfillmentType:dayFulfillment,pickupPointCode:selectedPointCode||pickupPoints[0]?.code||"",requestedTime:dayTime})}>Внести изменения</button>}{canPause&&<button type="button" disabled={pauseLoading===loading} onClick={()=>void pause(s.id,day.service_date)}>{pauseLoading===loading?"Пауза…":"Поставить на паузу"}</button>}</span>
               </div>})}</div></section>
             <p className="subscription-cutoff-note">Время доставки и способ получения на сегодня можно изменить до 11:00. Будущие дни можно менять заранее. Паузу можно поставить только на завтра до 20:00.</p>
           </details>}
@@ -312,6 +310,8 @@ export default function AccountPage(){
     </section>}
 
     {!draft&&!subscriptions.length&&<section className="empty-account"><h1>Подписок пока нет</h1><p>Выберите дни и блюда в разделе меню подписки.</p><Link href="/#subscription">Открыть подписку</Link></section>}
+
+    {fulfillmentEditor&&<div className="modal-backdrop" role="presentation" onMouseDown={e=>{if(e.currentTarget===e.target&&!fulfillmentLoading)setFulfillmentEditor(null)}}><section className="payment-modal day-fulfillment-modal" role="dialog" aria-modal="true"><button type="button" className="modal-close" aria-label="Закрыть" disabled={Boolean(fulfillmentLoading)} onClick={()=>setFulfillmentEditor(null)}>×</button><span className="eyebrow">Получение</span><h2>Внести изменения</h2><p>{formatDate(fulfillmentEditor.serviceDate)}</p><div className="fulfillment-switch"><button type="button" className={fulfillmentEditor.fulfillmentType==="DELIVERY"?"selected":""} onClick={()=>setFulfillmentEditor(current=>current?{...current,fulfillmentType:"DELIVERY"}:current)}>Доставка</button><button type="button" className={fulfillmentEditor.fulfillmentType==="PICKUP"?"selected":""} onClick={()=>setFulfillmentEditor(current=>current?{...current,fulfillmentType:"PICKUP"}:current)}>Самовывоз</button></div><label>Пункт выдачи<select value={fulfillmentEditor.pickupPointCode} onChange={e=>setFulfillmentEditor(current=>current?{...current,pickupPointCode:e.target.value}:current)}>{pickupPoints.map(point=><option key={point.code} value={point.code}>{point.shortName} — {point.address}</option>)}</select></label>{fulfillmentEditor.fulfillmentType==="DELIVERY"&&<label>Время доставки<input type="time" min="13:30" max="18:00" step="900" value={fulfillmentEditor.requestedTime} onChange={e=>setFulfillmentEditor(current=>current?{...current,requestedTime:e.target.value}:current)}/></label>}<button type="button" className="day-fulfillment-save" disabled={Boolean(fulfillmentLoading)||!fulfillmentEditor.pickupPointCode} onClick={()=>void saveFulfillmentEditor()}>{fulfillmentLoading?"Сохраняем…":"Сохранить изменения"}</button></section></div>}
 
     {chatOpen&&<div className="modal-backdrop chat-backdrop" role="presentation" onMouseDown={e=>{if(e.currentTarget===e.target)setChatOpen(false)}}><section className="chat-window" role="dialog" aria-modal="true"><header className="chat-header"><div><span className="eyebrow">MealPoint</span><h2>Чат с менеджером</h2></div><button type="button" className="chat-close" onClick={()=>setChatOpen(false)}>×</button></header><div className="chat-messages">{!chatMessages.length&&<p className="chat-empty">Напишите менеджеру — история сообщений сохранится здесь.</p>}{chatMessages.map(message=><article key={message.id} className={`chat-bubble ${message.senderRole==="CUSTOMER"?"chat-own":"chat-other"}`}><strong>{message.senderRole==="CUSTOMER"?"Вы":(message.senderName||"Менеджер")}</strong><p>{message.body}</p>{message.imageUrl&&<a href={message.imageUrl} target="_blank" rel="noreferrer"><img className="chat-image" src={message.imageUrl} alt="Изображение в чате" loading="lazy"/></a>}<time>{new Date(message.createdAt).toLocaleString("ru-RU",{timeZone:"Asia/Bangkok"})}</time></article>)}</div>{chatError&&<p className="form-error chat-error">{chatError}</p>}<div className="chat-attachment"><label>📎 Прикрепить изображение<input type="file" accept="image/jpeg,image/png,image/webp" disabled={chatLoading} onChange={e=>{const f=e.target.files?.[0];if(f&&f.size>5*1024*1024)setChatError("Размер изображения — до 5 МБ");else if(f){setChatImage(f);setChatError("");}e.target.value="";}}/></label>{chatImage&&<button type="button" onClick={()=>setChatImage(null)}>{chatImage.name} ×</button>}</div><div className="chat-composer"><textarea value={chatText} onChange={e=>setChatText(e.target.value)} maxLength={4000} placeholder="Напишите сообщение…" onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();void sendChatMessage();}}}/><button type="button" disabled={chatLoading||(!chatText.trim()&&!chatImage)} onClick={()=>void sendChatMessage()}>{chatLoading?"Отправляем…":"Отправить"}</button></div></section></div>}
     {scanTarget&&<div className="modal-backdrop qr-customer-backdrop"><section className="payment-modal customer-qr-modal" role="dialog" aria-modal="true"><button className="modal-close" type="button" onClick={()=>{void stopScanner();setScanTarget(null)}}>×</button><span className="eyebrow">Самовывоз</span><h2>Сканировать QR точки</h2><p>{scanTarget.days.find(day=>day.service_date===clock.date)?.pickup_point_name||scanTarget.pickup_point_name||"MealPoint"}. Сканирование можно выполнить только один раз за сегодняшний день.</p><div id="pickup-qr-reader" className="customer-qr-reader"/><p className={scanMessage==="Ошибка чтения QR"?"form-error qr-scan-message":"qr-scan-message"}>{scanMessage}</p><button type="button" disabled={scanBusy} onClick={()=>setScannerAttempt(n=>n+1)}>Включить камеру снова</button><label className="scanner-file-button customer-file-scan">Выбрать фото QR<input type="file" accept="image/*" capture="environment" disabled={scanBusy} onChange={e=>{const file=e.target.files?.[0];if(file)void scanFile(file);e.currentTarget.value=""}}/></label><button type="button" className="text-button muted" onClick={()=>{void stopScanner();setScanTarget(null)}}>Закрыть</button></section></div>}

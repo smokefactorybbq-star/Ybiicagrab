@@ -55,8 +55,8 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "Укажите адрес доставки в профиле" }, { status: 400 });
     }
   }
-  if (fulfillmentType === "PICKUP" && !pickupPointCode) {
-    return NextResponse.json({ ok: false, error: "Выберите точку самовывоза" }, { status: 400 });
+  if (!pickupPointCode) {
+    return NextResponse.json({ ok: false, error: "Выберите пункт выдачи" }, { status: 400 });
   }
 
   try {
@@ -73,12 +73,13 @@ export async function PATCH(request: NextRequest) {
       if (!day) throw new Error("NOT_FOUND");
       if (!["PLANNED", "AVAILABLE"].includes(day.status)) throw new Error("UNAVAILABLE");
 
+      const point = await client.query<{ id: string; code: string; name: string }>(
+        `SELECT id::text, code, name FROM pickup_points WHERE code=$1 AND is_active=true LIMIT 1 FOR SHARE`,
+        [pickupPointCode]
+      );
+      if (!point.rows[0]) throw new Error("POINT_NOT_FOUND");
+
       if (fulfillmentType === "PICKUP") {
-        const point = await client.query<{ id: string; code: string; name: string }>(
-          `SELECT id::text, code, name FROM pickup_points WHERE code=$1 AND is_active=true LIMIT 1 FOR SHARE`,
-          [pickupPointCode]
-        );
-        if (!point.rows[0]) throw new Error("POINT_NOT_FOUND");
         await client.query(
           `UPDATE subscription_days
            SET fulfillment_type='PICKUP', pickup_point_id=$2::uuid, requested_time=NULL, delivery_address=NULL
@@ -95,16 +96,16 @@ export async function PATCH(request: NextRequest) {
 
       await client.query(
         `UPDATE subscription_days
-         SET fulfillment_type='DELIVERY', pickup_point_id=NULL, requested_time=$2, delivery_address=$3
+         SET fulfillment_type='DELIVERY', pickup_point_id=$2::uuid, requested_time=$3, delivery_address=$4
          WHERE id=$1`,
-        [day.id, requestedTime, deliveryAddress]
+        [day.id, point.rows[0].id, requestedTime, deliveryAddress]
       );
       await client.query(
         `INSERT INTO manager_events(event_type,entity_id,payload)
          VALUES('SUBSCRIPTION_FULFILLMENT_CHANGED',$1,$2::jsonb)`,
-        [subscriptionId, JSON.stringify({ serviceDate, fulfillmentType, requestedTime, deliveryAddress })]
+        [subscriptionId, JSON.stringify({ serviceDate, fulfillmentType, pickupPointCode: point.rows[0].code, pickupPointName: point.rows[0].name, requestedTime, deliveryAddress })]
       );
-      return { fulfillmentType, pickupPointCode: null, pickupPointName: null, requestedTime };
+      return { fulfillmentType, pickupPointCode: point.rows[0].code, pickupPointName: point.rows[0].name, requestedTime };
     });
 
     return NextResponse.json({ ok: true, ...result });
@@ -112,7 +113,7 @@ export async function PATCH(request: NextRequest) {
     const code = error instanceof Error ? error.message : "";
     const message = code === "NOT_FOUND" ? "Этот день подписки не найден"
       : code === "UNAVAILABLE" ? "Для этого дня способ получения уже нельзя изменить"
-      : code === "POINT_NOT_FOUND" ? "Точка самовывоза недоступна. Выберите другую."
+      : code === "POINT_NOT_FOUND" ? "Пункт выдачи недоступен. Выберите другой."
       : "Не удалось изменить способ получения";
     return NextResponse.json({ ok: false, error: message }, { status: 409 });
   }
