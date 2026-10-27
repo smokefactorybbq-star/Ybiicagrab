@@ -157,34 +157,61 @@ export default function ManagerPage() {
       if(!sessionResponse.ok)throw new Error("Не удалось проверить сессию менеджера");
       setAuthorized(true);
 
-      const [subscriptionsResponse, pickupResponse, clockResponse, fulfillmentResponse] = await Promise.all([
-        fetch("/api/manager/subscriptions", { cache: "no-store", credentials: "same-origin" }),
-        fetch("/api/manager/pickup-points", { cache: "no-store", credentials: "same-origin" }),
-        fetch("/api/manager/test-clock", { cache: "no-store", credentials: "same-origin" }),
-        fetch("/api/manager/fulfillment-today", { cache: "no-store", credentials: "same-origin" })
+      const fetchPanel = async (url: string) => {
+        try {
+          const response = await fetch(url, { cache: "no-store", credentials: "same-origin" });
+          const data = await response.json().catch(() => ({}));
+          return { response, data };
+        } catch (error) {
+          return { response: null, data: { ok: false, error: error instanceof Error ? error.message : "Ошибка сети" } };
+        }
+      };
+
+      const [subscriptionsResult, pickupResult, clockResult, fulfillmentResult] = await Promise.all([
+        fetchPanel("/api/manager/subscriptions"),
+        fetchPanel("/api/manager/pickup-points"),
+        fetchPanel("/api/manager/test-clock"),
+        fetchPanel("/api/manager/fulfillment-today")
       ]);
-      const [subscriptionsData, pickupData, clockData, fulfillmentData] = await Promise.all([
-        subscriptionsResponse.json(), pickupResponse.json(), clockResponse.json(), fulfillmentResponse.json()
-      ]);
 
-      if (!subscriptionsResponse.ok || !subscriptionsData.ok) throw new Error(subscriptionsData.error || "Ошибка загрузки подписок");
-      if (!pickupResponse.ok || !pickupData.ok) throw new Error(pickupData.error || "Ошибка загрузки пунктов выдачи");
-      if (!clockResponse.ok || !clockData.ok) throw new Error(clockData.error || "Ошибка загрузки тестового времени");
-      if (!fulfillmentResponse.ok || !fulfillmentData.ok) throw new Error(fulfillmentData.error || "Ошибка загрузки клиентов на сегодня");
+      const panelErrors: string[] = [];
 
-
-      setSubscriptions(subscriptionsData.subscriptions);
-      setPickupDashboard(pickupData as PickupDashboard);
-      setFulfillmentDashboard(fulfillmentData as FulfillmentDashboard);
-
-      setTestClock(clockData.clock as AppClock);
-      if (!testDirty) {
-        setTestEnabled(Boolean(clockData.clock.isTestMode));
-        setTestDateTime(String(clockData.clock.localDateTime || ""));
+      // "Все покупки" загружается независимо от остальных панелей.
+      // Ошибка в ПВ/доставке не должна очищать или скрывать подписки менеджера.
+      if (subscriptionsResult.response?.ok && subscriptionsResult.data?.ok) {
+        setSubscriptions(Array.isArray(subscriptionsResult.data.subscriptions) ? subscriptionsResult.data.subscriptions : []);
+      } else {
+        panelErrors.push(subscriptionsResult.data?.error || "Ошибка загрузки подписок");
       }
-      setDeliveredDrafts(Object.fromEntries(
-        (pickupData.points as PickupPointToday[]).map((point) => [point.pickupPointName, String(point.deliveredCount)])
-      ));
+
+      if (pickupResult.response?.ok && pickupResult.data?.ok) {
+        const pickupData = pickupResult.data as PickupDashboard;
+        setPickupDashboard(pickupData);
+        setDeliveredDrafts(Object.fromEntries(
+          (pickupData.points || []).map((point: PickupPointToday) => [point.pickupPointName, String(point.deliveredCount)])
+        ));
+      } else {
+        panelErrors.push(pickupResult.data?.error || "Ошибка загрузки пунктов выдачи");
+      }
+
+      if (clockResult.response?.ok && clockResult.data?.ok) {
+        const clockData = clockResult.data;
+        setTestClock(clockData.clock as AppClock);
+        if (!testDirty) {
+          setTestEnabled(Boolean(clockData.clock?.isTestMode));
+          setTestDateTime(String(clockData.clock?.localDateTime || ""));
+        }
+      } else {
+        panelErrors.push(clockResult.data?.error || "Ошибка загрузки тестового времени");
+      }
+
+      if (fulfillmentResult.response?.ok && fulfillmentResult.data?.ok) {
+        setFulfillmentDashboard(fulfillmentResult.data as FulfillmentDashboard);
+      } else {
+        panelErrors.push(fulfillmentResult.data?.error || "Ошибка загрузки клиентов на сегодня");
+      }
+
+      if (panelErrors.length) setError(panelErrors.join(" · "));
       setAuthorized(true);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Ошибка загрузки");

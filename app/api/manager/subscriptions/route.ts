@@ -43,9 +43,18 @@ export async function GET(request: Request) {
          u.id AS user_id,
          s.code,
          s.status,
-         u.full_name,
-         u.phone,
-         s.pickup_point_name,
+         COALESCE(
+           NULLIF(s.customer_name, ''),
+           NULLIF(u.profile_name, ''),
+           NULLIF(u.full_name, ''),
+           'Клиент MealPoint'
+         ) AS full_name,
+         COALESCE(
+           NULLIF(s.customer_phone, ''),
+           NULLIF(ca.phone, ''),
+           NULLIF(u.phone, '')
+         ) AS phone,
+         COALESCE(NULLIF(s.pickup_point_name, ''), day_info.pickup_point_name) AS pickup_point_name,
          s.fulfillment_type,
          s.payment_method,
          s.selected_days,
@@ -65,19 +74,26 @@ export async function GET(request: Request) {
              AND cm.sender_role = 'CUSTOMER'
              AND cm.read_by_manager_at IS NULL
          ), 0)::int AS manager_unread_count,
-         COALESCE(
-           json_agg(
-             json_build_object(
-               'service_date', sd.service_date::text,
-               'status', sd.status::text
-             ) ORDER BY sd.service_date
-           ) FILTER (WHERE sd.id IS NOT NULL),
-           '[]'::json
-         ) AS dates
+         COALESCE(day_info.dates, '[]'::json) AS dates
        FROM subscriptions s
        JOIN users u ON u.id = s.user_id
-       LEFT JOIN subscription_days sd ON sd.subscription_id = s.id
-       GROUP BY s.id, u.id, u.full_name, u.phone
+       LEFT JOIN customer_accounts ca ON ca.user_id = u.id
+       LEFT JOIN LATERAL (
+         SELECT
+           COALESCE(
+             json_agg(
+               json_build_object(
+                 'service_date', sd.service_date::text,
+                 'status', sd.status::text
+               ) ORDER BY sd.service_date
+             ) FILTER (WHERE sd.id IS NOT NULL),
+             '[]'::json
+           ) AS dates,
+           MIN(pp.name) FILTER (WHERE pp.name IS NOT NULL) AS pickup_point_name
+         FROM subscription_days sd
+         LEFT JOIN pickup_points pp ON pp.id = sd.pickup_point_id
+         WHERE sd.subscription_id = s.id
+       ) day_info ON TRUE
        ORDER BY CASE WHEN s.status = 'AWAITING_ACTIVATION' THEN 0 ELSE 1 END, s.created_at DESC
        LIMIT 300`
     );
