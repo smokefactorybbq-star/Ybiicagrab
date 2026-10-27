@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS customer_accounts (
   user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   phone TEXT,
   password_hash TEXT NOT NULL DEFAULT '',
-  terms_version TEXT NOT NULL DEFAULT '2026-08-13',
+  terms_version TEXT NOT NULL DEFAULT '2026-10-27',
   terms_accepted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -113,6 +113,7 @@ CREATE TABLE IF NOT EXISTS phone_otp_codes (
 );
 CREATE INDEX IF NOT EXISTS phone_otp_codes_phone_idx ON phone_otp_codes(phone, created_at DESC);
 
+ALTER TABLE customer_accounts ALTER COLUMN terms_version SET DEFAULT '2026-10-27';
 CREATE TABLE IF NOT EXISTS customer_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -409,3 +410,22 @@ CREATE TABLE IF NOT EXISTS subscription_day_extensions (
  last_date DATE NOT NULL,
  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- 2026-10-27: pause allowance is based on the initially purchased duration:
+-- one pause for every five original subscription days. Manager-added days do
+-- not increase the allowance.
+WITH initial_subscription_days AS (
+  SELECT
+    s.id,
+    GREATEST(0, s.selected_days - COALESCE(SUM(e.days), 0)::int) AS initial_days
+  FROM subscriptions s
+  LEFT JOIN subscription_day_extensions e ON e.subscription_id = s.id
+  GROUP BY s.id, s.selected_days
+)
+UPDATE subscriptions s
+SET pause_limit = GREATEST(s.pauses_used, FLOOR(i.initial_days / 5.0)::int),
+    updated_at = now()
+FROM initial_subscription_days i
+WHERE s.id = i.id
+  AND NOT EXISTS (SELECT 1 FROM app_migrations WHERE name='pause-policy-2026-10-27');
+INSERT INTO app_migrations(name) VALUES('pause-policy-2026-10-27') ON CONFLICT DO NOTHING;
