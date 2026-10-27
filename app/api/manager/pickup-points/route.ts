@@ -25,8 +25,8 @@ type UncollectedRow = {
 };
 
 function getDayEndHour() {
-  const parsed = Number(process.env.PICKUP_POINT_DAY_END_HOUR || "22");
-  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 23 ? parsed : 22;
+  const parsed = Number(process.env.PICKUP_POINT_DAY_END_HOUR || "21");
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 23 ? parsed : 21;
 }
 
 export async function GET(request: Request) {
@@ -43,14 +43,15 @@ export async function GET(request: Request) {
       query<PointSummaryRow>(
         `WITH day_rows AS (
            SELECT
-             COALESCE(NULLIF(BTRIM(s.pickup_point_name), ''), 'Пункт не указан') AS pickup_point_name,
+             COALESCE(NULLIF(BTRIM(day_point.name), ''), NULLIF(BTRIM(s.pickup_point_name), ''), 'Пункт не указан') AS pickup_point_name,
              sd.status,
              sd.manual_writeoff_at
            FROM subscription_days sd
            JOIN subscriptions s ON s.id = sd.subscription_id
+           LEFT JOIN pickup_points day_point ON day_point.id = sd.pickup_point_id
            WHERE s.status IN ('ACTIVE', 'COMPLETED')
              AND sd.service_date = $1::date
-             AND s.fulfillment_type = 'PICKUP'
+             AND sd.fulfillment_type = 'PICKUP'
              AND (sd.status IN ('PLANNED', 'AVAILABLE', 'REDEEMED') OR sd.manual_writeoff_at IS NOT NULL)
          ),
          aggregates AS (
@@ -84,7 +85,7 @@ export async function GET(request: Request) {
       ),
       query<UncollectedRow>(
         `SELECT
-           COALESCE(NULLIF(BTRIM(s.pickup_point_name), ''), 'Пункт не указан') AS pickup_point_name,
+           COALESCE(NULLIF(BTRIM(day_point.name), ''), NULLIF(BTRIM(s.pickup_point_name), ''), 'Пункт не указан') AS pickup_point_name,
            u.full_name,
            u.phone,
            COUNT(*)::int AS portions,
@@ -92,8 +93,9 @@ export async function GET(request: Request) {
          FROM subscription_days sd
          JOIN subscriptions s ON s.id = sd.subscription_id
          JOIN users u ON u.id = s.user_id
+         LEFT JOIN pickup_points day_point ON day_point.id = sd.pickup_point_id
          WHERE s.status = 'ACTIVE'
-           AND s.fulfillment_type = 'PICKUP'
+           AND sd.fulfillment_type = 'PICKUP'
            AND sd.service_date = $1::date
            AND sd.status IN ('PLANNED', 'AVAILABLE')
          GROUP BY pickup_point_name, u.id, u.full_name, u.phone

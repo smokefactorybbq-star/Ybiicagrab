@@ -45,13 +45,6 @@ function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[char] || char));
 }
 
-function validTime(value: string) {
-  if (!/^\d{2}:\d{2}$/.test(value)) return false;
-  const [h,m] = value.split(":").map(Number);
-  const n=h*60+m;
-  return n >= 12*60 && n <= 18*60;
-}
-
 export async function POST(request: NextRequest) {
   if (!isSameOriginMutation(request)) return NextResponse.json({ok:false,error:"Недопустимый источник запроса"},{status:403});
   try {
@@ -80,7 +73,7 @@ export async function POST(request: NextRequest) {
     if (!rateLimit.allowed) return NextResponse.json({ok:false,error:"Слишком много попыток оформления"},{status:429});
     if (customerName.length < 2) return badRequest("Введите имя");
     if (phone.length < 8) return badRequest("Введите корректный телефон");
-    if (fulfillmentType === "DELIVERY" && !validDeliveryTime(requestedTime || "")) return badRequest("Выберите время с 12:00 до 18:00");
+    if (fulfillmentType === "DELIVERY" && !validDeliveryTime(requestedTime || "")) return badRequest("Выберите время с 13:30 до 18:00");
     if (fulfillmentType === "DELIVERY" && (address.length < 5 || address.length > 1000)) return badRequest("Введите адрес доставки");
     const resolvedPoint=fulfillmentType==="PICKUP"?(typeof body.pickupPointCode==="string"?await findPickupPointByCode(body.pickupPointCode):await findPickupPointByName(pickupPointName)):null;
     if (fulfillmentType === "PICKUP" && !resolvedPoint) return badRequest("Выберите пункт самовывоза");
@@ -119,9 +112,9 @@ export async function POST(request: NextRequest) {
       for (const serviceDate of dates) {
         await client.query(
           `INSERT INTO subscription_days (
-             subscription_id,service_date,status,fulfillment_type,requested_time,customer_name,customer_phone,delivery_address,price_thb,discount_percent
-           ) VALUES ($1,$2,'PLANNED',$3,$4,$5,$6,$7,$8,$9)`,
-          [subscriptionId,serviceDate,fulfillmentType,requestedTime,customerName,phone,fulfillmentType === "DELIVERY" ? address : null,quote.days.find(d=>d.date===serviceDate)!.price,quote.days.find(d=>d.date===serviceDate)!.percent]
+             subscription_id,service_date,status,fulfillment_type,pickup_point_id,requested_time,customer_name,customer_phone,delivery_address,price_thb,discount_percent
+           ) VALUES ($1,$2,'PLANNED',$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [subscriptionId,serviceDate,fulfillmentType,fulfillmentType === "PICKUP" ? resolvedPoint?.id || null : null,requestedTime,customerName,phone,fulfillmentType === "DELIVERY" ? address : null,quote.days.find(d=>d.date===serviceDate)!.price,quote.days.find(d=>d.date===serviceDate)!.percent]
         );
       }
       await client.query(

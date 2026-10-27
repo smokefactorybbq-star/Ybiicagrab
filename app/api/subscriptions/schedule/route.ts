@@ -10,12 +10,6 @@ import { validDeliveryTime, isUuid, validDate } from "../../../../lib/validation
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function validTime(value: string) {
-  if (!/^\d{2}:\d{2}$/.test(value)) return false;
-  const [h,m] = value.split(":").map(Number);
-  const minutes = h*60+m;
-  return minutes >= 12*60 && minutes <= 18*60;
-}
 
 export async function PATCH(request: NextRequest) {
   if (!isSameOriginMutation(request)) return NextResponse.json({ok:false,error:"Недопустимый источник запроса"},{status:403});
@@ -27,19 +21,19 @@ export async function PATCH(request: NextRequest) {
   const serviceDate = typeof body.serviceDate === "string" ? body.serviceDate.trim() : "";
   const requestedTime = typeof body.requestedTime === "string" ? body.requestedTime.trim() : "";
   if (!isUuid(subscriptionId) || !validDate(serviceDate) || !validDeliveryTime(requestedTime)) {
-    return NextResponse.json({ok:false,error:"Выберите время с 12:00 до 18:00"},{status:400});
+    return NextResponse.json({ok:false,error:"Выберите время с 13:30 до 18:00"},{status:400});
   }
   const clock = await getAppClock();
   if (serviceDate < clock.date) return NextResponse.json({ok:false,error:"Нельзя изменить время прошедшего дня"},{status:400});
-  if (serviceDate === clock.date && (clock.hour > 11 || (clock.hour === 11 && clock.minute >= 30))) {
-    return NextResponse.json({ok:false,error:"После 11:30 время на сегодня изменить нельзя. Можно изменить следующий день."},{status:409});
+  if (serviceDate === clock.date && clock.hour >= 11) {
+    return NextResponse.json({ok:false,error:"После 11:00 время доставки на сегодня изменить нельзя."},{status:409});
   }
   const result = await query<{id:string}>(
     `UPDATE subscription_days sd
      SET requested_time=$4
      FROM subscriptions s
      WHERE sd.subscription_id=s.id AND s.id=$1 AND s.user_id=$2 AND sd.service_date=$3::date
-       AND s.status='ACTIVE' AND s.fulfillment_type='DELIVERY' AND sd.fulfillment_type='DELIVERY'
+       AND s.status='ACTIVE' AND sd.fulfillment_type='DELIVERY'
        AND sd.status IN ('PLANNED','AVAILABLE')
      RETURNING sd.id::text`,
     [subscriptionId,account.userId,serviceDate,requestedTime]

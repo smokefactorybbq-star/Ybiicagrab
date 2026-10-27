@@ -702,6 +702,7 @@ img { display: block; max-width: 100%; }
 .history-meal-name { display: grid; gap: 4px; color: var(--ink) !important; }
 .history-meal-name small { color: #71807a; font-weight: 500; }
 .meal-day-actions { display: grid; justify-items: end; gap: 7px; }
+.meal-day-actions select, .meal-day-actions input[type="time"] { min-width: 150px; max-width: 230px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
 .meal-day-actions em { color: #71807a; font-style: normal; font-size: 12px; }
 .meal-preparing-status, .meal-ready-status { padding: 8px 11px; border-radius: 999px; font-size: 12px; }
 .meal-preparing-status { color: #8f1812; background: #ffe0dc; }

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedAccount } from "../../../../lib/auth";
 import { query } from "../../../../lib/db";
+import { CURRENT_TERMS_VERSION } from "../../../../lib/terms";
 
 import { isSameOriginMutation } from "../../../../lib/request-security";
-import { validDeliveryTime, isUuid, validDate } from "../../../../lib/validation";
 
 export const runtime = "nodejs";
 
@@ -17,10 +17,10 @@ export async function POST(request: NextRequest) {
 
   const result = await query<{ terms_accepted_at: string }>(
     `UPDATE customer_accounts
-     SET terms_accepted_at = now(), terms_version = '2026-08-13', updated_at = now()
+     SET terms_accepted_at = now(), terms_version = $2, updated_at = now()
      WHERE user_id = $1
      RETURNING terms_accepted_at::text`,
-    [account.userId]
+    [account.userId, CURRENT_TERMS_VERSION]
   );
   return NextResponse.json({ ok: true, termsAcceptedAt: result.rows[0]?.terms_accepted_at || new Date().toISOString() });
 }

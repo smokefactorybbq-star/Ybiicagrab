@@ -7,7 +7,7 @@ import { notifyManagerTelegram } from "../../../../lib/telegram";
 import { processSubscriptionDayClosures } from "../../../../lib/subscription-maintenance";
 
 import { isSameOriginMutation } from "../../../../lib/request-security";
-import { validDeliveryTime, isUuid, validDate } from "../../../../lib/validation";
+import { isUuid, validDate } from "../../../../lib/validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +29,13 @@ export async function POST(request: NextRequest) {
     if (serviceDate < clock.date) {
       return NextResponse.json({ ok: false, error: "Нельзя поставить на паузу прошедший день" }, { status: 400 });
     }
+    const tomorrow = addDaysToIso(clock.date, 1);
+    if (serviceDate !== tomorrow) {
+      return NextResponse.json({ ok: false, error: "Поставить на паузу можно только следующий день" }, { status: 409 });
+    }
+    if (clock.hour >= 20) {
+      return NextResponse.json({ ok: false, error: "Пауза на завтра доступна только до 20:00 текущего дня" }, { status: 409 });
+    }
 
     const result = await withTransaction(async (client) => {
       const subscriptionResult = await client.query<{
@@ -48,8 +55,8 @@ export async function POST(request: NextRequest) {
       if (subscription.pause_limit < 1) throw new Error("NO_PAUSES");
       if (subscription.pauses_used >= subscription.pause_limit) throw new Error("LIMIT_REACHED");
 
-      const dayResult = await client.query<{ id: string; status: string; fulfillment_type: string; requested_time: string | null; customer_name: string | null; customer_phone: string | null; delivery_address: string | null }>(
-        `SELECT id, status, fulfillment_type, requested_time, customer_name, customer_phone, delivery_address FROM subscription_days
+      const dayResult = await client.query<{ id: string; status: string; fulfillment_type: string; pickup_point_id: string | null; requested_time: string | null; customer_name: string | null; customer_phone: string | null; delivery_address: string | null }>(
+        `SELECT id, status, fulfillment_type, pickup_point_id::text, requested_time, customer_name, customer_phone, delivery_address FROM subscription_days
          WHERE subscription_id = $1 AND service_date = $2::date
          FOR UPDATE`,
         [id, serviceDate]
@@ -69,9 +76,9 @@ export async function POST(request: NextRequest) {
       await client.query(`UPDATE subscription_days SET status = 'PAUSED', pause_requested_at = now() WHERE id = $1`, [day.id]);
       await client.query(
         `INSERT INTO subscription_days (
-           subscription_id, service_date, status, fulfillment_type, requested_time, customer_name, customer_phone, delivery_address
-         ) VALUES ($1, $2::date, 'AVAILABLE', $3, $4, $5, $6, $7)`,
-        [id, replacementDate, day.fulfillment_type, day.requested_time, day.customer_name, day.customer_phone, day.delivery_address]
+           subscription_id, service_date, status, fulfillment_type, pickup_point_id, requested_time, customer_name, customer_phone, delivery_address
+         ) VALUES ($1, $2::date, 'AVAILABLE', $3, $4::uuid, $5, $6, $7, $8)`,
+        [id, replacementDate, day.fulfillment_type, day.pickup_point_id, day.requested_time, day.customer_name, day.customer_phone, day.delivery_address]
       );
       await client.query(
         `UPDATE subscriptions SET pauses_used = pauses_used + 1, ends_on = $2::date, updated_at = now() WHERE id = $1`,

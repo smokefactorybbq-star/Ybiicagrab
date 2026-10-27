@@ -54,15 +54,16 @@ export async function GET(request: Request) {
       ),
       query<DeliveryRow>(
         `SELECT
-           COALESCE(NULLIF(BTRIM(s.pickup_point_name), ''), 'Пункт не указан') AS pickup_point_name,
+           COALESCE(NULLIF(BTRIM(day_point.name), ''), NULLIF(BTRIM(s.pickup_point_name), ''), 'Пункт не указан') AS pickup_point_name,
            sd.service_date::text AS service_date,
            COUNT(*)::int AS total
          FROM subscription_days sd
          JOIN subscriptions s ON s.id = sd.subscription_id
+         LEFT JOIN pickup_points day_point ON day_point.id = sd.pickup_point_id
          WHERE s.status IN ('ACTIVE', 'COMPLETED')
            AND sd.service_date BETWEEN $1::date AND $2::date
            AND sd.status NOT IN ('PAUSED', 'PAUSE_REQUESTED')
-           AND s.fulfillment_type = 'PICKUP'
+           AND sd.fulfillment_type = 'PICKUP'
          GROUP BY pickup_point_name, sd.service_date
          ORDER BY pickup_point_name, sd.service_date`,
         [startDate, endDate]

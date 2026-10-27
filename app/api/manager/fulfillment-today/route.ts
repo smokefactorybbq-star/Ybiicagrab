@@ -18,7 +18,9 @@ export async function GET(request: Request) {
   const clock = await getAppClock();
   const serviceDate = operationalDate(clock.date, clock.hour);
   const result = await query<any>(
-    `SELECT s.id::text AS subscription_id, s.code, s.fulfillment_type, s.pickup_point_name,
+    `SELECT s.id::text AS subscription_id, s.code,
+            COALESCE(sd.fulfillment_type,s.fulfillment_type) AS fulfillment_type,
+            COALESCE(day_point.name,s.pickup_point_name) AS pickup_point_name,
             u.full_name, COALESCE(sd.customer_phone,s.customer_phone,u.phone) AS phone,
             COALESCE(sd.delivery_address,s.delivery_address) AS delivery_address,
             COALESCE(sd.requested_time,s.default_time) AS requested_time,
@@ -28,10 +30,11 @@ export async function GET(request: Request) {
      FROM subscription_days sd
      JOIN subscriptions s ON s.id=sd.subscription_id
      JOIN users u ON u.id=s.user_id
+     LEFT JOIN pickup_points day_point ON day_point.id=sd.pickup_point_id
      WHERE sd.service_date=$1::date
        AND s.status IN ('ACTIVE','COMPLETED')
        AND sd.status NOT IN ('PAUSED','PAUSE_REQUESTED')
-     ORDER BY s.fulfillment_type DESC, COALESCE(sd.requested_time,s.default_time), u.full_name`,
+     ORDER BY COALESCE(sd.fulfillment_type,s.fulfillment_type) DESC, COALESCE(sd.requested_time,s.default_time), u.full_name`,
     [serviceDate]
   );
   const pickupClients:any[]=[]; const deliveryClients:any[]=[];
@@ -86,10 +89,11 @@ export async function PATCH(request: Request) {
         }>(
           `SELECT sd.id::text, COALESCE(sd.fulfillment_type,s.fulfillment_type) AS fulfillment_type,
                   sd.status::text, sd.redeemed_at, sd.consumed_at, sd.manual_writeoff_at,
-                  s.remaining_portions, s.pickup_point_name, u.full_name
+                  s.remaining_portions, COALESCE(day_point.name,s.pickup_point_name) AS pickup_point_name, u.full_name
            FROM subscription_days sd
            JOIN subscriptions s ON s.id=sd.subscription_id
            JOIN users u ON u.id=s.user_id
+           LEFT JOIN pickup_points day_point ON day_point.id=sd.pickup_point_id
            WHERE s.id=$1 AND sd.service_date=$2::date
            FOR UPDATE OF sd, s`, [subscriptionId,serviceDate]
         );

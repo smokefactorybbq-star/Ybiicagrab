@@ -23,8 +23,14 @@ export async function GET(request: NextRequest) {
     );
     const ids = subscriptionsResult.rows.map((x:any)=>x.id);
     const daysResult = ids.length ? await query<any>(
-      `SELECT subscription_id::text,service_date::text,status,fulfillment_type,requested_time,customer_name,customer_phone,delivery_address,redeemed_at,consumed_at,delivery_received_at,pickup_redeemed_point_name,price_thb,discount_percent
-       FROM subscription_days WHERE subscription_id=ANY($1::uuid[]) ORDER BY service_date ASC`, [ids]
+      `SELECT sd.subscription_id::text,sd.service_date::text,sd.status,sd.fulfillment_type,sd.requested_time,sd.customer_name,sd.customer_phone,sd.delivery_address,
+              sd.redeemed_at,sd.consumed_at,sd.delivery_received_at,sd.pickup_redeemed_point_name,sd.price_thb,sd.discount_percent,
+              COALESCE(pp.code,s.pickup_point_code) AS pickup_point_code,
+              COALESCE(pp.name,s.pickup_point_name) AS pickup_point_name
+       FROM subscription_days sd
+       JOIN subscriptions s ON s.id=sd.subscription_id
+       LEFT JOIN pickup_points pp ON pp.id=sd.pickup_point_id
+       WHERE sd.subscription_id=ANY($1::uuid[]) ORDER BY sd.service_date ASC`, [ids]
     ) : {rows:[]};
     const daysBy = new Map<string,any[]>();
     for (const day of daysResult.rows) {

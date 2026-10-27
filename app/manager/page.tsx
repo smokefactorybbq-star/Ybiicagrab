@@ -441,9 +441,9 @@ export default function ManagerPage() {
           <div>
             <span className="eyebrow">Пункты выдачи</span>
             <h2>Остатки на {pickupDashboard ? formatDate(pickupDashboard.serviceDate) : "сегодня"}</h2>
-            <p>Самовывоз списывается только после QR. Красный индикатор — клиент ещё не забрал, зелёный — QR успешно отсканирован.</p>
+            <p>Самовывоз списывается после успешного QR. Если клиент не забрал обед до 21:00, день автоматически считается использованным. Красный индикатор — клиент ещё не забрал, зелёный — QR успешно отсканирован.</p>
           </div>
-          {pickupDashboard && <small>После 22:00 панель автоматически переключится на следующий день.</small>}
+          {pickupDashboard && <small>После 21:00 панель автоматически переключится на следующий день.</small>}
         </div>
 
         <div className="manager-table-wrap pickup-table-wrap">

@@ -41,6 +41,9 @@ export async function POST(request: NextRequest) {
     if (!point) return NextResponse.json({ ok:false, error:GENERIC_ERROR }, { status:400 });
 
     const clock = await getAppClock();
+    if (clock.hour < 13 || clock.hour >= 21) {
+      return NextResponse.json({ ok:false, error:"Самовывоз доступен с 13:00 до 21:00." }, { status:409 });
+    }
 
     const redeemed = await withTransaction(async (client) => {
       const activePoint=await client.query(`SELECT code FROM pickup_points WHERE code=$1 AND is_active=true FOR SHARE`,[point.code]);
@@ -51,12 +54,16 @@ export async function POST(request: NextRequest) {
         redeemed_at:string|null; consumed_at:string|null; full_name:string; phone:string|null;
       }>(
         `SELECT s.id::text AS subscription_id, s.code, s.status::text AS subscription_status,
-                s.fulfillment_type, s.pickup_point_name, s.pickup_point_code, s.remaining_portions,
+                COALESCE(sd.fulfillment_type,s.fulfillment_type) AS fulfillment_type,
+                COALESCE(day_point.name,s.pickup_point_name) AS pickup_point_name,
+                COALESCE(day_point.code,s.pickup_point_code) AS pickup_point_code,
+                s.remaining_portions,
                 sd.id::text AS day_id, sd.status::text AS day_status, sd.redeemed_at, sd.consumed_at,
                 u.full_name, u.phone
          FROM subscriptions s
          JOIN subscription_days sd ON sd.subscription_id=s.id AND sd.service_date=$3::date
          JOIN users u ON u.id=s.user_id
+         LEFT JOIN pickup_points day_point ON day_point.id=sd.pickup_point_id
          WHERE s.id=$1 AND s.user_id=$2
          FOR UPDATE OF s, sd`,
         [subscriptionId, account.userId, clock.date]
@@ -68,7 +75,7 @@ export async function POST(request: NextRequest) {
         const time=new Intl.DateTimeFormat("ru-RU",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(new Date(row.redeemed_at));
         throw new Error(`ALREADY_AT:${time}`);
       }
-      if (row.subscription_status !== "ACTIVE" || row.remaining_portions < 1 || clock.hour >= 22) throw new Error("BAD_QR");
+      if (row.subscription_status !== "ACTIVE" || row.remaining_portions < 1) throw new Error("BAD_QR");
       if (!["PLANNED","AVAILABLE"].includes(row.day_status) || row.consumed_at) throw new Error("BAD_QR");
 
       // If this point has an electronic lock configured, do not consume the meal
