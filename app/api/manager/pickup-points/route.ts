@@ -51,7 +51,7 @@ export async function GET(request: Request) {
            LEFT JOIN pickup_points day_point ON day_point.id = sd.pickup_point_id
            WHERE s.status IN ('ACTIVE', 'COMPLETED')
              AND sd.service_date = $1::date
-             AND sd.fulfillment_type = 'PICKUP'
+             AND COALESCE(sd.fulfillment_type, s.fulfillment_type) = 'PICKUP'
              AND (sd.status IN ('PLANNED', 'AVAILABLE', 'REDEEMED') OR sd.manual_writeoff_at IS NOT NULL)
          ),
          aggregates AS (
@@ -67,7 +67,14 @@ export async function GET(request: Request) {
            FROM pickup_point_daily_inventory
            WHERE service_date = $1::date
          ),
+         active_points AS (
+           SELECT name AS pickup_point_name
+           FROM pickup_points
+           WHERE is_active = true
+         ),
          points AS (
+           SELECT pickup_point_name FROM active_points
+           UNION
            SELECT pickup_point_name FROM aggregates
            UNION
            SELECT pickup_point_name FROM inventory
@@ -86,8 +93,8 @@ export async function GET(request: Request) {
       query<UncollectedRow>(
         `SELECT
            COALESCE(NULLIF(BTRIM(day_point.name), ''), NULLIF(BTRIM(s.pickup_point_name), ''), 'Пункт не указан') AS pickup_point_name,
-           u.full_name,
-           u.phone,
+           COALESCE(NULLIF(BTRIM(sd.customer_name), ''), NULLIF(BTRIM(s.customer_name), ''), u.full_name) AS full_name,
+           COALESCE(NULLIF(BTRIM(sd.customer_phone), ''), NULLIF(BTRIM(s.customer_phone), ''), u.phone) AS phone,
            COUNT(*)::int AS portions,
            array_agg(s.code ORDER BY s.code) AS subscription_codes
          FROM subscription_days sd
@@ -95,11 +102,11 @@ export async function GET(request: Request) {
          JOIN users u ON u.id = s.user_id
          LEFT JOIN pickup_points day_point ON day_point.id = sd.pickup_point_id
          WHERE s.status = 'ACTIVE'
-           AND sd.fulfillment_type = 'PICKUP'
+           AND COALESCE(sd.fulfillment_type, s.fulfillment_type) = 'PICKUP'
            AND sd.service_date = $1::date
            AND sd.status IN ('PLANNED', 'AVAILABLE')
-         GROUP BY pickup_point_name, u.id, u.full_name, u.phone
-         ORDER BY pickup_point_name, u.full_name`,
+         GROUP BY 1, u.id, 2, 3
+         ORDER BY 1, 2`,
         [serviceDate]
       )
     ]);
