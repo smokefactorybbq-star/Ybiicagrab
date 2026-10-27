@@ -813,9 +813,36 @@ img { display: block; max-width: 100%; }
 @media (max-width: 720px) {
   .test-clock-controls { grid-template-columns: 1fr; }
   .test-clock-heading { display: grid; }
-  .chat-window { width: 100vw; height: 100dvh; max-height: none; border-radius: 0; }
+
+  /* Chat must stay inside the real mobile browser viewport. */
+  .chat-backdrop {
+    padding: 8px;
+    place-items: center;
+    overflow: hidden;
+  }
+  .chat-window {
+    width: 100%;
+    max-width: 100%;
+    height: min(760px, calc(100svh - 16px));
+    max-height: calc(100svh - 16px);
+    margin: 0 auto;
+    border-radius: 20px;
+    overflow: hidden;
+  }
+  .chat-header { padding: 16px; gap: 12px; }
+  .chat-header h2 { font-size: clamp(27px, 8vw, 34px); line-height: 1.05; }
+  .chat-close { flex: 0 0 42px; }
+  .chat-messages { padding: 14px; }
   .chat-bubble { max-width: 90%; }
-  .chat-composer { grid-template-columns: 1fr; }
+  .chat-attachment { padding: 9px 12px; }
+  .chat-composer { grid-template-columns: 1fr; gap: 8px; padding: 10px 12px 12px; }
+  .chat-composer textarea {
+    width: 100%;
+    min-height: 64px;
+    max-height: 88px;
+    resize: none;
+  }
+  .chat-composer button { min-height: 44px; }
 }
 
 .manager-action-stack {
