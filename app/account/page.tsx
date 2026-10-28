@@ -39,10 +39,42 @@ function addIsoDays(value:string,amount:number){const [y,m,d]=value.split("-").m
 function fallbackClock():Clock { const p=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date()); const g=(t:string)=>p.find(x=>x.type===t)?.value||"0"; return {date:`${g("year")}-${g("month")}-${g("day")}`,hour:+g("hour"),minute:+g("minute")}; }
 const validSubscriptionTime=validDeliveryTime;
 
+function TelegramLegacyLogin({ phone }: { phone: string }) {
+  const containerRef=useRef<HTMLDivElement|null>(null);
+  const [message,setMessage]=useState("Загружаем вход через Telegram…");
+  useEffect(()=>{
+    let cancelled=false;
+    const query=new URLSearchParams({phone});
+    void fetch(`/api/auth/telegram/config?${query.toString()}`,{cache:"no-store",credentials:"same-origin"}).then(async response=>{
+      const data=await response.json();
+      if(!response.ok||!data.ok)throw new Error(data.error||"Telegram-вход не настроен");
+      if(cancelled||!containerRef.current)return;
+      if(data.publicOrigin&&window.location.origin!==data.publicOrigin){
+        const target=new URL(window.location.pathname+window.location.search+window.location.hash,data.publicOrigin);
+        window.location.replace(target.toString());
+        return;
+      }
+      containerRef.current.innerHTML="";
+      const script=document.createElement("script");
+      script.async=true;script.src="https://telegram.org/js/telegram-widget.js?22";
+      script.setAttribute("data-telegram-login",data.botUsername);
+      script.setAttribute("data-size","large");
+      script.setAttribute("data-radius","12");
+      script.setAttribute("data-userpic","false");
+      script.setAttribute("data-request-access","write");
+      script.setAttribute("data-auth-url",data.authUrl||`${window.location.origin}/api/auth/telegram/callback`);
+      containerRef.current.appendChild(script);
+      setMessage("");
+    }).catch(error=>{if(!cancelled)setMessage(error instanceof Error?error.message:"Не удалось загрузить Telegram-вход")});
+    return()=>{cancelled=true;};
+  },[phone]);
+  return <div className="telegram-login-box"><div ref={containerRef} className="telegram-login-widget"/>{message&&<p className="form-error">{message}</p>}<p className="telegram-login-note">Подтвердите вход в Telegram. Этот резервный режим использует существующий TELEGRAM_BOT_TOKEN.</p></div>;
+}
+
 export default function AccountPage(){
   const {points:pickupPoints,discounts,ready:catalogReady,error:catalogError,reload:reloadCatalog}=useCatalog();
   const [ready,setReady]=useState(false); const [account,setAccount]=useState<Account|null>(null); const [error,setError]=useState("");
-  const [loginPhone,setLoginPhone]=useState(""); const [sessionBusy,setSessionBusy]=useState(false);
+  const [loginPhone,setLoginPhone]=useState(""); const [sessionBusy,setSessionBusy]=useState(false); const [legacyTelegramLogin,setLegacyTelegramLogin]=useState(false);
   const [draft,setDraft]=useState<Draft|null>(null); const [subscriptions,setSubscriptions]=useState<Subscription[]>([]); const [clock,setClock]=useState<Clock>(fallbackClock());
   const [name,setName]=useState(""); const [phone,setPhone]=useState(""); const [address,setAddress]=useState("");
   const [fulfillment,setFulfillment]=useState<"PICKUP"|"DELIVERY">("PICKUP"); const [requestedTime,setRequestedTime]=useState("13:30");
@@ -189,7 +221,7 @@ export default function AccountPage(){
     try{
       const response=await fetch("/api/account/logout",{method:"POST",credentials:"same-origin"});
       const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||"Не удалось выйти из кабинета");
-      setAccount(null);setSubscriptions([]);setChatOpen(false);setChatUnread(0);setLoginPhone("");
+      setAccount(null);setSubscriptions([]);setChatOpen(false);setChatUnread(0);setLoginPhone("");setLegacyTelegramLogin(false);
     }catch(e){setError(e instanceof Error?e.message:"Не удалось выйти из кабинета");}
     finally{setSessionBusy(false);}
   }
@@ -201,7 +233,13 @@ export default function AccountPage(){
     try{
       const response=await fetch("/api/auth/telegram/start",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:enteredPhone})});
       const data=await response.json();
-      if(!response.ok||!data.ok||!data.authorizationUrl)throw new Error(data.error||"Не удалось начать вход через Telegram");
+      if(!response.ok||!data.ok)throw new Error(data.error||"Не удалось начать вход через Telegram");
+      if(data.mode==="legacy"){
+        setLegacyTelegramLogin(true);
+        setSessionBusy(false);
+        return;
+      }
+      if(!data.authorizationUrl)throw new Error("Не удалось получить адрес входа Telegram");
       window.location.assign(data.authorizationUrl);
     }catch(e){setError(e instanceof Error?e.message:"Не удалось начать вход через Telegram");setSessionBusy(false);}
   }
@@ -250,7 +288,7 @@ export default function AccountPage(){
 
   if(!ready)return <main className="page-shell account-page"><section className="empty-account"><h1>Открываем личный кабинет…</h1></section></main>;
   if(!account){
-    return <main className="page-shell account-page"><section className="account-login-shell"><div className="account-login-card"><span className="eyebrow">Личный кабинет</span><h1>Вход через Telegram</h1><p>Введите номер телефона вашего Telegram-аккаунта в международном формате. После каждого выхода поле очищается — можно войти с другим номером.</p><label>Номер телефона<div className="login-phone-input-wrap"><input name="mealpoint-login-phone-manual" value={loginPhone} onChange={e=>setLoginPhone(e.target.value)} onFocus={e=>e.currentTarget.select()} onKeyDown={e=>{if(e.key==="Enter")void startTelegramLogin();}} inputMode="tel" autoComplete="off" autoCorrect="off" spellCheck={false} placeholder=""/>{loginPhone&&<button type="button" className="login-phone-clear" onClick={()=>setLoginPhone("")} aria-label="Очистить номер">Очистить</button>}</div><small className="login-phone-hint">Например: +66 81 234 5678</small></label>{error&&<p className="form-error">{error}</p>}<button type="button" className="telegram-entry-button" disabled={sessionBusy} onClick={()=>void startTelegramLogin()}>{sessionBusy?"Открываем Telegram…":"Войти через Telegram"}</button><p className="telegram-login-note">Telegram подтвердит аккаунт и передаст проверенный номер. Если номера не совпадут, вход будет отклонён.</p><Link href="/">Вернуться к подписке</Link></div></section></main>;
+    return <main className="page-shell account-page"><section className="account-login-shell"><div className="account-login-card"><span className="eyebrow">Личный кабинет</span><h1>Вход через Telegram</h1><p>Введите номер телефона в международном формате. После каждого выхода поле очищается.</p><label>Номер телефона<div className="login-phone-input-wrap"><input name="mealpoint-login-phone-manual" value={loginPhone} onChange={e=>{setLoginPhone(e.target.value);setLegacyTelegramLogin(false);}} onFocus={e=>e.currentTarget.select()} onKeyDown={e=>{if(e.key==="Enter")void startTelegramLogin();}} inputMode="tel" autoComplete="off" autoCorrect="off" spellCheck={false} placeholder=""/>{loginPhone&&<button type="button" className="login-phone-clear" onClick={()=>{setLoginPhone("");setLegacyTelegramLogin(false);}} aria-label="Очистить номер">Очистить</button>}</div><small className="login-phone-hint">Например: +66 81 234 5678</small></label>{error&&<p className="form-error">{error}</p>}{legacyTelegramLogin?<><TelegramLegacyLogin phone={loginPhone}/><button type="button" className="telegram-back-button" onClick={()=>setLegacyTelegramLogin(false)}>Изменить номер</button></>:<button type="button" className="telegram-entry-button" disabled={sessionBusy} onClick={()=>void startTelegramLogin()}>{sessionBusy?"Открываем Telegram…":"Войти через Telegram"}</button>}<p className="telegram-login-note">Если новый Telegram Web Login настроен в BotFather, Telegram сможет подтвердить номер. Если нет — сайт автоматически использует старый рабочий Login Widget через TELEGRAM_BOT_TOKEN.</p><Link href="/">Вернуться к подписке</Link></div></section></main>;
   }
 
   return <main className="page-shell account-page">

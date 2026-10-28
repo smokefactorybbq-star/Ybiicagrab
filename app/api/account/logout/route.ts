@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   const response = NextResponse.json({ ok: true });
   clearSessionCookie(response);
   clearRememberedSessionCookie(response);
-  for (const name of [TELEGRAM_OIDC_STATE_COOKIE, TELEGRAM_OIDC_VERIFIER_COOKIE, TELEGRAM_OIDC_NONCE_COOKIE, TELEGRAM_OIDC_PHONE_COOKIE]) {
+  for (const name of [TELEGRAM_OIDC_STATE_COOKIE, TELEGRAM_OIDC_VERIFIER_COOKIE, TELEGRAM_OIDC_NONCE_COOKIE, TELEGRAM_OIDC_PHONE_COOKIE, "mealpoint_login_state", "mealpoint_pending_login_phone"]) {
     response.cookies.set(name, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 0 });
   }
   return response;

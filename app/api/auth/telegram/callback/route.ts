@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { createBrowserSession, getAuthenticatedAccount, getOrCreateTelegramAccount, setRememberedSessionCookie, setSessionCookie } from "../../../../../lib/auth";
+import { createBrowserSession, getOrCreateTelegramAccount, normalizeContactPhone, setSessionCookie } from "../../../../../lib/auth";
+import { query } from "../../../../../lib/db";
 import { parseAndVerifyTelegramLogin } from "../../../../../lib/telegram-login";
 
 export const runtime = "nodejs";
@@ -43,16 +44,50 @@ export async function GET(request: NextRequest) {
     const expected=Buffer.from(request.cookies.get("mealpoint_login_state")?.value||"");
     if(expected.length!==43||supplied.length!==expected.length||!timingSafeEqual(supplied,expected))throw new Error("BAD_TELEGRAM_AUTH");
     const telegram = parseAndVerifyTelegramLogin(new URL(request.url));
-    const userId = await getOrCreateTelegramAccount(telegram);
+    const pendingPhone = normalizeContactPhone(request.cookies.get("mealpoint_pending_login_phone")?.value || "");
+    let preferredUserId: string | null = null;
+    if (pendingPhone) {
+      const existingPhoneAccount = await query<{ id: string; telegramId: string | null }>(
+        `SELECT u.id::text AS id, u.telegram_id::text AS "telegramId"
+         FROM users u
+         LEFT JOIN customer_accounts ca ON ca.user_id = u.id
+         WHERE ca.phone = $1 OR u.phone = $1
+         ORDER BY u.created_at ASC
+         LIMIT 1`,
+        [pendingPhone]
+      );
+      if (existingPhoneAccount.rows[0] && !existingPhoneAccount.rows[0].telegramId) {
+        preferredUserId = existingPhoneAccount.rows[0].id;
+      }
+    }
+    const userId = await getOrCreateTelegramAccount(telegram, preferredUserId);
+    if (pendingPhone) {
+      await query(
+        `UPDATE users SET phone = CASE WHEN phone IS NULL OR trim(phone) = '' THEN $1 ELSE phone END,
+                          updated_at = now(), last_site_visit_at = now()
+         WHERE id = $2`,
+        [pendingPhone, userId]
+      );
+      await query(
+        `INSERT INTO customer_accounts (user_id, phone, password_hash) VALUES ($1, $2, '')
+         ON CONFLICT (user_id) DO UPDATE
+         SET phone = CASE WHEN customer_accounts.phone IS NULL OR trim(customer_accounts.phone) = '' THEN EXCLUDED.phone ELSE customer_accounts.phone END,
+             updated_at = now()`,
+        [userId, pendingPhone]
+      );
+    }
     const token = await createBrowserSession(userId);
     const response = redirect("ok");
     response.cookies.delete("mealpoint_login_state");
+    response.cookies.delete("mealpoint_pending_login_phone");
     setSessionCookie(response, token);
-    setRememberedSessionCookie(response, token);
     return response;
   } catch (error) {
     const code = error instanceof Error ? error.message : "TELEGRAM_LOGIN_FAILED";
     console.error("Telegram login callback failed", error);
-    return redirect(["TELEGRAM_NOT_CONFIGURED","TELEGRAM_AUTH_EXPIRED","BAD_TELEGRAM_AUTH"].includes(code)?code:"TELEGRAM_LOGIN_FAILED");
+    const response = redirect(["TELEGRAM_NOT_CONFIGURED","TELEGRAM_AUTH_EXPIRED","BAD_TELEGRAM_AUTH"].includes(code)?code:"TELEGRAM_LOGIN_FAILED");
+    response.cookies.delete("mealpoint_login_state");
+    response.cookies.delete("mealpoint_pending_login_phone");
+    return response;
   }
 }

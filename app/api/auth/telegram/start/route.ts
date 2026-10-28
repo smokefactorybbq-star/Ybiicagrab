@@ -34,7 +34,21 @@ export async function POST(request: NextRequest) {
     const phone = normalizeContactPhone(rawPhone);
     if (!phone) return NextResponse.json({ ok: false, error: "Введите корректный номер телефона" }, { status: 400 });
 
-    const { clientId } = getTelegramOidcConfig();
+    let clientId = "";
+    try {
+      ({ clientId } = getTelegramOidcConfig());
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      if (code === "TELEGRAM_OIDC_NOT_CONFIGURED") {
+        // Backward-compatible fallback: the existing Telegram Login Widget only
+        // needs TELEGRAM_BOT_TOKEN / TELEGRAM_BOT_USERNAME and a BotFather domain.
+        return NextResponse.json(
+          { ok: true, mode: "legacy" },
+          { headers: { "Cache-Control": "no-store" } }
+        );
+      }
+      throw error;
+    }
     const origin = getMealPointPublicOrigin();
     const redirectUri = `${origin}/api/auth/telegram/oidc-callback`;
     const state = randomBytes(32).toString("base64url");

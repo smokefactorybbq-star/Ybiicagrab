@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { normalizeContactPhone } from "../../../../../lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +15,16 @@ function publicOrigin() {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const rawPhone = request.nextUrl.searchParams.get("phone") || "";
+  const phone = normalizeContactPhone(rawPhone);
+  if (!phone) {
+    return NextResponse.json(
+      { ok: false, error: "Введите корректный номер телефона" },
+      { status: 400, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+
   const configuredUsername = (process.env.TELEGRAM_BOT_USERNAME || process.env.BOT_USERNAME || "").trim().replace(/^@/, "");
   const token = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
   let botUsername = "";
@@ -57,5 +67,6 @@ export async function GET() {
     { headers: { "Cache-Control": "no-store" } }
   );
   response.cookies.set("mealpoint_login_state",state,{httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"lax",path:"/",maxAge:900});
+  response.cookies.set("mealpoint_pending_login_phone",phone,{httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"lax",path:"/",maxAge:900});
   return response;
 }
