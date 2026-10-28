@@ -10,7 +10,6 @@ import {priceForDates} from "../../lib/meal-prices";
 import { subscriptionRules } from "../../data/subscriptionRules";
 
 type Account = { userId:string; fullName:string; phone:string; address:string; photoUrl:string; termsAcceptedAt:string|null; telegramUsername:string };
-type RememberedAccount = { fullName:string; telegramUsername:string; photoUrl:string };
 type ChatMessage = { id:string; senderRole:"CUSTOMER"|"MANAGER"; senderName:string|null; body:string; imageUrl?:string|null; attachmentType?:"image"|"pdf"|null; createdAt:string };
 type Draft = { dates:string[]; selectedDays:number; rate:number; total:number; createdAt:string; fulfillmentType:"PICKUP"|"DELIVERY"; pickupPointName?:string; pickupPointCode?:string; duplicateConfirmed?:boolean; checkoutKey?:string };
 type Day = {
@@ -40,45 +39,10 @@ function addIsoDays(value:string,amount:number){const [y,m,d]=value.split("-").m
 function fallbackClock():Clock { const p=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date()); const g=(t:string)=>p.find(x=>x.type===t)?.value||"0"; return {date:`${g("year")}-${g("month")}-${g("day")}`,hour:+g("hour"),minute:+g("minute")}; }
 const validSubscriptionTime=validDeliveryTime;
 
-function TelegramLogin() {
-  const containerRef=useRef<HTMLDivElement|null>(null);
-  const [message,setMessage]=useState("Загружаем вход через Telegram…");
-  useEffect(()=>{
-    let cancelled=false;
-    void fetch("/api/auth/telegram/config",{cache:"no-store"}).then(async response=>{
-      const data=await response.json();
-      if(!response.ok||!data.ok)throw new Error(data.error||"Telegram-вход не настроен");
-      if(cancelled||!containerRef.current)return;
-      // Telegram Login validates the origin that embeds the widget. Always use the
-      // canonical MealPoint host so www/Railway preview domains cannot cause
-      // "Bot domain invalid".
-      if(data.publicOrigin && window.location.origin !== data.publicOrigin){
-        const target = new URL(window.location.pathname + window.location.search + window.location.hash, data.publicOrigin);
-        window.location.replace(target.toString());
-        return;
-      }
-      containerRef.current.innerHTML="";
-      const script=document.createElement("script");
-      script.async=true; script.src="https://telegram.org/js/telegram-widget.js?22";
-      script.setAttribute("data-telegram-login",data.botUsername);
-      script.setAttribute("data-size","large");
-      script.setAttribute("data-radius","12");
-      script.setAttribute("data-userpic","false");
-      script.setAttribute("data-request-access","write");
-      script.setAttribute("data-auth-url",data.authUrl || `${window.location.origin}/api/auth/telegram/callback`);
-      containerRef.current.appendChild(script);
-      setMessage("");
-    }).catch(error=>{if(!cancelled)setMessage(error instanceof Error?error.message:"Не удалось загрузить Telegram-вход")});
-    return()=>{cancelled=true;};
-  },[]);
-  return <div className="telegram-login-box"><div ref={containerRef} className="telegram-login-widget" />{message&&<p className="form-error">{message}</p>}<p className="telegram-login-note">Нажмите кнопку Telegram и подтвердите вход. SMS больше не используется.</p></div>;
-}
-
-
 export default function AccountPage(){
   const {points:pickupPoints,discounts,ready:catalogReady,error:catalogError,reload:reloadCatalog}=useCatalog();
   const [ready,setReady]=useState(false); const [account,setAccount]=useState<Account|null>(null); const [error,setError]=useState("");
-  const [rememberedAccount,setRememberedAccount]=useState<RememberedAccount|null>(null); const [telegramLoginVisible,setTelegramLoginVisible]=useState(false); const [sessionBusy,setSessionBusy]=useState(false);
+  const [loginPhone,setLoginPhone]=useState(""); const [sessionBusy,setSessionBusy]=useState(false);
   const [draft,setDraft]=useState<Draft|null>(null); const [subscriptions,setSubscriptions]=useState<Subscription[]>([]); const [clock,setClock]=useState<Clock>(fallbackClock());
   const [name,setName]=useState(""); const [phone,setPhone]=useState(""); const [address,setAddress]=useState("");
   const [fulfillment,setFulfillment]=useState<"PICKUP"|"DELIVERY">("PICKUP"); const [requestedTime,setRequestedTime]=useState("13:30");
@@ -109,24 +73,13 @@ export default function AccountPage(){
     }
   },[draft,catalogReady,discounts,pickupPoints]);
 
-  const loadRememberedSession=useCallback(async()=>{
-    try{
-      const response=await fetch("/api/account/session",{cache:"no-store",credentials:"same-origin"});
-      const data=await response.json();
-      if(!response.ok||!data.ok)throw new Error(data.error||"Не удалось проверить сохранённую сессию");
-      setRememberedAccount(data.remembered||null);
-      if(data.remembered)setTelegramLoginVisible(false);
-    }catch{
-      setRememberedAccount(null);
-    }
-  },[]);
   const loadAccount=useCallback(async()=>{
-    const response=await fetch("/api/account/me",{cache:"no-store"});
-    if(response.status===401){setAccount(null);await loadRememberedSession();setReady(true);return;}
+    const response=await fetch("/api/account/me",{cache:"no-store",credentials:"same-origin"});
+    if(response.status===401){setAccount(null);setReady(true);return;}
     const data=await response.json(); if(!response.ok||!data.ok)throw new Error(data.error||"Не удалось открыть кабинет");
-    setAccount(data.account); setRememberedAccount(null); setTelegramLoginVisible(false); setName(data.account.fullName||""); setPhone(data.account.phone||""); setAddress(data.account.address||"");
+    setAccount(data.account); setName(data.account.fullName||""); setPhone(data.account.phone||""); setAddress(data.account.address||"");
     if(!data.account.termsAcceptedAt)setTermsOpen(true); setReady(true);
-  },[loadRememberedSession]);
+  },[]);
   const loadSubscriptions=useCallback(async()=>{
     if(!account)return; const response=await fetch("/api/subscriptions/list",{cache:"no-store"}); const data=await response.json();
     if(response.ok&&data.ok){
@@ -140,8 +93,12 @@ export default function AccountPage(){
     if(telegramStatus&&telegramStatus!=="ok"){
       const telegramErrors:Record<string,string>={
         TELEGRAM_NOT_CONFIGURED:"Telegram-вход не настроен на сервере",
+        TELEGRAM_OIDC_NOT_CONFIGURED:"Telegram Web Login не настроен на сервере",
         TELEGRAM_AUTH_EXPIRED:"Подтверждение Telegram устарело. Попробуйте войти ещё раз.",
-        BAD_TELEGRAM_AUTH:"Не удалось проверить подпись Telegram. Попробуйте войти ещё раз."
+        BAD_TELEGRAM_AUTH:"Не удалось проверить вход Telegram. Попробуйте ещё раз.",
+        TELEGRAM_PHONE_REQUIRED:"Для входа разрешите Telegram передать подтверждённый номер телефона.",
+        TELEGRAM_PHONE_MISMATCH:"Введённый номер не совпадает с номером выбранного Telegram-аккаунта.",
+        TELEGRAM_LOGIN_CANCELLED:"Вход через Telegram отменён."
       };
       setError(telegramErrors[telegramStatus]||"Не удалось войти через Telegram");
     }
@@ -232,27 +189,21 @@ export default function AccountPage(){
     try{
       const response=await fetch("/api/account/logout",{method:"POST",credentials:"same-origin"});
       const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||"Не удалось выйти из кабинета");
-      setAccount(null);setSubscriptions([]);setChatOpen(false);setChatUnread(0);await loadRememberedSession();
+      setAccount(null);setSubscriptions([]);setChatOpen(false);setChatUnread(0);setLoginPhone("");
     }catch(e){setError(e instanceof Error?e.message:"Не удалось выйти из кабинета");}
     finally{setSessionBusy(false);}
   }
-  async function resumeRememberedSession(){
-    if(sessionBusy)return;setSessionBusy(true);setError("");
+  async function startTelegramLogin(){
+    if(sessionBusy)return;
+    const enteredPhone=loginPhone.trim();
+    if(!enteredPhone){setError("Введите номер телефона");return;}
+    setSessionBusy(true);setError("");
     try{
-      const response=await fetch("/api/account/session",{method:"POST",credentials:"same-origin"});
-      const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||"Не удалось восстановить сессию");
-      await loadAccount();
-    }catch(e){setRememberedAccount(null);setError(e instanceof Error?e.message:"Не удалось восстановить сессию");}
-    finally{setSessionBusy(false);}
-  }
-  async function closeRememberedSession(){
-    if(sessionBusy)return;setSessionBusy(true);setError("");
-    try{
-      const response=await fetch("/api/account/session",{method:"DELETE",credentials:"same-origin"});
-      const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||"Не удалось закрыть сессию");
-      setRememberedAccount(null);setTelegramLoginVisible(false);setAccount(null);setSubscriptions([]);
-    }catch(e){setError(e instanceof Error?e.message:"Не удалось закрыть сессию");}
-    finally{setSessionBusy(false);}
+      const response=await fetch("/api/auth/telegram/start",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:enteredPhone})});
+      const data=await response.json();
+      if(!response.ok||!data.ok||!data.authorizationUrl)throw new Error(data.error||"Не удалось начать вход через Telegram");
+      window.location.assign(data.authorizationUrl);
+    }catch(e){setError(e instanceof Error?e.message:"Не удалось начать вход через Telegram");setSessionBusy(false);}
   }
   async function saveCheckoutProfileAndOpenPayment(){
     const fullName=name.trim(); const contactPhone=phone.trim(); const deliveryAddress=address.trim();
@@ -299,8 +250,7 @@ export default function AccountPage(){
 
   if(!ready)return <main className="page-shell account-page"><section className="empty-account"><h1>Открываем личный кабинет…</h1></section></main>;
   if(!account){
-    const rememberedLabel=rememberedAccount?.telegramUsername?`@${rememberedAccount.telegramUsername}`:rememberedAccount?.fullName||"предыдущий аккаунт";
-    return <main className="page-shell account-page"><section className="account-login-shell"><div className="account-login-card"><span className="eyebrow">Личный кабинет</span><h1>{rememberedAccount?"Вы вышли из личного кабинета":"Вход и регистрация через Telegram"}</h1><p>{rememberedAccount?"Сессия предыдущего пользователя сохранена на этом устройстве.":"Авторизуйтесь своим Telegram-аккаунтом. После первого входа укажите телефон для связи в профиле."}</p>{error&&<p className="form-error">{error}</p>}{rememberedAccount?<div className="remembered-session-actions"><button type="button" className="remembered-login-button" disabled={sessionBusy} onClick={()=>void resumeRememberedSession()}>Войти как {rememberedLabel}</button><button type="button" className="close-session-button" disabled={sessionBusy} onClick={()=>void closeRememberedSession()}>Закрыть сессию</button></div>:telegramLoginVisible?<><TelegramLogin/><button type="button" className="telegram-back-button" disabled={sessionBusy} onClick={()=>setTelegramLoginVisible(false)}>Назад</button></>:<button type="button" className="telegram-entry-button" disabled={sessionBusy} onClick={()=>setTelegramLoginVisible(true)}>Войти через Telegram</button>}<Link href="/">Вернуться к подписке</Link></div></section></main>;
+    return <main className="page-shell account-page"><section className="account-login-shell"><div className="account-login-card"><span className="eyebrow">Личный кабинет</span><h1>Вход через Telegram</h1><p>Введите номер телефона вашего Telegram-аккаунта в международном формате. После каждого выхода номер нужно вводить заново — предыдущая сессия не сохраняется.</p><label>Номер телефона<input value={loginPhone} onChange={e=>setLoginPhone(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")void startTelegramLogin();}} inputMode="tel" autoComplete="off" placeholder="+66 81 234 5678"/></label>{error&&<p className="form-error">{error}</p>}<button type="button" className="telegram-entry-button" disabled={sessionBusy} onClick={()=>void startTelegramLogin()}>{sessionBusy?"Открываем Telegram…":"Войти через Telegram"}</button><p className="telegram-login-note">Telegram подтвердит аккаунт и передаст проверенный номер. Если номера не совпадут, вход будет отклонён.</p><Link href="/">Вернуться к подписке</Link></div></section></main>;
   }
 
   return <main className="page-shell account-page">
