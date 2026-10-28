@@ -1701,3 +1701,23 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:3px solid #bc
   .account-chat-unavailable { right: auto; left: 0; }
   .account-chat-unavailable::before { right: auto; left: 17px; }
 }
+
+/* Account session chooser: soft logout, resume and explicit close-session flow. */
+.remembered-session-actions { display:grid; gap:10px; margin-top:22px; }
+.account-login-card .remembered-session-actions button,
+.account-login-card > .telegram-entry-button,
+.account-login-card > .telegram-back-button {
+  width:100%;
+  border:0;
+  padding:14px 18px;
+  border-radius:13px;
+  cursor:pointer;
+  font-weight:900;
+}
+.remembered-login-button,
+.telegram-entry-button { color:#fff; background:#229ed9; }
+.close-session-button { color:#7d211b; background:#ffe2df; }
+.telegram-back-button { margin-top:10px; color:var(--ink); background:#edf1ef; }
+.remembered-session-actions button:disabled,
+.telegram-entry-button:disabled,
+.telegram-back-button:disabled { opacity:.6; cursor:wait; }

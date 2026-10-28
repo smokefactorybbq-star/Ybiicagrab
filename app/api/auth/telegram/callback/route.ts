@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { createBrowserSession, getAuthenticatedAccount, getOrCreateTelegramAccount, setSessionCookie } from "../../../../../lib/auth";
+import { createBrowserSession, getAuthenticatedAccount, getOrCreateTelegramAccount, setRememberedSessionCookie, setSessionCookie } from "../../../../../lib/auth";
 import { parseAndVerifyTelegramLogin } from "../../../../../lib/telegram-login";
 
 export const runtime = "nodejs";
@@ -48,6 +48,7 @@ export async function GET(request: NextRequest) {
     const response = redirect("ok");
     response.cookies.delete("mealpoint_login_state");
     setSessionCookie(response, token);
+    setRememberedSessionCookie(response, token);
     return response;
   } catch (error) {
     const code = error instanceof Error ? error.message : "TELEGRAM_LOGIN_FAILED";

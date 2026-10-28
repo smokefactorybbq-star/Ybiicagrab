@@ -10,6 +10,7 @@ import {priceForDates} from "../../lib/meal-prices";
 import { subscriptionRules } from "../../data/subscriptionRules";
 
 type Account = { userId:string; fullName:string; phone:string; address:string; photoUrl:string; termsAcceptedAt:string|null; telegramUsername:string };
+type RememberedAccount = { fullName:string; telegramUsername:string; photoUrl:string };
 type ChatMessage = { id:string; senderRole:"CUSTOMER"|"MANAGER"; senderName:string|null; body:string; imageUrl?:string|null; attachmentType?:"image"|"pdf"|null; createdAt:string };
 type Draft = { dates:string[]; selectedDays:number; rate:number; total:number; createdAt:string; fulfillmentType:"PICKUP"|"DELIVERY"; pickupPointName?:string; pickupPointCode?:string; duplicateConfirmed?:boolean; checkoutKey?:string };
 type Day = {
@@ -77,6 +78,7 @@ function TelegramLogin() {
 export default function AccountPage(){
   const {points:pickupPoints,discounts,ready:catalogReady,error:catalogError,reload:reloadCatalog}=useCatalog();
   const [ready,setReady]=useState(false); const [account,setAccount]=useState<Account|null>(null); const [error,setError]=useState("");
+  const [rememberedAccount,setRememberedAccount]=useState<RememberedAccount|null>(null); const [telegramLoginVisible,setTelegramLoginVisible]=useState(false); const [sessionBusy,setSessionBusy]=useState(false);
   const [draft,setDraft]=useState<Draft|null>(null); const [subscriptions,setSubscriptions]=useState<Subscription[]>([]); const [clock,setClock]=useState<Clock>(fallbackClock());
   const [name,setName]=useState(""); const [phone,setPhone]=useState(""); const [address,setAddress]=useState("");
   const [fulfillment,setFulfillment]=useState<"PICKUP"|"DELIVERY">("PICKUP"); const [requestedTime,setRequestedTime]=useState("13:30");
@@ -107,13 +109,24 @@ export default function AccountPage(){
     }
   },[draft,catalogReady,discounts,pickupPoints]);
 
+  const loadRememberedSession=useCallback(async()=>{
+    try{
+      const response=await fetch("/api/account/session",{cache:"no-store",credentials:"same-origin"});
+      const data=await response.json();
+      if(!response.ok||!data.ok)throw new Error(data.error||"Не удалось проверить сохранённую сессию");
+      setRememberedAccount(data.remembered||null);
+      if(data.remembered)setTelegramLoginVisible(false);
+    }catch{
+      setRememberedAccount(null);
+    }
+  },[]);
   const loadAccount=useCallback(async()=>{
     const response=await fetch("/api/account/me",{cache:"no-store"});
-    if(response.status===401){setAccount(null);setReady(true);return;}
+    if(response.status===401){setAccount(null);await loadRememberedSession();setReady(true);return;}
     const data=await response.json(); if(!response.ok||!data.ok)throw new Error(data.error||"Не удалось открыть кабинет");
-    setAccount(data.account); setName(data.account.fullName||""); setPhone(data.account.phone||""); setAddress(data.account.address||"");
+    setAccount(data.account); setRememberedAccount(null); setTelegramLoginVisible(false); setName(data.account.fullName||""); setPhone(data.account.phone||""); setAddress(data.account.address||"");
     if(!data.account.termsAcceptedAt)setTermsOpen(true); setReady(true);
-  },[]);
+  },[loadRememberedSession]);
   const loadSubscriptions=useCallback(async()=>{
     if(!account)return; const response=await fetch("/api/subscriptions/list",{cache:"no-store"}); const data=await response.json();
     if(response.ok&&data.ok){
@@ -214,7 +227,33 @@ export default function AccountPage(){
 
   const exactDuplicate=useMemo(()=>draft?subscriptions.some(s=>s.status==="ACTIVE"&&s.days.map(d=>d.service_date).join("|")===draft.dates.join("|")):false,[draft,subscriptions]);
   async function acceptTerms(){ if(!termsChecked)return; const r=await fetch("/api/account/terms",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accepted:true})}); const d=await r.json(); if(!r.ok||!d.ok){setError(d.error);return;} setAccount(a=>a?{...a,termsAcceptedAt:d.termsAcceptedAt}:a); setTermsOpen(false); }
-  async function logout(){await fetch("/api/account/logout",{method:"POST"});setAccount(null);setSubscriptions([]);}
+  async function logout(){
+    if(sessionBusy)return;setSessionBusy(true);setError("");
+    try{
+      const response=await fetch("/api/account/logout",{method:"POST",credentials:"same-origin"});
+      const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||"Не удалось выйти из кабинета");
+      setAccount(null);setSubscriptions([]);setChatOpen(false);setChatUnread(0);await loadRememberedSession();
+    }catch(e){setError(e instanceof Error?e.message:"Не удалось выйти из кабинета");}
+    finally{setSessionBusy(false);}
+  }
+  async function resumeRememberedSession(){
+    if(sessionBusy)return;setSessionBusy(true);setError("");
+    try{
+      const response=await fetch("/api/account/session",{method:"POST",credentials:"same-origin"});
+      const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||"Не удалось восстановить сессию");
+      await loadAccount();
+    }catch(e){setRememberedAccount(null);setError(e instanceof Error?e.message:"Не удалось восстановить сессию");}
+    finally{setSessionBusy(false);}
+  }
+  async function closeRememberedSession(){
+    if(sessionBusy)return;setSessionBusy(true);setError("");
+    try{
+      const response=await fetch("/api/account/session",{method:"DELETE",credentials:"same-origin"});
+      const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||"Не удалось закрыть сессию");
+      setRememberedAccount(null);setTelegramLoginVisible(false);setAccount(null);setSubscriptions([]);
+    }catch(e){setError(e instanceof Error?e.message:"Не удалось закрыть сессию");}
+    finally{setSessionBusy(false);}
+  }
   async function saveCheckoutProfileAndOpenPayment(){
     const fullName=name.trim(); const contactPhone=phone.trim(); const deliveryAddress=address.trim();
     if(fullName.length<2)return setError("Введите имя");
@@ -259,10 +298,13 @@ export default function AccountPage(){
   function canEditDay(date:string){ if(date>clock.date)return true; if(date<clock.date)return false; return clock.hour<11; }
 
   if(!ready)return <main className="page-shell account-page"><section className="empty-account"><h1>Открываем личный кабинет…</h1></section></main>;
-  if(!account)return <main className="page-shell account-page"><section className="account-login-shell"><div className="account-login-card"><span className="eyebrow">Личный кабинет</span><h1>Вход и регистрация через Telegram</h1><p>Авторизуйтесь своим Telegram-аккаунтом. После первого входа укажите телефон для связи в профиле.</p>{error&&<p className="form-error">{error}</p>}<TelegramLogin/><Link href="/">Вернуться к подписке</Link></div></section></main>;
+  if(!account){
+    const rememberedLabel=rememberedAccount?.telegramUsername?`@${rememberedAccount.telegramUsername}`:rememberedAccount?.fullName||"предыдущий аккаунт";
+    return <main className="page-shell account-page"><section className="account-login-shell"><div className="account-login-card"><span className="eyebrow">Личный кабинет</span><h1>{rememberedAccount?"Вы вышли из личного кабинета":"Вход и регистрация через Telegram"}</h1><p>{rememberedAccount?"Сессия предыдущего пользователя сохранена на этом устройстве.":"Авторизуйтесь своим Telegram-аккаунтом. После первого входа укажите телефон для связи в профиле."}</p>{error&&<p className="form-error">{error}</p>}{rememberedAccount?<div className="remembered-session-actions"><button type="button" className="remembered-login-button" disabled={sessionBusy} onClick={()=>void resumeRememberedSession()}>Войти как {rememberedLabel}</button><button type="button" className="close-session-button" disabled={sessionBusy} onClick={()=>void closeRememberedSession()}>Закрыть сессию</button></div>:telegramLoginVisible?<><TelegramLogin/><button type="button" className="telegram-back-button" disabled={sessionBusy} onClick={()=>setTelegramLoginVisible(false)}>Назад</button></>:<button type="button" className="telegram-entry-button" disabled={sessionBusy} onClick={()=>setTelegramLoginVisible(true)}>Войти через Telegram</button>}<Link href="/">Вернуться к подписке</Link></div></section></main>;
+  }
 
   return <main className="page-shell account-page">
-    <section className="account-top"><div><span className="eyebrow">Личный кабинет</span><h1>Здравствуйте, {name||"клиент"}</h1><p>{account.telegramUsername?`@${account.telegramUsername}`:"Telegram"}{phone?` · ${phone}`:""}</p></div><div className="account-top-actions"><div className="account-chat-control"><button type="button" className="account-message-button" aria-label="Чат с менеджером" onClick={(event)=>{event.stopPropagation();void openChat();}}>💬{chatUnread>0&&<span className="message-alert">{Math.min(chatUnread,99)}</span>}</button>{chatUnavailableHint&&<div className="account-chat-unavailable" role="status">Чат с менеджером будет доступен после оформления заказа</div>}</div><Link className="new-subscription-link" href="/#subscription">Оформить подписку</Link><button type="button" className="text-button muted" onClick={logout}>Выйти</button></div></section>
+    <section className="account-top"><div><span className="eyebrow">Личный кабинет</span><h1>Здравствуйте, {name||"клиент"}</h1><p>{account.telegramUsername?`@${account.telegramUsername}`:"Telegram"}{phone?` · ${phone}`:""}</p></div><div className="account-top-actions"><div className="account-chat-control"><button type="button" className="account-message-button" aria-label="Чат с менеджером" onClick={(event)=>{event.stopPropagation();void openChat();}}>💬{chatUnread>0&&<span className="message-alert">{Math.min(chatUnread,99)}</span>}</button>{chatUnavailableHint&&<div className="account-chat-unavailable" role="status">Чат с менеджером будет доступен после оформления заказа</div>}</div><Link className="new-subscription-link" href="/#subscription">Оформить подписку</Link><button type="button" className="text-button muted" disabled={sessionBusy} onClick={logout}>Выйти</button></div></section>
     {clock.isTestMode&&<p className="test-mode-banner">Тестовое время: {clock.date} {String(clock.hour).padStart(2,"0")}:{String(clock.minute).padStart(2,"0")}</p>}
     {catalogError&&<p className="form-error">{catalogError}</p>}
     {error&&<p className="form-error account-error">{error}</p>}
