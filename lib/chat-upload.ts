@@ -2,7 +2,40 @@ import sharp from "sharp";
 
 export const MAX_CHAT_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_MULTIPART_BYTES = MAX_CHAT_FILE_BYTES + 512 * 1024;
+const MAX_JSON_BYTES = 32 * 1024;
 const MAX_IMAGE_PIXELS = 80_000_000;
+
+async function readBodyWithLimit(request: Request, maxBytes: number) {
+  const contentLengthHeader = request.headers.get("content-length");
+  if (contentLengthHeader) {
+    const contentLength = Number(contentLengthHeader);
+    if (Number.isFinite(contentLength) && contentLength > maxBytes) throw new Error("FILE_TOO_LARGE");
+  }
+
+  if (!request.body) return Buffer.alloc(0);
+
+  const reader = request.body.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel("request body too large").catch(() => undefined);
+        throw new Error("FILE_TOO_LARGE");
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return Buffer.concat(chunks, total);
+}
 
 function isPdf(input: Buffer) {
   return input.length >= 5 && input.subarray(0, 5).toString("ascii") === "%PDF-";
@@ -25,13 +58,18 @@ export async function readChatInput(request: Request) {
   const contentType = request.headers.get("content-type") || "";
 
   if (contentType.includes("multipart/form-data")) {
-    const contentLength = Number(request.headers.get("content-length") || "0");
-    if (Number.isFinite(contentLength) && contentLength > MAX_MULTIPART_BYTES) throw new Error("FILE_TOO_LARGE");
+    const rawBody = await readBodyWithLimit(request, MAX_MULTIPART_BYTES);
 
     let form: FormData;
     try {
-      form = await request.formData();
-    } catch {
+      const boundedRequest = new Request(request.url, {
+        method: "POST",
+        headers: { "content-type": contentType },
+        body: new Uint8Array(rawBody),
+      });
+      form = await boundedRequest.formData();
+    } catch (error) {
+      if (error instanceof Error && error.message === "FILE_TOO_LARGE") throw error;
       throw new Error("BAD_MESSAGE");
     }
 
@@ -39,9 +77,10 @@ export async function readChatInput(request: Request) {
     const entry = form.get("file") || form.get("image");
     if (entry && typeof entry !== "string" && entry.size > 0) file = entry;
   } else {
+    const rawBody = await readBodyWithLimit(request, MAX_JSON_BYTES);
     let body: unknown;
     try {
-      body = await request.json();
+      body = JSON.parse(rawBody.toString("utf8"));
     } catch {
       throw new Error("BAD_MESSAGE");
     }
