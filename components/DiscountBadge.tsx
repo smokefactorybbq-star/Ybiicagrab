@@ -1,1 +1,0 @@
-export default function DiscountBadge({percent}:{percent?:number}){return percent&&[20,30,50].includes(percent)?<img className="discount-badge" src={`/discounts/discount-${percent}.svg`} alt={`${percent}% скидка`}/>:null;}
