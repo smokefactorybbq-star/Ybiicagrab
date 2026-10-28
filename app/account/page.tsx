@@ -75,7 +75,7 @@ export default function AccountPage(){
 
   const loadAccount=useCallback(async()=>{
     const response=await fetch("/api/account/me",{cache:"no-store",credentials:"same-origin"});
-    if(response.status===401){setAccount(null);setReady(true);return;}
+    if(response.status===401){setAccount(null);setLoginPhone("");setReady(true);return;}
     const data=await response.json(); if(!response.ok||!data.ok)throw new Error(data.error||"Не удалось открыть кабинет");
     setAccount(data.account); setName(data.account.fullName||""); setPhone(data.account.phone||""); setAddress(data.account.address||"");
     if(!data.account.termsAcceptedAt)setTermsOpen(true); setReady(true);
@@ -250,7 +250,7 @@ export default function AccountPage(){
 
   if(!ready)return <main className="page-shell account-page"><section className="empty-account"><h1>Открываем личный кабинет…</h1></section></main>;
   if(!account){
-    return <main className="page-shell account-page"><section className="account-login-shell"><div className="account-login-card"><span className="eyebrow">Личный кабинет</span><h1>Вход через Telegram</h1><p>Введите номер телефона вашего Telegram-аккаунта в международном формате. После каждого выхода номер нужно вводить заново — предыдущая сессия не сохраняется.</p><label>Номер телефона<input value={loginPhone} onChange={e=>setLoginPhone(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")void startTelegramLogin();}} inputMode="tel" autoComplete="off" placeholder="+66 81 234 5678"/></label>{error&&<p className="form-error">{error}</p>}<button type="button" className="telegram-entry-button" disabled={sessionBusy} onClick={()=>void startTelegramLogin()}>{sessionBusy?"Открываем Telegram…":"Войти через Telegram"}</button><p className="telegram-login-note">Telegram подтвердит аккаунт и передаст проверенный номер. Если номера не совпадут, вход будет отклонён.</p><Link href="/">Вернуться к подписке</Link></div></section></main>;
+    return <main className="page-shell account-page"><section className="account-login-shell"><div className="account-login-card"><span className="eyebrow">Личный кабинет</span><h1>Вход через Telegram</h1><p>Введите номер телефона вашего Telegram-аккаунта в международном формате. После каждого выхода поле очищается — можно войти с другим номером.</p><label>Номер телефона<div className="login-phone-input-wrap"><input name="mealpoint-login-phone-manual" value={loginPhone} onChange={e=>setLoginPhone(e.target.value)} onFocus={e=>e.currentTarget.select()} onKeyDown={e=>{if(e.key==="Enter")void startTelegramLogin();}} inputMode="tel" autoComplete="off" autoCorrect="off" spellCheck={false} placeholder=""/>{loginPhone&&<button type="button" className="login-phone-clear" onClick={()=>setLoginPhone("")} aria-label="Очистить номер">Очистить</button>}</div><small className="login-phone-hint">Например: +66 81 234 5678</small></label>{error&&<p className="form-error">{error}</p>}<button type="button" className="telegram-entry-button" disabled={sessionBusy} onClick={()=>void startTelegramLogin()}>{sessionBusy?"Открываем Telegram…":"Войти через Telegram"}</button><p className="telegram-login-note">Telegram подтвердит аккаунт и передаст проверенный номер. Если номера не совпадут, вход будет отклонён.</p><Link href="/">Вернуться к подписке</Link></div></section></main>;
   }
 
   return <main className="page-shell account-page">
