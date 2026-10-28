@@ -12,6 +12,14 @@ export const dynamic = "force-dynamic";
 
 const ATTACHMENT_ONLY_BODY = "__MEALPOINT_ATTACHMENT_ONLY__";
 
+async function hasOrder(userId: string) {
+  const result = await query<{ exists: boolean }>(
+    `SELECT EXISTS(SELECT 1 FROM subscriptions WHERE user_id = $1) AS exists`,
+    [userId]
+  );
+  return Boolean(result.rows[0]?.exists);
+}
+
 async function ensureConversation(userId: string) {
   return withTransaction(async(client)=>{
   await client.query(`SELECT id FROM users WHERE id=$1 FOR UPDATE`,[userId]);
@@ -29,6 +37,7 @@ async function ensureConversation(userId: string) {
 export async function GET(request: NextRequest) {
   const account = await getAuthenticatedAccount(request);
   if (!account) return NextResponse.json({ ok: false, error: "Требуется вход" }, { status: 401 });
+  if (!await hasOrder(account.userId)) return NextResponse.json({ ok: false, error: "Чат с менеджером будет доступен после оформления заказа" }, { status: 403 });
   const conversationId = await ensureConversation(account.userId);
   const markRead = request.nextUrl.searchParams.get("markRead") === "1";
   if (markRead) {
@@ -62,6 +71,7 @@ export async function POST(request: NextRequest) {
   if (!isSameOriginMutation(request)) return NextResponse.json({ ok: false, error: "Недопустимый источник запроса" }, { status: 403 });
   const account = await getAuthenticatedAccount(request);
   if (!account) return NextResponse.json({ ok: false, error: "Требуется вход" }, { status: 401 });
+  if (!await hasOrder(account.userId)) return NextResponse.json({ ok: false, error: "Чат с менеджером будет доступен после оформления заказа" }, { status: 403 });
   try {
     const limit=await consumeRateLimit(`chat:${account.userId}`,30,60);
     if(!limit.allowed)return NextResponse.json({ok:false,error:"Слишком много сообщений. Подождите минуту."},{status:429});

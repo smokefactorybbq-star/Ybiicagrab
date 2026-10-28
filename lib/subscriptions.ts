@@ -50,20 +50,13 @@ export function getTomorrowBangkokIso() {
   return addDaysToIso(getBangkokTodayIso(), 1);
 }
 
-export function validateConsecutiveDates(dates: string[], todayIso = getBangkokTodayIso()) {
+export function validateSubscriptionDates(dates: string[], todayIso = getBangkokTodayIso()) {
   if (!dates.length) return { valid: false, error: "Выберите хотя бы один день" };
-  if (dates.length > 30) return { valid: false, error: "Можно выбрать не более 30 дней" };
-
   if (dates.some(date => !validDate(date))) return {valid:false,error:"Некорректная дата"};
-  const tomorrow = addDaysToIso(todayIso, 1);
-  if (dates[0] < tomorrow) {
-    return { valid: false, error: "Подписка должна начинаться не раньше завтрашнего дня" };
-  }
 
-  for (let index = 1; index < dates.length; index += 1) {
-    if (dates[index] !== addDaysToIso(dates[index - 1], 1)) {
-      return { valid: false, error: "Дни подписки должны идти подряд" };
-    }
+  const tomorrow = addDaysToIso(todayIso, 1);
+  if (dates.some(date => date < tomorrow)) {
+    return { valid: false, error: "Можно выбирать только даты начиная с завтрашнего дня" };
   }
 
   return { valid: true, error: "" };
@@ -71,7 +64,8 @@ export function validateConsecutiveDates(dates: string[], todayIso = getBangkokT
 
 export function calculateSubscriptionPrice(dates: string[]) {
   if (!dates.length) return { rate: 0, total: 0 };
-  const rate = 350;
+  const discountPercent = dates.length >= 20 ? 20 : dates.length >= 7 ? 10 : 0;
+  const rate = 350 * (100 - discountPercent) / 100;
   return { rate, total: dates.length * rate };
 }
 

@@ -35,7 +35,6 @@ type ExistingSubscription = {
 
 const monthNames = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
 const weekdayNames = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
-const MAX_SUBSCRIPTION_DAYS = 30;
 
 function bangkokTodayIso() {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -88,11 +87,10 @@ export default function SubscriptionCalendar() {
   const [detailsIndex, setDetailsIndex] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const {rate,total}=priceForDates(selected,discounts);
+  const {rate,total,loyaltyPercent,savings}=priceForDates(selected,discounts);
   useEffect(()=>{if(!pickupPoints.some(p=>p.code===chosenPickupPoint))setChosenPickupPoint(pickupPoints[0]?.code||"");},[pickupPoints,chosenPickupPoint]);
   useEffect(()=>{const select=(e:Event)=>setChosenPickupPoint((e as CustomEvent<string>).detail);window.addEventListener("mealpoint-pickup-selected",select);return()=>window.removeEventListener("mealpoint-pickup-selected",select);},[]);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
-  const nextIndex = selected.length;
   const detailsDay = detailsIndex === null ? null : days[detailsIndex];
 
   useEffect(() => {
@@ -128,18 +126,13 @@ export default function SubscriptionCalendar() {
     };
   }, [detailsIndex, days.length]);
 
-  function addNextDay() {
-    if (selected.length >= MAX_SUBSCRIPTION_DAYS || nextIndex >= days.length) return;
-    const nextDay = days[nextIndex];
-    setSelected((current) => [...current, nextDay.id]);
-    requestAnimationFrame(() => document.getElementById(`meal-day-${days[Math.min(nextIndex + 1, days.length - 1)].id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" }));
-  }
-
-  function addNextDayFromModal() {
-    if (selected.length >= MAX_SUBSCRIPTION_DAYS || nextIndex >= days.length) return;
-    const indexToAdd = nextIndex;
-    setSelected((current) => [...current, days[indexToAdd].id]);
-    setDetailsIndex(Math.min(indexToAdd + 1, days.length - 1));
+  function toggleDay(date: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return [...next].sort();
+    });
   }
 
   function moveCalendar(value: number) {
@@ -213,15 +206,13 @@ export default function SubscriptionCalendar() {
     }
   }
 
-  const nextDayForButton = selected.length < MAX_SUBSCRIPTION_DAYS ? days[nextIndex] : null;
-
   return (
     <section id="subscription" className="subscription-section">
       <div className="section-heading split-heading">
         <div>
           <span className="eyebrow">Меню подписки</span>
-          <h2>Выбирайте обеды <em>день за днём</em></h2>
-          <p>Начните с завтрашнего дня и добавляйте следующий день в подписку. Нажмите на центр карточки, чтобы посмотреть состав, описание, калории и КБЖУ.</p>
+          <h2>Выбирайте обеды <em>на любые дни</em></h2>
+          <p>Выбирайте любые удобные даты начиная с завтрашнего дня: подряд или с пропусками. Нажмите на центр карточки, чтобы посмотреть состав, описание, калории и КБЖУ.</p>
         </div>
         <QuestionLink />
       </div>
@@ -230,16 +221,15 @@ export default function SubscriptionCalendar() {
 
       <div className="calendar-actions consecutive-actions">
         <button type="button" className="text-button muted" onClick={() => setSelected([])} disabled={!selected.length}>Сбросить выбранные дни</button>
-        <span className="calendar-action-note">Добавляйте дни последовательно — следующий день становится доступен после предыдущего.</span>
+        <span className="calendar-action-note">Можно выбрать любые дни с пропусками — ограничений по последовательности нет.</span>
       </div>
 
       <div className="calendar-scroll" ref={scrollRef} onScroll={syncCalendarSlider}>
         {days.map((item, index) => {
           const isSelected = selectedSet.has(item.id);
-          const isNext = index === nextIndex && selected.length < MAX_SUBSCRIPTION_DAYS;
           const visibleCourse = showFirstCourse ? item.meal.firstCourse : item.meal.secondCourse;
           return (
-            <article id={`meal-day-${item.id}`} key={item.id} className={`meal-day ${isSelected ? "selected" : ""} ${isNext ? "next-available" : ""}`}>
+            <article id={`meal-day-${item.id}`} key={item.id} className={`meal-day ${isSelected ? "selected" : ""}`}>
               <button
                 type="button"
                 className="meal-day-open-area"
@@ -259,7 +249,7 @@ export default function SubscriptionCalendar() {
                 </span>
                 <span className="meal-tag">{item.id === days[0].id ? "Можно начать завтра" : item.meal.tag}</span>
                 <span className="meal-title">{visibleCourse.title}</span>
-                <span className="day-price">{discounts[item.id]&&<del>350 ฿</del>} {priceForDay(item.id,discounts).price} ฿</span>
+                <span className="day-price">{(discounts[item.id]||isSelected&&loyaltyPercent>0)&&<del>350 ฿</del>} {priceForDay(item.id,discounts,isSelected?loyaltyPercent:0).price} ฿</span>
                 <span className="meal-details-hint">Нажмите на дату или блюдо — откроется подробное меню на весь экран</span>
               </button>
 
@@ -267,16 +257,9 @@ export default function SubscriptionCalendar() {
                 <button
                   type="button"
                   className={`add-next-day-button ${isSelected ? "is-selected" : ""}`}
-                  disabled={!isNext}
-                  onClick={addNextDay}
+                  onClick={() => toggleDay(item.id)}
                 >
-                  {isSelected
-                    ? "✓ День добавлен"
-                    : isNext
-                      ? selected.length === 0
-                        ? "+ Добавить первый день"
-                        : "+ Добавить следующий день"
-                      : "Сначала добавьте предыдущий день"}
+                  {isSelected ? "Сбросить день" : "+ Добавить день"}
                 </button>
               </div>
             </article>
@@ -292,7 +275,7 @@ export default function SubscriptionCalendar() {
       {checkoutError && <p className="form-error calendar-checkout-error">{checkoutError}</p>}
       <div className="subscription-summary" aria-live="polite">
         <div><small>Выбрано дней</small><strong>{selected.length}</strong></div>
-        <div><small>Базовая цена за день</small><strong>{rate ? `${rate} ฿` : "—"}</strong></div>
+        <div><small>{loyaltyPercent ? `Скидка лояльности ${loyaltyPercent}%` : "Базовая цена за день"}</small><strong>{loyaltyPercent ? `−${savings.toLocaleString("ru-RU")} ฿` : rate ? `${rate} ฿` : "—"}</strong></div>
         <div className="summary-total"><small>Итого</small><strong>{total.toLocaleString("ru-RU")} ฿</strong></div>
         <button type="button" disabled={!selected.length || checkingDuplicate || !catalogReady} onClick={goToCheckout}>{checkingDuplicate ? "Проверяем…" : "Оформить подписку"}</button>
       </div>
@@ -349,14 +332,10 @@ export default function SubscriptionCalendar() {
                 <div>
                   <small>В подписке выбрано</small>
                   <strong>{selected.length} дней</strong>
-                  {nextDayForButton && <span>Следующий: {formatLongDate(nextDayForButton)}</span>}
+                  <span>{selectedSet.has(detailsDay.id) ? "Этот день выбран" : "Этот день пока не выбран"}</span>
                 </div>
-                <button type="button" disabled={!nextDayForButton} onClick={addNextDayFromModal}>
-                  {nextDayForButton
-                    ? selected.length === 0
-                      ? `+ Добавить первый день — ${nextDayForButton.day} ${nextDayForButton.monthLabel}`
-                      : `+ Добавить следующий день — ${nextDayForButton.day} ${nextDayForButton.monthLabel}`
-                    : "Достигнут лимит выбранных дней"}
+                <button type="button" onClick={() => toggleDay(detailsDay.id)}>
+                  {selectedSet.has(detailsDay.id) ? "Сбросить день" : `+ Добавить день — ${detailsDay.day} ${detailsDay.monthLabel}`}
                 </button>
               </div>
             </div>

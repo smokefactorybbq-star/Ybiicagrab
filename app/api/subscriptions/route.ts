@@ -6,13 +6,12 @@ import { notifyManagerTelegram } from "../../../lib/telegram";
 import { findPickupPointByCode,findPickupPointByName,getDateDiscounts } from "../../../lib/catalog";
 import { priceForDates } from "../../../lib/meal-prices";
 import {
-  calculateSubscriptionPrice,
   createAccessToken,
   createPendingCode,
   getPauseLimit,
   hashToken,
   normalizeDates,
-  validateConsecutiveDates
+  validateSubscriptionDates
 } from "../../../lib/subscriptions";
 
 import { isSameOriginMutation } from "../../../lib/request-security";
@@ -79,7 +78,7 @@ export async function POST(request: NextRequest) {
     if (!resolvedPoint) return badRequest("Выберите пункт выдачи");
 
     const clock = await getAppClock();
-    const dateValidation = validateConsecutiveDates(dates, clock.date);
+    const dateValidation = validateSubscriptionDates(dates, clock.date);
     if (!dateValidation.valid) return badRequest(dateValidation.error);
 
     const quote = priceForDates(dates,await getDateDiscounts());
