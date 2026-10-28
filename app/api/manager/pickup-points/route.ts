@@ -1,0 +1,184 @@
+import { NextResponse } from "next/server";
+import { query } from "../../../../lib/db";
+import { getAppClock } from "../../../../lib/app-time";
+import { authorizeManager } from "../../../../lib/manager-auth";
+import { isSameOriginMutation } from "../../../../lib/request-security";
+import { addDaysToIso } from "../../../../lib/subscriptions";
+
+import { processSubscriptionDayClosures } from "../../../../lib/subscription-maintenance";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+type PointSummaryRow = {
+  pickup_point_name: string;
+  planned_count: number;
+  picked_up_count: number;
+  delivered_count: number;
+};
+
+type UncollectedRow = {
+  pickup_point_name: string;
+  full_name: string;
+  phone: string | null;
+  portions: number;
+  subscription_codes: string[];
+};
+
+function getDayEndHour() {
+  const parsed = Number(process.env.PICKUP_POINT_DAY_END_HOUR || "21");
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 23 ? parsed : 21;
+}
+
+export async function GET(request: Request) {
+  const auth = await authorizeManager(request);
+  if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
+  await processSubscriptionDayClosures();
+
+  try {
+    const clock = await getAppClock();
+    const dayEndHour = getDayEndHour();
+    const serviceDate = clock.hour >= dayEndHour ? addDaysToIso(clock.date, 1) : clock.date;
+
+    const [summaryResult, uncollectedResult] = await Promise.all([
+      query<PointSummaryRow>(
+        `WITH day_rows AS (
+           SELECT
+             COALESCE(NULLIF(BTRIM(day_point.name), ''), NULLIF(BTRIM(s.pickup_point_name), ''), 'Пункт не указан') AS pickup_point_name,
+             sd.status,
+             sd.manual_writeoff_at
+           FROM subscription_days sd
+           JOIN subscriptions s ON s.id = sd.subscription_id
+           LEFT JOIN pickup_points day_point ON day_point.id = sd.pickup_point_id
+           WHERE s.status IN ('ACTIVE', 'COMPLETED')
+             AND sd.service_date = $1::date
+             AND COALESCE(sd.fulfillment_type, s.fulfillment_type) = 'PICKUP'
+             AND (sd.status IN ('PLANNED', 'AVAILABLE', 'REDEEMED') OR sd.manual_writeoff_at IS NOT NULL)
+         ),
+         aggregates AS (
+           SELECT
+             pickup_point_name,
+             COUNT(*)::int AS planned_count,
+             COUNT(*) FILTER (WHERE status = 'REDEEMED' OR manual_writeoff_at IS NOT NULL)::int AS picked_up_count
+           FROM day_rows
+           GROUP BY pickup_point_name
+         ),
+         inventory AS (
+           SELECT pickup_point_name, delivered_count
+           FROM pickup_point_daily_inventory
+           WHERE service_date = $1::date
+         ),
+         active_points AS (
+           SELECT name AS pickup_point_name
+           FROM pickup_points
+           WHERE is_active = true
+         ),
+         points AS (
+           SELECT pickup_point_name FROM active_points
+           UNION
+           SELECT pickup_point_name FROM aggregates
+           UNION
+           SELECT pickup_point_name FROM inventory
+         )
+         SELECT
+           p.pickup_point_name,
+           COALESCE(a.planned_count, 0)::int AS planned_count,
+           COALESCE(a.picked_up_count, 0)::int AS picked_up_count,
+           COALESCE(i.delivered_count, a.planned_count, 0)::int AS delivered_count
+         FROM points p
+         LEFT JOIN aggregates a USING (pickup_point_name)
+         LEFT JOIN inventory i USING (pickup_point_name)
+         ORDER BY p.pickup_point_name`,
+        [serviceDate]
+      ),
+      query<UncollectedRow>(
+        `SELECT
+           COALESCE(NULLIF(BTRIM(day_point.name), ''), NULLIF(BTRIM(s.pickup_point_name), ''), 'Пункт не указан') AS pickup_point_name,
+           COALESCE(NULLIF(BTRIM(sd.customer_name), ''), NULLIF(BTRIM(s.customer_name), ''), u.full_name) AS full_name,
+           COALESCE(NULLIF(BTRIM(sd.customer_phone), ''), NULLIF(BTRIM(s.customer_phone), ''), u.phone) AS phone,
+           COUNT(*)::int AS portions,
+           array_agg(s.code ORDER BY s.code) AS subscription_codes
+         FROM subscription_days sd
+         JOIN subscriptions s ON s.id = sd.subscription_id
+         JOIN users u ON u.id = s.user_id
+         LEFT JOIN pickup_points day_point ON day_point.id = sd.pickup_point_id
+         WHERE s.status = 'ACTIVE'
+           AND COALESCE(sd.fulfillment_type, s.fulfillment_type) = 'PICKUP'
+           AND sd.service_date = $1::date
+           AND sd.status IN ('PLANNED', 'AVAILABLE')
+         GROUP BY 1, u.id, 2, 3
+         ORDER BY 1, 2`,
+        [serviceDate]
+      )
+    ]);
+
+    const uncollectedByPoint = new Map<string, UncollectedRow[]>();
+    for (const client of uncollectedResult.rows) {
+      const current = uncollectedByPoint.get(client.pickup_point_name) || [];
+      current.push({
+        ...client,
+        portions: Number(client.portions),
+        subscription_codes: Array.isArray(client.subscription_codes) ? client.subscription_codes : []
+      });
+      uncollectedByPoint.set(client.pickup_point_name, current);
+    }
+
+    const points = summaryResult.rows.map((row) => {
+      const deliveredCount = Number(row.delivered_count);
+      const pickedUpCount = Number(row.picked_up_count);
+      return {
+        pickupPointName: row.pickup_point_name,
+        plannedCount: Number(row.planned_count),
+        deliveredCount,
+        pickedUpCount,
+        remainingCount: Math.max(0, deliveredCount - pickedUpCount),
+        uncollectedClients: uncollectedByPoint.get(row.pickup_point_name) || []
+      };
+    });
+
+    return NextResponse.json({
+      ok: true,
+      serviceDate,
+      dayEndHour,
+      isEndOfDay: false,
+      testMode: clock.isTestMode,
+      points
+    }, {
+      headers: { "Cache-Control": "no-store, max-age=0" }
+    });
+  } catch (error) {
+    console.error("Manager pickup point dashboard failed", error);
+    return NextResponse.json({ ok: false, error: "Не удалось загрузить остатки в пунктах выдачи" }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  if (!isSameOriginMutation(request)) return NextResponse.json({ ok:false, error:"Недопустимый источник запроса" }, { status:403 });
+  const auth = await authorizeManager(request);
+  if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
+
+  try {
+    const body = await request.json() as { pickupPointName?: unknown; deliveredCount?: unknown };
+    const pickupPointName = typeof body.pickupPointName === "string" ? body.pickupPointName.trim().slice(0, 160) : "";
+    const deliveredCount = Number(body.deliveredCount);
+
+    if (!pickupPointName || !Number.isInteger(deliveredCount) || deliveredCount < 0 || deliveredCount > 10000) {
+      return NextResponse.json({ ok: false, error: "Некорректное количество доставленных обедов" }, { status: 400 });
+    }
+
+    const clock = await getAppClock();
+    const dayEndHour = getDayEndHour();
+    const serviceDate = clock.hour >= dayEndHour ? addDaysToIso(clock.date, 1) : clock.date;
+    await query(
+      `INSERT INTO pickup_point_daily_inventory (service_date, pickup_point_name, delivered_count)
+       VALUES ($1::date, $2, $3)
+       ON CONFLICT (service_date, pickup_point_name)
+       DO UPDATE SET delivered_count = EXCLUDED.delivered_count, updated_at = now()`,
+      [serviceDate, pickupPointName, deliveredCount]
+    );
+
+    return NextResponse.json({ ok: true, serviceDate, pickupPointName, deliveredCount });
+  } catch (error) {
+    console.error("Update pickup point delivery count failed", error);
+    return NextResponse.json({ ok: false, error: "Не удалось сохранить количество доставленных обедов" }, { status: 500 });
+  }
+}
