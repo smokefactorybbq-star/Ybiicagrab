@@ -26,6 +26,7 @@ export async function POST() {
       botUsername: bot.username,
       hasMainWebApp: bot.hasMainWebApp,
       telegramUrl: `https://t.me/${bot.username}?startapp=${encodeURIComponent(startParam)}`,
+      telegramAppUrl: `tg://resolve?domain=${encodeURIComponent(bot.username)}&startapp=${encodeURIComponent(startParam)}`,
       miniAppUrl: `${origin}/telegram-login`,
       expiresIn: 600
     }, { headers: { "Cache-Control": "no-store" } });
