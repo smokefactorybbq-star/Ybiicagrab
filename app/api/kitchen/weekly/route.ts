@@ -64,8 +64,8 @@ export async function GET(request: Request) {
            AND sd.service_date BETWEEN $1::date AND $2::date
            AND sd.status NOT IN ('PAUSED', 'PAUSE_REQUESTED')
            AND sd.fulfillment_type = 'PICKUP'
-         GROUP BY pickup_point_name, sd.service_date
-         ORDER BY pickup_point_name, sd.service_date`,
+         GROUP BY 1, 2
+         ORDER BY 1, 2`,
         [startDate, endDate]
       ),
       query<MealRow>(
