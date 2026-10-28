@@ -86,7 +86,6 @@ export default function SubscriptionCalendar() {
   const [scrollPosition, setScrollPosition] = useState(0);
   const [detailsIndex, setDetailsIndex] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const scrollSnapTimerRef = useRef<number | null>(null);
 
   const {rate,total,loyaltyPercent,savings}=priceForDates(selected,discounts);
   useEffect(()=>{if(!pickupPoints.some(p=>p.code===chosenPickupPoint))setChosenPickupPoint(pickupPoints[0]?.code||"");},[pickupPoints,chosenPickupPoint]);
@@ -110,10 +109,6 @@ export default function SubscriptionCalendar() {
   useEffect(() => {
     const rotation = window.setInterval(() => setShowFirstCourse((current) => !current), 5000);
     return () => window.clearInterval(rotation);
-  }, []);
-
-  useEffect(() => () => {
-    if (scrollSnapTimerRef.current !== null) window.clearTimeout(scrollSnapTimerRef.current);
   }, []);
 
   useEffect(() => {
@@ -141,42 +136,11 @@ export default function SubscriptionCalendar() {
   }
 
   function moveCalendar(value: number) {
+    setScrollPosition(value);
     const calendar = scrollRef.current;
     if (!calendar) return;
-
-    const maximum = Math.max(0, calendar.scrollWidth - calendar.clientWidth);
-    const requestedLeft = maximum * (value / 1000);
-    const cards = Array.from(calendar.querySelectorAll<HTMLElement>(".meal-day"));
-
-    if (!cards.length) {
-      calendar.scrollTo({ left: requestedLeft, behavior: "smooth" });
-      return;
-    }
-
-    const calendarLeft = calendar.getBoundingClientRect().left;
-    const paddingLeft = Number.parseFloat(window.getComputedStyle(calendar).paddingLeft) || 0;
-    const snapPoints = cards.map((card) => Math.min(maximum, Math.max(0, card.getBoundingClientRect().left - calendarLeft + calendar.scrollLeft - paddingLeft)));
-    const nearest = snapPoints.reduce((best, point) => Math.abs(point - requestedLeft) < Math.abs(best - requestedLeft) ? point : best, snapPoints[0]);
-
-    setScrollPosition(maximum > 0 ? Math.round((nearest / maximum) * 1000) : 0);
-    calendar.scrollTo({ left: nearest, behavior: "smooth" });
-  }
-
-  function snapCalendarToNearest() {
-    const calendar = scrollRef.current;
-    if (!calendar) return;
-    const cards = Array.from(calendar.querySelectorAll<HTMLElement>(".meal-day"));
-    if (!cards.length) return;
-    const maximum = Math.max(0, calendar.scrollWidth - calendar.clientWidth);
-    const calendarLeft = calendar.getBoundingClientRect().left;
-    const current = calendar.scrollLeft;
-    const snapPoints = cards.map((card) =>
-      Math.min(maximum, Math.max(0, card.getBoundingClientRect().left - calendarLeft + current))
-    );
-    const nearest = snapPoints.reduce((best, point) =>
-      Math.abs(point - current) < Math.abs(best - current) ? point : best, snapPoints[0]
-    );
-    if (Math.abs(nearest - current) > 1) calendar.scrollTo({ left: nearest, behavior: "smooth" });
+    const maximum = calendar.scrollWidth - calendar.clientWidth;
+    calendar.scrollLeft = maximum * (value / 1000);
   }
 
   function syncCalendarSlider() {
@@ -184,11 +148,6 @@ export default function SubscriptionCalendar() {
     if (!calendar) return;
     const maximum = calendar.scrollWidth - calendar.clientWidth;
     setScrollPosition(maximum > 0 ? Math.round((calendar.scrollLeft / maximum) * 1000) : 0);
-    if (scrollSnapTimerRef.current !== null) window.clearTimeout(scrollSnapTimerRef.current);
-    scrollSnapTimerRef.current = window.setTimeout(() => {
-      scrollSnapTimerRef.current = null;
-      snapCalendarToNearest();
-    }, 140);
   }
 
   function openFulfillmentChoice(isDuplicate = false) {
@@ -284,18 +243,12 @@ export default function SubscriptionCalendar() {
                 </span>
                 <span className="meal-image-frame">
                   <DiscountBadge percent={discounts[item.id]}/>
-                  <span className={`meal-slide-layer ${showFirstCourse ? "is-active" : ""}`} aria-hidden={!showFirstCourse}>
-                    <img src={item.meal.firstCourse.image} alt={showFirstCourse ? item.meal.firstCourse.title : ""} loading="lazy" />
-                    <span className="meal-course-badge">Первое блюдо</span>
-                  </span>
-                  <span className={`meal-slide-layer ${!showFirstCourse ? "is-active" : ""}`} aria-hidden={showFirstCourse}>
-                    <img src={item.meal.secondCourse.image} alt={!showFirstCourse ? item.meal.secondCourse.title : ""} loading="lazy" />
-                    <span className="meal-course-badge">Второе блюдо</span>
-                  </span>
+                  <img key={`${item.id}-${showFirstCourse ? "first" : "second"}`} src={visibleCourse.image} alt={visibleCourse.title} loading="lazy" />
+                  <span className="meal-course-badge">{showFirstCourse ? "Первое блюдо" : "Второе блюдо"}</span>
                   <span className="meal-open-overlay">Открыть меню и КБЖУ</span>
                 </span>
                 <span className="meal-tag">{item.id === days[0].id ? "Можно начать завтра" : item.meal.tag}</span>
-                <span key={`${item.id}-${showFirstCourse ? "first" : "second"}-title`} className="meal-title meal-title-changing">{visibleCourse.title}</span>
+                <span className="meal-title">{visibleCourse.title}</span>
                 <span className="day-price">{(discounts[item.id]||isSelected&&loyaltyPercent>0)&&<del>350 ฿</del>} {priceForDay(item.id,discounts,isSelected?loyaltyPercent:0).price} ฿</span>
                 <span className="meal-details-hint">Нажмите на дату или блюдо — откроется подробное меню на весь экран</span>
               </button>
