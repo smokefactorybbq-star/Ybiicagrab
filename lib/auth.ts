@@ -5,7 +5,6 @@ import type { TelegramLoginData } from "./telegram-login";
 import { CURRENT_TERMS_VERSION } from "./terms";
 
 export const SESSION_COOKIE = "mealpoint_session";
-export const REMEMBERED_SESSION_COOKIE = "mealpoint_remembered_session";
 const SESSION_DAYS = 30;
 
 export type AuthenticatedAccount = {
@@ -60,30 +59,6 @@ export function setSessionCookie(response: NextResponse, token: string) {
 export function clearSessionCookie(response: NextResponse) {
   response.cookies.set({
     name: SESSION_COOKIE,
-    value: "",
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 0
-  });
-}
-
-export function setRememberedSessionCookie(response: NextResponse, token: string) {
-  response.cookies.set({
-    name: REMEMBERED_SESSION_COOKIE,
-    value: token,
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_DAYS * 24 * 60 * 60
-  });
-}
-
-export function clearRememberedSessionCookie(response: NextResponse) {
-  response.cookies.set({
-    name: REMEMBERED_SESSION_COOKIE,
     value: "",
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
@@ -212,8 +187,10 @@ export async function getOrCreatePhoneAccount(phone: string) {
   });
 }
 
-async function getAccountBySessionToken(token: string, touch = false): Promise<AuthenticatedAccount | null> {
+export async function getAuthenticatedAccount(request: NextRequest): Promise<AuthenticatedAccount | null> {
+  const token = request.cookies.get(SESSION_COOKIE)?.value || "";
   if (!token) return null;
+
   const result = await query<AuthenticatedAccount & { sessionId: string }>(
     `SELECT cs.id::text AS "sessionId", u.id::text AS "userId",
             COALESCE(NULLIF(u.profile_name,''), NULLIF(u.full_name,''), 'Пользователь MealPoint') AS "fullName",
@@ -231,7 +208,7 @@ async function getAccountBySessionToken(token: string, touch = false): Promise<A
   );
   const row = result.rows[0];
   if (!row) return null;
-  if (touch) void query(`UPDATE customer_sessions SET last_used_at = now() WHERE id = $1`, [row.sessionId]);
+  void query(`UPDATE customer_sessions SET last_used_at = now() WHERE id = $1`, [row.sessionId]);
   return {
     userId: row.userId,
     fullName: row.fullName,
@@ -241,12 +218,4 @@ async function getAccountBySessionToken(token: string, touch = false): Promise<A
     termsAcceptedAt: row.termsAcceptedAt,
     telegramUsername: row.telegramUsername
   };
-}
-
-export async function getAuthenticatedAccount(request: NextRequest): Promise<AuthenticatedAccount | null> {
-  return getAccountBySessionToken(request.cookies.get(SESSION_COOKIE)?.value || "", true);
-}
-
-export async function getRememberedAccount(request: NextRequest): Promise<AuthenticatedAccount | null> {
-  return getAccountBySessionToken(request.cookies.get(REMEMBERED_SESSION_COOKIE)?.value || "", false);
 }

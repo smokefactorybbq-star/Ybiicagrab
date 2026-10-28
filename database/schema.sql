@@ -429,15 +429,3 @@ FROM initial_subscription_days i
 WHERE s.id = i.id
   AND NOT EXISTS (SELECT 1 FROM app_migrations WHERE name='pause-policy-2026-10-27');
 INSERT INTO app_migrations(name) VALUES('pause-policy-2026-10-27') ON CONFLICT DO NOTHING;
-
--- One-time handoff from Telegram Mini App back to the browser login page.
-CREATE TABLE IF NOT EXISTS telegram_login_requests (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  token_hash TEXT UNIQUE NOT NULL,
-  approved_user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  expires_at TIMESTAMPTZ NOT NULL,
-  approved_at TIMESTAMPTZ,
-  consumed_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS telegram_login_requests_expiry_idx ON telegram_login_requests(expires_at);
