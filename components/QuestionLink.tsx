@@ -1,4 +1,4 @@
-const managerTelegramUrl = process.env.NEXT_PUBLIC_MANAGER_TELEGRAM_URL || "https://t.me/mealpoint_phuket";
+const managerTelegramUrl = process.env.NEXT_PUBLIC_MANAGER_TELEGRAM_URL || "https://t.me/SmokefactoryBBQ";
 
 export default function QuestionLink({ className = "question-link" }: { className?: string }) {
   return (
