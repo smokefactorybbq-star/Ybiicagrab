@@ -19,15 +19,18 @@
 
 ## Telegram-вход
 
-Используется Telegram Login Widget. На сервере проверяется подпись Telegram и свежесть `auth_date`.
+Клиентский кабинет использует Telegram OpenID Connect. После выхода MealPoint полностью удаляет свою серверную сессию. При следующем входе пользователь заново вводит номер телефона, а Telegram возвращает подтверждённый номер; сайт сверяет их перед созданием новой сессии. В запрос авторизации добавляется `prompt=login`, поэтому предыдущая Telegram Web-авторизация не должна использоваться как тихий вход.
 
 Обязательно:
 
-- `TELEGRAM_BOT_TOKEN` — токен бота.
-- `TELEGRAM_BOT_USERNAME` — username бота без `@`. Если переменная не задана, можно добавить её в Railway для явной конфигурации.
-- Домен сайта должен быть привязан к этому боту в BotFather (`/setdomain`) для legacy Telegram Login Widget.
+- `TELEGRAM_BOT_TOKEN` — остаётся нужен для Bot API и уведомлений.
+- `TELEGRAM_CLIENT_ID` — Client ID из @BotFather → Bot Settings → Web Login. Если не задан, сервер пробует использовать numeric bot id из `TELEGRAM_BOT_TOKEN`, но явная переменная предпочтительнее.
+- `TELEGRAM_CLIENT_SECRET` — Client Secret из того же раздела Web Login. Это НЕ bot token.
+- `MEALPOINT_PUBLIC_URL=https://www.meal-point.com`.
+- В @BotFather → Web Login → Allowed URLs добавить `https://www.meal-point.com` и `https://www.meal-point.com/api/auth/telegram/oidc-callback`.
+- Для подписи ID token оставьте стандартный алгоритм `RS256`.
 
-Старые SMS API-маршруты отключены и возвращают HTTP 410. Клиент входит через Telegram.
+Legacy `/api/auth/telegram/callback` сохранён только для совместимости, но текущий клиентский интерфейс его не использует. Старые SMS API-маршруты отключены.
 
 ## QR самовывоза
 
@@ -76,6 +79,9 @@ QR менеджер открывает на `/manager` в блоке «QR точ
 DATABASE_URL=...
 TELEGRAM_BOT_TOKEN=...
 TELEGRAM_BOT_USERNAME=your_bot_username
+TELEGRAM_CLIENT_ID=...
+TELEGRAM_CLIENT_SECRET=...
+MEALPOINT_PUBLIC_URL=https://www.meal-point.com
 MANAGER_USERNAME=manager
 MANAGER_PASSWORD=...
 PICKUP_QR_SECRET=long-random-secret-at-least-24-chars
