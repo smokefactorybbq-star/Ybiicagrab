@@ -1,0 +1,26 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getAuthenticatedAccount } from "../../../../lib/auth";
+import { query } from "../../../../lib/db";
+import { CURRENT_TERMS_VERSION } from "../../../../lib/terms";
+
+import { isSameOriginMutation } from "../../../../lib/request-security";
+
+export const runtime = "nodejs";
+
+export async function POST(request: NextRequest) {
+  if (!isSameOriginMutation(request)) return NextResponse.json({ok:false,error:"Недопустимый источник запроса"},{status:403});
+  const account = await getAuthenticatedAccount(request);
+  if (!account) return NextResponse.json({ ok: false, error: "Требуется вход" }, { status: 401 });
+
+  const body = await request.json() as { accepted?: unknown };
+  if (body.accepted !== true) return NextResponse.json({ ok: false, error: "Необходимо принять правила" }, { status: 400 });
+
+  const result = await query<{ terms_accepted_at: string }>(
+    `UPDATE customer_accounts
+     SET terms_accepted_at = now(), terms_version = $2, updated_at = now()
+     WHERE user_id = $1
+     RETURNING terms_accepted_at::text`,
+    [account.userId, CURRENT_TERMS_VERSION]
+  );
+  return NextResponse.json({ ok: true, termsAcceptedAt: result.rows[0]?.terms_accepted_at || new Date().toISOString() });
+}
