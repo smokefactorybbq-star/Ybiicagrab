@@ -32,7 +32,7 @@ function formatBangkok(value?:string|null) {
   }).format(date);
 }
 
-export default function ManagerPickupLock({point="patong"}:{point?:string}) {
+export default function ManagerPickupLock({point="patong",pointName}:{point?:string;pointName?:string}) {
   const [status,setStatus]=useState<LockStatus|null>(null);
   const [loading,setLoading]=useState(true);
   const [opening,setOpening]=useState(false);
@@ -77,12 +77,12 @@ export default function ManagerPickupLock({point="patong"}:{point?:string}) {
   return <section className="manager-feature-card pickup-lock-card">
     <div className="pickup-today-heading">
       <div>
-        <span className="eyebrow">Холодильник · Chalong</span>
+        <span className="eyebrow">Холодильник · {pointName || status?.point?.name || point}</span>
         <h2>Замок и ESP32</h2>
         <p>Статус обновляется каждые 10 секунд. Команда открытия действует {status?.openSeconds||20} секунд.</p>
       </div>
       <span className={`pickup-lock-status ${status?.online?"is-online":"is-offline"}`}>
-        {loading?"Проверяем…":status?.online?"● ONLINE":"● OFFLINE"}
+        {loading?"Проверяем…":status&&!status.configured?"● НЕ НАСТРОЕН":status?.online?"● ONLINE":"● OFFLINE"}
       </span>
     </div>
 
