@@ -407,7 +407,7 @@ export default function ManagerPage() {
         <form className="manager-login" onSubmit={(event) => void loadManagerData(event)}>
           <span className="eyebrow">MealPoint Manager</span>
           <h1>Вход менеджера</h1>
-          <p>Вход защищён серверной сессией. Логин и пароль задаются в Railway.</p>
+          <p> </p>
           <input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Логин" autoComplete="username" required />
           <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Пароль" required />
           {error && <p className="form-error">{error}</p>}
