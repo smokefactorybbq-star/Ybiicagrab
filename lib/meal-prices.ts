@@ -1,8 +1,8 @@
 export const BASE_DAY_PRICE=350;
 
 export function loyaltyDiscountForCount(selectedCount:number){
- if(selectedCount>=20)return 20;
- if(selectedCount>=7)return 10;
+ if(selectedCount>=20)return 10;
+ if(selectedCount>=10)return 5;
  return 0;
 }
 
