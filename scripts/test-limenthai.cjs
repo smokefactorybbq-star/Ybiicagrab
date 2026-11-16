@@ -26,15 +26,15 @@ async function query(sql,args=[]){
  if(sql.includes('SELECT p.*'))return {rows:(!args[1]||args[1]===sub.user_id)?[{...payment}]:[]};
  if(sql.includes('SET lease=$2')){payment.lease=args[1];return {rowCount:1,rows:[]};}
  if(sql.includes("SET quoted_rate=$3,state='creating'")){payment.state='creating';return {rowCount:1};}
- if(sql.includes('SET provider_id=$2')){Object.assign(payment,{provider_id:args[1],state:args[2],amount_rub:args[4],provider_rate:args[3],lease:null});return {rowCount:1};}
+ if(sql.includes('SET provider_id=$2')){Object.assign(payment,{provider_id:args[1],state:args[2],amount_rub:args[4],provider_rate:args[3],payment_url:args[5],expires_at:args[6],last_error:args[7],lease:null});return {rowCount:1};}
  if(sql.includes("UPDATE subscriptions SET status='ACTIVE'")){sub.status='ACTIVE';activations++;return {rowCount:1};}
  if(sql.includes('SET activated=true'))payment.activated=true;
  if(sql.includes('SET lease=NULL'))payment.lease=null;
  return {rowCount:1,rows:[]};
 }
 process.env.LIMENTHAI_ENABLED='true';process.env.LIMENTHAI_API_KEY='lt_test_example';delete process.env.LIMENTHAI_THB_PER_USDT;
-let failHttp=false;
-global.fetch=async(url,opts)=>{calls.push({url,opts});if(failHttp)return {ok:false,status:401,json:async()=>({error:{code:'invalid_api_key',message:'lt_live_SECRET_SHOULD_NOT_LEAK'}})};return {ok:true,json:async()=>url.includes('/quote?')?quote:({...order,order_id:'ord_1',partner_order_id:'SF-id'})};};
+let failHttp=false, providerOverride=null;
+global.fetch=async(url,opts)=>{calls.push({url,opts});if(failHttp)return {ok:false,status:401,json:async()=>({error:{code:'invalid_api_key',message:'lt_live_SECRET_SHOULD_NOT_LEAK'}})};return {ok:true,json:async()=>url.includes('/quote?')?quote:(providerOverride||{...order,order_id:'ord_1',partner_order_id:'SF-id'})};};
 const l=load('lib/limenthai.ts',{'./db':{query,withTransaction:fn=>fn({query})},'./subscriptions':{createSubscriptionCode:()=> 'code'},'./telegram':{notifyManagerTelegram:async()=>true},'./limenthai-contract':c,qrcode:{toDataURL:async()=> 'data:image/png;base64,AA'}});
 (async()=>{
  reset(true);await l.syncLimen('id','owner');assert.equal(activations,0);assert.equal(payment.state,'paid');console.log('PASS test payment never activates');
@@ -48,5 +48,23 @@ const l=load('lib/limenthai.ts',{'./db':{query,withTransaction:fn=>fn({query})},
  reset(false);payment.state='new';await assert.rejects(()=>l.syncLimen('id','owner','2500.00'));assert.equal(payment.state,'new');assert.equal(calls.length,1);console.log('PASS changed price never creates order');
  reset(false);payment.state='new';await assert.rejects(()=>l.quoteLimen('id','intruder'));assert.equal(calls.length,0);console.log('PASS quote ownership');
  reset(false);payment.state='new';failHttp=true;let diagnostic;try{await l.quoteLimen('id','owner');}catch(e){diagnostic=l.limenErrorCode(e);}failHttp=false;assert.equal(diagnostic,'LIMENTHAI_HTTP_401_INVALID_API_KEY');assert.ok(!diagnostic.includes('SECRET'));assert.equal(l.limenErrorCode(new Error('lt_live_SECRET')),'PROVIDER_UNAVAILABLE');console.log('PASS useful diagnostics exclude raw provider messages and keys');
- console.log(`${count+11} checks passed; transaction adapter is mocked, not real PostgreSQL.`);
+ test('malformed URL is diagnosed',()=>assert.throws(()=>c.paymentUrl('/relative'),/INVALID_PAYMENT_URL/));
+ test('unlisted HTTPS host blocked',()=>assert.throws(()=>c.paymentUrl('https://pay.example.com/token?secret=abc')));
+ process.env.LIMENTHAI_PAYMENT_HOSTS='pay.example.com';
+ test('explicit exact HTTPS host accepted',()=>assert.equal(c.paymentUrl('https://pay.example.com/pay'),'https://pay.example.com/pay'));
+ test('subdomain spoof blocked',()=>assert.throws(()=>c.paymentUrl('https://pay.example.com.evil.test/pay')));
+ test('diagnostic strips payment tokens',()=>assert.equal(c.paymentHost('https://pay.example.com/token?secret=abc'),'pay.example.com'));
+ delete process.env.LIMENTHAI_PAYMENT_HOSTS;
+ reset(false);providerOverride={...order,order_id:'ord_1',partner_order_id:'SF-id',status:'pending',payment_url:'https://pay.example.com/private-token?secret=abc',expires_at:'2099-01-01T00:00:00Z'};
+ const blocked=await l.syncLimen('id','owner');assert.equal(payment.provider_id,'ord_1');assert.equal(payment.amount_rub,'2678.00');assert.equal(blocked.paymentUrl,null);assert.equal(blocked.paymentLinkIssue,true);console.log('PASS bad link preserves amount and provider ID without exposing URL');
+ process.env.LIMENTHAI_PAYMENT_HOSTS='pay.example.com';
+ const recovered=await l.syncLimen('id','owner');assert.equal(calls.length,2);assert.equal(calls[1].opts.method,'GET');assert.ok(calls[1].url.endsWith('/orders/ord_1'));assert.equal(recovered.paymentLinkIssue,false);assert.ok(recovered.paymentUrl.startsWith('https://pay.example.com/'));console.log('PASS configured host recovers existing order with no duplicate POST');
+ delete process.env.LIMENTHAI_PAYMENT_HOSTS;providerOverride=null;
+ test('confirmed sandbox URL works in test without variable',()=>assert.equal(c.paymentUrl('https://api.limenthai.com/partner-api/sandbox/ord_af80d11a8d8a',true),'https://api.limenthai.com/partner-api/sandbox/ord_af80d11a8d8a'));
+ test('sandbox URL blocked in live mode',()=>assert.throws(()=>c.paymentUrl('https://api.limenthai.com/partner-api/sandbox/ord_af80d11a8d8a',false)));
+ test('other provider paths not implicitly allowed',()=>assert.throws(()=>c.paymentUrl('https://api.limenthai.com/other',true)));
+ reset(true);process.env.LIMENTHAI_API_KEY='lt_test_example';providerOverride={...order,order_id:'ord_1',partner_order_id:'SF-id',status:'pending',payment_url:'https://api.limenthai.com/partner-api/sandbox/ord_af80d11a8d8a',expires_at:'2099-01-01T00:00:00Z'};
+ const sandboxPayment=await l.syncLimen('id','owner');assert.equal(sandboxPayment.paymentLinkIssue,false);assert.equal(sandboxPayment.paymentUrl,providerOverride.payment_url);assert.equal(sandboxPayment.amountRub,'2678.00');assert.equal(activations,0);console.log('PASS actual sandbox URL reaches frontend without configuration');
+ providerOverride=null;
+ console.log(`${count+14} checks passed; transaction adapter is mocked, not real PostgreSQL.`);
 })().catch(e=>{console.error(e);process.exitCode=1});

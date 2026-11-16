@@ -9,11 +9,28 @@ export function thbAmount(total: number): string {
   if (!Number.isSafeInteger(total) || total <= 0) throw new Error("INVALID_TOTAL");
   return `${total}.00`;
 }
-export function paymentUrl(value: unknown): string {
+export function paymentUrl(value: unknown, testMode = false): string {
   if (typeof value !== "string") throw new Error("INVALID_PAYMENT_URL");
-  const url = new URL(value);
-  if (url.protocol !== "https:" || url.hostname !== "qr.nspk.ru" || url.port || url.username || url.password) throw new Error("INVALID_PAYMENT_URL");
+  let url: URL;
+  try { url = new URL(value); } catch { throw new Error("INVALID_PAYMENT_URL"); }
+  const allowed = new Set(["qr.nspk.ru"]);
+  for (const host of (process.env.LIMENTHAI_PAYMENT_HOSTS || "").split(",")) {
+    const normalized = host.trim().toLowerCase();
+    // Exact DNS hosts only: no wildcard, paths, ports, or numeric IP addresses.
+    if (/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/.test(normalized)) allowed.add(normalized);
+  }
+  const sandbox = url.hostname === "api.limenthai.com" && /^\/partner-api\/sandbox\/ord_[a-zA-Z0-9_-]+\/?$/.test(url.pathname);
+  // User supplied this exact provider sandbox route. It is never a live payment.
+  if (sandbox && !testMode) throw new Error("INVALID_PAYMENT_URL");
+  if (url.protocol !== "https:" || (!allowed.has(url.hostname) && !(testMode && sandbox)) || url.port || url.username || url.password) throw new Error("INVALID_PAYMENT_URL");
   return url.href;
+}
+/** Log only a DNS hostname. Paths and query strings can contain payment tokens. */
+export function paymentHost(value: unknown): string {
+  try {
+    const url = new URL(typeof value === "string" ? value : "");
+    return /^[a-z0-9.-]{1,253}$/i.test(url.hostname) ? url.hostname : "unavailable";
+  } catch { return "unavailable"; }
 }
 export type ProviderOrder = {order_id:string;partner_order_id:string;status:string;amount_rub:string;rate:string;amount_thb:string;settlement_currency:string;payment_url?:string;expires_at?:string;paid_at?:string};
 export function validateOrder(raw: unknown, expected: {partner_id:string;amount_rub:string|null;amount_thb:string;provider_id:string|null;rate?:string|null}): ProviderOrder {

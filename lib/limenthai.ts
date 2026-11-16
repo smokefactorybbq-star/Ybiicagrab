@@ -3,7 +3,7 @@ import QRCode from "qrcode";
 import { query, withTransaction } from "./db";
 import { createSubscriptionCode } from "./subscriptions";
 import { notifyManagerTelegram } from "./telegram";
-import { decimal, thbAmount, paymentUrl, validateOrder, validateQuote } from "./limenthai-contract";
+import { decimal, thbAmount, paymentUrl, paymentHost, validateOrder, validateQuote } from "./limenthai-contract";
 
 const BASE = "https://api.limenthai.com/partner-api/v1";
 export function limenConfig() {
@@ -23,7 +23,7 @@ async function api(path: string, key: string, body?: object, idempotency?: strin
   }
   return response.json();
 }
-type Payment = {subscription_id:string;partner_id:string;provider_id:string|null;amount_rub:string|null;total_thb:number;contract_version:string;payer_phone:string|null;provider_rate:string|null;test:boolean;state:string;payment_url:string|null;expires_at:string|null;lease:string|null;activated:boolean};
+type Payment = {subscription_id:string;partner_id:string;provider_id:string|null;amount_rub:string|null;total_thb:number;contract_version:string;payer_phone:string|null;provider_rate:string|null;test:boolean;state:string;payment_url:string|null;expires_at:string|null;lease:string|null;activated:boolean;last_error:string|null};
 export async function syncLimen(id: string, owner?: string, acceptedRub?: string) {
   const config = limenConfig();
   // Persist request amount BEFORE calling the remote service. Retries reuse both
@@ -56,16 +56,24 @@ export async function syncLimen(id: string, owner?: string, acceptedRub?: string
       ? await api(`/orders/${encodeURIComponent(p.provider_id)}`,config.key)
       : await api("/orders",config.key,{partner_order_id:p.partner_id,amount_thb:thbAmount(p.total_thb),...(p.payer_phone?{payer_phone:p.payer_phone}:{})},p.partner_id);
     const order = validateOrder(raw,{partner_id:p.partner_id,amount_rub:p.amount_rub,amount_thb:thbAmount(p.total_thb),provider_id:p.provider_id,rate:p.provider_rate});
-    const url = order.payment_url ? paymentUrl(order.payment_url) : null;
+    let url: string | null = null;
+    let linkError: string | null = null;
+    if (order.payment_url) {
+      try { url = paymentUrl(order.payment_url,p.test); }
+      catch { linkError = "INVALID_PAYMENT_URL"; }
+    }
     const expires = order.expires_at && Number.isFinite(Date.parse(order.expires_at)) ? order.expires_at : null;
-    if (!p.provider_id && order.status === "pending" && (!url || !expires)) throw new Error("INCOMPLETE_PAYMENT_DETAILS");
+    if (order.status === "pending" && ((!url && !p.payment_url) || (!expires && !p.expires_at))) linkError ||= "INCOMPLETE_PAYMENT_DETAILS";
+    if (linkError && order.status === "pending") console.error("LimenThai payment link rejected", {subscriptionId:id,code:linkError,host:paymentHost(order.payment_url)});
+    // A bad navigation link must not discard a valid provider ID or amounts,
+    // nor prevent confirming an already-paid order through authenticated API.
     const activated = await withTransaction(async client => {
       const s = await client.query(`SELECT status,payment_method,total_thb FROM subscriptions WHERE id=$1 FOR UPDATE`,[id]);
       const current = await client.query<Payment>(`SELECT * FROM limenthai_payments WHERE subscription_id=$1 FOR UPDATE`,[id]);
       const row = current.rows[0];
       if (!row || row.lease !== lease) return false;
       if (s.rows[0]?.payment_method !== "BANK_RU" || s.rows[0].total_thb !== row.total_thb) throw new Error("SUBSCRIPTION_MISMATCH");
-      await client.query(`UPDATE limenthai_payments SET provider_id=$2,state=$3,provider_rate=$4,amount_rub=$5,payment_url=COALESCE($6,payment_url),expires_at=COALESCE($7,expires_at),lease=NULL,lease_until=NULL,last_error=NULL WHERE subscription_id=$1`,[id,order.order_id,order.status,order.rate,order.amount_rub,url,expires]);
+      await client.query(`UPDATE limenthai_payments SET provider_id=$2,state=$3,provider_rate=$4,amount_rub=$5,payment_url=CASE WHEN $8::text IS NOT NULL THEN NULL ELSE COALESCE($6,payment_url) END,expires_at=COALESCE($7,expires_at),lease=NULL,lease_until=NULL,last_error=$8 WHERE subscription_id=$1`,[id,order.order_id,order.status,order.rate,order.amount_rub,url,expires,linkError]);
       // Test payments never grant real meals, even with a paid test response.
       if (order.status !== "paid" || row.test || row.activated) return false;
       if (s.rows[0].status !== "AWAITING_ACTIVATION") throw new Error("SUBSCRIPTION_STATUS_MISMATCH");
@@ -88,7 +96,15 @@ export async function readLimen(id:string,owner?:string) {
   const r = await query<Payment>(`SELECT p.* FROM limenthai_payments p JOIN subscriptions s ON s.id=p.subscription_id WHERE p.subscription_id=$1 AND ($2::uuid IS NULL OR s.user_id=$2::uuid)`,[id,owner||null]);
   const p=r.rows[0];if(!p)throw new Error("NOT_FOUND");
   if(p.contract_version!=="THB_V1")throw new Error("OLD_CONTRACT_REQUIRES_REVIEW");
-  return {state:p.state,totalThb:p.total_thb,amountRub:p.amount_rub,rate:p.provider_rate,test:p.test,activated:p.activated,expiresAt:p.expires_at,paymentUrl:p.payment_url,qr:p.payment_url?await QRCode.toDataURL(paymentUrl(p.payment_url),{width:320,margin:2}):null};
+  let safeUrl: string | null = null;
+  let linkError = p.last_error === "INVALID_PAYMENT_URL" || p.last_error === "INCOMPLETE_PAYMENT_DETAILS";
+  if (p.payment_url) {
+    try { safeUrl = paymentUrl(p.payment_url,p.test); }
+    catch { linkError = true; }
+  }
+  const validExpiry = p.expires_at && Number.isFinite(new Date(p.expires_at).getTime());
+  if (!validExpiry) safeUrl = null;
+  return {state:p.state,totalThb:p.total_thb,amountRub:p.amount_rub,rate:p.provider_rate,test:p.test,activated:p.activated,expiresAt:p.expires_at,paymentUrl:safeUrl,paymentLinkIssue:p.state === "pending" && (linkError || !safeUrl),qr:safeUrl?await QRCode.toDataURL(safeUrl,{width:320,margin:2}):null};
 }
 let running=false;
 export async function reconcileLimen() {

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-type Payment = {state:string;totalThb:number;amountRub:string|null;rate:string|null;test:boolean;activated:boolean;expiresAt:string|null;paymentUrl:string|null;qr:string|null;quoteExpiresAt?:string};
+type Payment = {state:string;totalThb:number;amountRub:string|null;rate:string|null;test:boolean;activated:boolean;expiresAt:string|null;paymentUrl:string|null;qr:string|null;paymentLinkIssue?:boolean;quoteExpiresAt?:string};
 type Result = {ok:boolean;payment?:Payment;error?:string;code?:string};
 const buttonStyle = {display:"block",width:"100%",padding:"16px 20px",border:0,borderRadius:16,background:"#163a32",color:"#fff",fontSize:18,fontWeight:700,cursor:"pointer",marginTop:16};
 export default function LimenThaiPayment({subscriptionId,onPaid}:{subscriptionId:string;onPaid?:()=>void}) {
@@ -66,13 +66,15 @@ export default function LimenThaiPayment({subscriptionId,onPaid}:{subscriptionId
   return <div aria-busy={busy}>
     {!payment&&busy&&<p role="status">Получаем сумму в рублях…</p>}
     {payment&&<>
-      {payment.test&&<p>Тестовый режим: деньги не списываются, подписка не активируется.</p>}
+      {payment.test&&<p>Тестовая оплата LimenThai: откроется sandbox-страница. Деньги не списываются, подписка не активируется.</p>}
       <p>{payment.totalThb.toLocaleString("ru-RU")} ฿</p>
       {payment.amountRub&&<p className="payment-amount">{Number(payment.amountRub).toLocaleString("ru-RU",{minimumFractionDigits:2,maximumFractionDigits:2})} ₽</p>}
+      {payment.rate&&<p>Курс обменника: 1 ฿ = {payment.rate} ₽</p>}
+      {payment.paymentLinkIssue&&<p className="form-error">Сумма получена, но ссылка оплаты не прошла проверку. Сообщите менеджеру код INVALID_PAYMENT_URL / INCOMPLETE_PAYMENT_DETAILS. Не создавайте повторный заказ.</p>}
       {isNew&&<small>Предварительная сумма. Точную сумму обменник фиксирует при создании платежа.</small>}
       {notice&&<p role="status">{notice}</p>}
       {(isNew||payment.state==="pending")&&<button type="button" style={{...buttonStyle,opacity:canPay?1:0.55}} disabled={!canPay} onClick={pay}>{busy?"Подготавливаем оплату…":"Оплатить"}</button>}
-      {payment.state==="pending"&&!expired&&<p>По кнопке «Оплатить» откроется страница СБП с выбором банка.</p>}
+      {payment.state==="pending"&&!expired&&<p>{payment.test?"По кнопке откроется тестовая страница LimenThai.":"По кнопке «Оплатить» откроется страница СБП с выбором банка."}</p>}
       {payment.state==="pending"&&!expired&&payment.qr&&<details style={{marginTop:12}}><summary>Показать QR для оплаты с другого устройства</summary><img className="bank-payment-qr" src={payment.qr} alt="QR для оплаты через СБП"/></details>}
       {payment.state==="creating"&&<p>Проверяем созданную заявку. Не создавайте повторный заказ.</p>}
       {payment.state==="paid"&&<p>{payment.test?"Тестовая оплата подтверждена.":payment.activated?"Оплата подтверждена. Подписка активирована.":"Оплата получена. Обратитесь к менеджеру."}</p>}

@@ -5,7 +5,7 @@ import { consumeRateLimit } from "../../../../lib/rate-limit";
 import { syncLimen, quoteLimen, limenErrorCode, limenErrorMessage } from "../../../../lib/limenthai";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-const headers = {"Cache-Control":"no-store"};
+const headers = {"Cache-Control":"no-store","X-LimenThai-Integration":"2026-11-16-sandbox-v2"};
 export async function POST(request: NextRequest) {
   if (!isSameOriginMutation(request)) return NextResponse.json({ok:false,error:"Обновите страницу сайта и повторите запрос."},{status:403,headers});
   let id: string | undefined;
