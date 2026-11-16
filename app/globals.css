@@ -1701,3 +1701,10 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:3px solid #bc
   .account-chat-unavailable { right: auto; left: 0; }
   .account-chat-unavailable::before { right: auto; left: 17px; }
 }
+
+/* Language control stays immediately to the left of the account link. */
+.header-account-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.language-switch{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;flex-shrink:0;padding:7px;border:1px solid #d5d9d4;border-radius:50%;background:#fff;cursor:pointer}
+.language-switch svg{border:1px solid #ddd;border-radius:2px;overflow:hidden}
+.language-switch:focus-visible{outline:3px solid #af3828;outline-offset:3px}
+html[lang="en"] .site-header{gap:14px}

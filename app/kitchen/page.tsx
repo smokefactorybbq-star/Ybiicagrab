@@ -1,5 +1,7 @@
 "use client";
 
+import {Translated,useLanguage} from "../../components/LanguageProvider";
+import {getLocale} from "../../lib/i18n/translate";
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
@@ -32,12 +34,14 @@ function formatDay(value: string) {
   if (!match) return value;
   const [, year, month, day] = match;
   const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), 12));
-  const weekday = new Intl.DateTimeFormat("ru-RU", { weekday: "short", timeZone: "UTC" }).format(date);
-  const calendarDate = new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", timeZone: "UTC" }).format(date);
+  const weekday = new Intl.DateTimeFormat(getLocale(), { weekday: "short", timeZone: "UTC" }).format(date);
+  const calendarDate = new Intl.DateTimeFormat(getLocale(), { day: "2-digit", month: "2-digit", timeZone: "UTC" }).format(date);
   return `${weekday}, ${calendarDate}`;
 }
 
 export default function KitchenPage() {
+  const {t,language}=useLanguage();
+
   const [username, setUsername] = useState("kitchen");
   const [password, setPassword] = useState("");
   const [plan, setPlan] = useState<KitchenPlan | null>(null);
@@ -107,13 +111,13 @@ export default function KitchenPage() {
       <main className="page-shell kitchen-page">
         <form className="manager-login kitchen-login" onSubmit={(event) => void loadPlan(event)}>
           <span className="eyebrow">MealPoint Kitchen</span>
-          <h1>Вход на кухню</h1>
-          <p>Введите логин и пароль кухонного кабинета.</p>
-          <input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Логин" autoComplete="username" required />
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Пароль" autoComplete="current-password" required />
-          {error && <p className="form-error">{error}</p>}
-          <button type="submit" disabled={loading}>{loading ? "Проверяем…" : "Открыть кухню"}</button>
-          <Link className="kitchen-back-link" href="/">Вернуться на сайт</Link>
+          <h1><Translated>{"Вход на кухню"}</Translated></h1>
+          <p><Translated>{"Введите логин и пароль кухонного кабинета."}</Translated></p>
+          <input value={username} onChange={(event) => setUsername(event.target.value)} placeholder={t("Логин")} autoComplete="username" required />
+          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={t("Пароль")} autoComplete="current-password" required />
+          {error && <p className="form-error"><Translated>{error}</Translated></p>}
+          <button type="submit" disabled={loading}><Translated>{loading ? "Проверяем…" : "Открыть кухню"}</Translated></button>
+          <Link className="kitchen-back-link" href="/"><Translated>{"Вернуться на сайт"}</Translated></Link>
         </form>
       </main>
     );
@@ -124,49 +128,49 @@ export default function KitchenPage() {
       <section className="manager-heading kitchen-heading">
         <div>
           <span className="eyebrow">MealPoint Kitchen</span>
-          <h1>План на 7 дней</h1>
-          <p>Паузы уже вычтены из приготовления и развозки. Всего на неделю: <b>{totals.week}</b> обедов.</p>
+          <h1><Translated>{"План на 7 дней"}</Translated></h1>
+          <p><Translated>{"Паузы уже вычтены из приготовления и развозки. Всего на неделю: "}</Translated><b><Translated>{totals.week}</Translated></b><Translated>{" обедов."}</Translated></p>
         </div>
         <div className="manager-heading-actions">
-          <Link className="manager-scanner-link" href="/manager">К менеджеру</Link>
-          <button type="button" disabled={loading} onClick={() => void loadPlan()}>{loading ? "Обновляем…" : "Обновить"}</button>
-          <button type="button" className="kitchen-logout" onClick={() => void logout()}>Выйти</button>
+          <Link className="manager-scanner-link" href="/manager"><Translated>{"К менеджеру"}</Translated></Link>
+          <button type="button" disabled={loading} onClick={() => void loadPlan()}><Translated>{loading ? "Обновляем…" : "Обновить"}</Translated></button>
+          <button type="button" className="kitchen-logout" onClick={() => void logout()}><Translated>{"Выйти"}</Translated></button>
         </div>
       </section>
 
-      {error && <p className="form-error">{error}</p>}
-      {plan.testMode && <p className="test-mode-banner">Тестовый режим включён. План построен от даты {formatDay(plan.startDate)}.</p>}
+      {error && <p className="form-error"><Translated>{error}</Translated></p>}
+      {plan.testMode && <p className="test-mode-banner"><Translated>{"Тестовый режим включён. План построен от даты "}</Translated><Translated>{formatDay(plan.startDate)}</Translated>.</p>}
 
       <section className="kitchen-section-card">
         <div className="kitchen-section-title">
           <div>
-            <span className="eyebrow">Приготовление</span>
-            <h2>Блюда и количество порций</h2>
+            <span className="eyebrow"><Translated>{"Приготовление"}</Translated></span>
+            <h2><Translated>{"Блюда и количество порций"}</Translated></h2>
           </div>
-          <small>Автообновление каждую минуту</small>
+          <small><Translated>{"Автообновление каждую минуту"}</Translated></small>
         </div>
         <div className="kitchen-table-wrap">
           <table className="kitchen-week-table">
             <thead>
               <tr>
-                <th>Показатель</th>
-                {plan.days.map((day) => <th key={day.date}>{formatDay(day.date)}</th>)}
+                <th><Translated>{"Показатель"}</Translated></th>
+                {plan.days.map((day) => <th key={day.date}><Translated>{formatDay(day.date)}</Translated></th>)}
               </tr>
             </thead>
             <tbody>
               <tr className="kitchen-meal-row">
-                <th>Блюдо</th>
+                <th><Translated>{"Блюдо"}</Translated></th>
                 {plan.days.map((day) => (
                   <td key={day.date}>
                     <img src={day.meal.image} alt="" />
-                    <strong>{day.meal.title}</strong>
-                    <small>{day.meal.description}</small>
+                    <strong><Translated>{day.meal.title}</Translated></strong>
+                    <small><Translated>{day.meal.description}</Translated></small>
                   </td>
                 ))}
               </tr>
               <tr className="kitchen-total-row">
-                <th>Приготовить</th>
-                {plan.days.map((day) => <td key={day.date}><b>{day.totalMeals}</b><span>обедов</span></td>)}
+                <th><Translated>{"Приготовить"}</Translated></th>
+                {plan.days.map((day) => <td key={day.date}><b><Translated>{day.totalMeals}</Translated></b><span><Translated>{"обедов"}</Translated></span></td>)}
               </tr>
             </tbody>
           </table>
@@ -176,31 +180,31 @@ export default function KitchenPage() {
       <section className="kitchen-section-card">
         <div className="kitchen-section-title">
           <div>
-            <span className="eyebrow">Доставка по ПВ</span>
-            <h2>Сколько обедов отвезти</h2>
+            <span className="eyebrow"><Translated>{"Доставка по ПВ"}</Translated></span>
+            <h2><Translated>{"Сколько обедов отвезти"}</Translated></h2>
           </div>
         </div>
         <div className="kitchen-table-wrap">
           <table className="kitchen-delivery-table">
             <thead>
               <tr>
-                <th>Пункт выдачи</th>
-                {plan.days.map((day) => <th key={day.date}>{formatDay(day.date)}</th>)}
+                <th><Translated>{"Пункт выдачи"}</Translated></th>
+                {plan.days.map((day) => <th key={day.date}><Translated>{formatDay(day.date)}</Translated></th>)}
               </tr>
             </thead>
             <tbody>
               {plan.delivery.map((row) => (
                 <tr key={row.pickupPointName}>
-                  <th>{row.pickupPointName}</th>
-                  {plan.days.map((day) => <td key={day.date}>{row.counts[day.date] || 0}</td>)}
+                  <th><Translated>{row.pickupPointName}</Translated></th>
+                  {plan.days.map((day) => <td key={day.date}><Translated>{row.counts[day.date] || 0}</Translated></td>)}
                 </tr>
               ))}
               {!plan.delivery.length && (
-                <tr><td colSpan={8} className="empty-table">На ближайшие 7 дней активных подписок пока нет.</td></tr>
+                <tr><td colSpan={8} className="empty-table"><Translated>{"На ближайшие 7 дней активных подписок пока нет."}</Translated></td></tr>
               )}
               <tr className="kitchen-delivery-total">
-                <th>Всего</th>
-                {plan.days.map((day) => <td key={day.date}>{totals.byDate[day.date] || 0}</td>)}
+                <th><Translated>{"Всего"}</Translated></th>
+                {plan.days.map((day) => <td key={day.date}><Translated>{totals.byDate[day.date] || 0}</Translated></td>)}
               </tr>
             </tbody>
           </table>

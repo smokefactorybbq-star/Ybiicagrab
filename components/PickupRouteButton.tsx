@@ -1,5 +1,7 @@
 "use client";
 
+import {Translated,useLanguage} from "./LanguageProvider";
+import {getLocale} from "../lib/i18n/translate";
 import { useState } from "react";
 import {useCatalog} from "./useCatalog";
 import { buildGoogleMapsRouteUrl } from "../data/pickupPoints";
@@ -11,6 +13,8 @@ type Props = {
 };
 
 export default function PickupRouteButton({ pickupPointName, className = "route-button", label = "Построить маршрут" }: Props) {
+  const {t,language}=useLanguage();
+
   const [loading, setLoading] = useState(false);
   const {points}=useCatalog();
   const point = points.find(p=>p.name===pickupPointName);
@@ -38,7 +42,7 @@ export default function PickupRouteButton({ pickupPointName, className = "route-
 
   return (
     <button type="button" className={className} disabled={!point || loading} onClick={openRoute}>
-      {loading ? "Определяем местоположение…" : label}
+      <Translated>{loading ? "Определяем местоположение…" : label}</Translated>
     </button>
   );
 }

@@ -1,10 +1,15 @@
 "use client";
 
+import {Translated,useLanguage} from "./LanguageProvider";
+import {getLocale} from "../lib/i18n/translate";
+import LanguageSwitch from "./LanguageSwitch";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 function AccountIcon() {
+  const {t,language}=useLanguage();
+
   return (
     <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none">
       <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" strokeWidth="1.8" />
@@ -14,6 +19,8 @@ function AccountIcon() {
 }
 
 function SubscriptionIcon() {
+  const {t,language}=useLanguage();
+
   return (
     <svg aria-hidden="true" width="23" height="23" viewBox="0 0 24 24" fill="none">
       <rect x="3.5" y="5.5" width="17" height="15" rx="3" stroke="currentColor" strokeWidth="1.8" />
@@ -24,6 +31,8 @@ function SubscriptionIcon() {
 }
 
 function PickupIcon() {
+  const {t,language}=useLanguage();
+
   return (
     <svg aria-hidden="true" width="23" height="23" viewBox="0 0 24 24" fill="none">
       <path d="M20 10c0 5.2-8 11-8 11S4 15.2 4 10a8 8 0 1 1 16 0Z" stroke="currentColor" strokeWidth="1.8" />
@@ -33,6 +42,8 @@ function PickupIcon() {
 }
 
 function RulesIcon() {
+  const {t,language}=useLanguage();
+
   return (
     <svg aria-hidden="true" width="23" height="23" viewBox="0 0 24 24" fill="none">
       <rect x="5" y="3.5" width="14" height="17" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
@@ -44,6 +55,8 @@ function RulesIcon() {
 type MobileTab = "subscription" | "pickup" | "rules";
 
 export default function Header() {
+  const {t,language}=useLanguage();
+
   const pathname = usePathname();
   const [activeMobileTab, setActiveMobileTab] = useState<MobileTab>("subscription");
 
@@ -69,23 +82,24 @@ export default function Header() {
   return (
     <>
       <header className="site-header">
-        <Link className="brand" href="/#top" aria-label="MealPoint — Еда по подписке">
-          <img className="brand-logo" src="/mealpoint-logo.png" alt="MealPoint — Еда по подписке" />
+        <Link className="brand" href="/#top" aria-label={t("MealPoint — Еда по подписке")}>
+          <img className="brand-logo" src="/mealpoint-logo.png" alt={t("MealPoint — Еда по подписке")} />
         </Link>
 
-        <nav className="desktop-nav" aria-label="Основная навигация">
-          <Link href="/#subscription">Подписка</Link>
-          <Link href="/#pickup-points">Точки выдачи</Link>
-          <Link href="/rules">Правила</Link>
+        <nav className="desktop-nav" aria-label={t("Основная навигация")}>
+          <Link href="/#subscription"><Translated>{"Подписка"}</Translated></Link>
+          <Link href="/#pickup-points"><Translated>{"Точки выдачи"}</Translated></Link>
+          <Link href="/rules"><Translated>{"Правила"}</Translated></Link>
         </nav>
 
-        <Link className="account-button" href="/account" aria-label="Личный кабинет">
+        <div className="header-account-actions"><LanguageSwitch /><Link className="account-button" href="/account" aria-label={t("Личный кабинет")}>
           <AccountIcon />
-          <span>Личный кабинет</span>
+          <span><Translated>{"Личный кабинет"}</Translated></span>
         </Link>
+        </div>
       </header>
 
-      <nav className="mobile-bottom-nav" aria-label="Быстрая навигация">
+      <nav className="mobile-bottom-nav" aria-label={t("Быстрая навигация")}>
         <Link
           href="/#subscription"
           className={activeMobileTab === "subscription" ? "active" : ""}
@@ -93,7 +107,7 @@ export default function Header() {
           onClick={() => setActiveMobileTab("subscription")}
         >
           <span className="mobile-bottom-nav-icon"><SubscriptionIcon /></span>
-          <span>Подписка</span>
+          <span><Translated>{"Подписка"}</Translated></span>
         </Link>
 
         <Link
@@ -103,7 +117,7 @@ export default function Header() {
           onClick={() => setActiveMobileTab("pickup")}
         >
           <span className="mobile-bottom-nav-icon"><PickupIcon /></span>
-          <span>Точки выдачи</span>
+          <span><Translated>{"Точки выдачи"}</Translated></span>
         </Link>
 
         <Link
@@ -113,7 +127,7 @@ export default function Header() {
           onClick={() => setActiveMobileTab("rules")}
         >
           <span className="mobile-bottom-nav-icon"><RulesIcon /></span>
-          <span>Правила</span>
+          <span><Translated>{"Правила"}</Translated></span>
         </Link>
       </nav>
     </>

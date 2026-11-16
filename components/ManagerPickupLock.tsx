@@ -1,5 +1,7 @@
 "use client";
 
+import {Translated,useLanguage} from "./LanguageProvider";
+import {getLocale} from "../lib/i18n/translate";
 import { useCallback, useEffect, useState } from "react";
 
 type LockStatus = {
@@ -26,13 +28,15 @@ function formatBangkok(value?:string|null) {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("ru-RU",{
+  return new Intl.DateTimeFormat(getLocale(),{
     timeZone:"Asia/Bangkok",day:"2-digit",month:"2-digit",year:"numeric",
     hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"
   }).format(date);
 }
 
 export default function ManagerPickupLock({point="patong",pointName}:{point?:string;pointName?:string}) {
+  const {t,language}=useLanguage();
+
   const [status,setStatus]=useState<LockStatus|null>(null);
   const [loading,setLoading]=useState(true);
   const [opening,setOpening]=useState(false);
@@ -77,35 +81,35 @@ export default function ManagerPickupLock({point="patong",pointName}:{point?:str
   return <section className="manager-feature-card pickup-lock-card">
     <div className="pickup-today-heading">
       <div>
-        <span className="eyebrow">Холодильник · {pointName || status?.point?.name || point}</span>
-        <h2>Замок и ESP32</h2>
-        <p>Статус обновляется каждые 10 секунд. Команда открытия действует {status?.openSeconds||20} секунд.</p>
+        <span className="eyebrow"><Translated>{"Холодильник · "}</Translated><Translated>{pointName || status?.point?.name || point}</Translated></span>
+        <h2><Translated>{"Замок и ESP32"}</Translated></h2>
+        <p><Translated>{"Статус обновляется каждые 10 секунд. Команда открытия действует "}</Translated><Translated>{status?.openSeconds||20}</Translated><Translated>{" секунд."}</Translated></p>
       </div>
       <span className={`pickup-lock-status ${status?.online?"is-online":"is-offline"}`}>
-        {loading?"Проверяем…":status&&!status.configured?"● НЕ НАСТРОЕН":status?.online?"● ONLINE":"● OFFLINE"}
+        <Translated>{loading?"Проверяем…":status&&!status.configured?"● НЕ НАСТРОЕН":status?.online?"● ONLINE":"● OFFLINE"}</Translated>
       </span>
     </div>
 
     <div className="pickup-lock-grid">
-      <div><small>Связь</small><strong>{status?.configured?(status?.online?"ESP32 на связи":"Нет связи с ESP32"):"Замок не настроен"}</strong></div>
-      <div><small>Последний сигнал</small><strong>{formatBangkok(status?.lastSeenAt)}</strong></div>
-      <div><small>Температура</small><strong>{status?.temperature==null?"Датчик не установлен":`${status.temperature.toFixed(1)} °C`}</strong></div>
-      <div><small>Влажность</small><strong>{status?.humidity==null?"—":`${status.humidity.toFixed(1)} %`}</strong></div>
-      <div><small>Замок</small><strong>{status?.open?"ОТКРЫТ":"ЗАКРЫТ"}</strong></div>
-      <div><small>Wi‑Fi RSSI</small><strong>{status?.rssi==null?"—":`${status.rssi} dBm`}</strong></div>
+      <div><small><Translated>{"Связь"}</Translated></small><strong><Translated>{status?.configured?(status?.online?"ESP32 на связи":"Нет связи с ESP32"):"Замок не настроен"}</Translated></strong></div>
+      <div><small><Translated>{"Последний сигнал"}</Translated></small><strong><Translated>{formatBangkok(status?.lastSeenAt)}</Translated></strong></div>
+      <div><small><Translated>{"Температура"}</Translated></small><strong><Translated>{status?.temperature==null?"Датчик не установлен":`${status.temperature.toFixed(1)} °C`}</Translated></strong></div>
+      <div><small><Translated>{"Влажность"}</Translated></small><strong><Translated>{status?.humidity==null?"—":`${status.humidity.toFixed(1)} %`}</Translated></strong></div>
+      <div><small><Translated>{"Замок"}</Translated></small><strong><Translated>{status?.open?"ОТКРЫТ":"ЗАКРЫТ"}</Translated></strong></div>
+      <div><small>Wi‑Fi RSSI</small><strong><Translated>{status?.rssi==null?"—":`${status.rssi} dBm`}</Translated></strong></div>
     </div>
 
     <div className="pickup-lock-actions">
       <button type="button" className="manager-primary"
         disabled={opening||!status?.configured||!status?.online}
         onClick={()=>void openDoor()}>
-        {opening?"Отправляем…":`Открыть дверь на ${status?.openSeconds||20} сек.`}
+        <Translated>{opening?"Отправляем…":`Открыть дверь на ${status?.openSeconds||20} сек.`}</Translated>
       </button>
-      <button type="button" disabled={loading} onClick={()=>void load()}>Обновить статус</button>
+      <button type="button" disabled={loading} onClick={()=>void load()}><Translated>{"Обновить статус"}</Translated></button>
     </div>
 
-    {message&&<p className="pickup-lock-success">{message}</p>}
-    {error&&<p className="form-error">{error}</p>}
-    {status?.lastEvent&&<p className="pickup-lock-meta">Последнее событие: <strong>{status.lastEvent}</strong> · {formatBangkok(status.lastEventAt)}{status.lastBootReason?` · причина: ${status.lastBootReason}`:""}</p>}
+    {message&&<p className="pickup-lock-success"><Translated>{message}</Translated></p>}
+    {error&&<p className="form-error"><Translated>{error}</Translated></p>}
+    {status?.lastEvent&&<p className="pickup-lock-meta"><Translated>{"Последнее событие: "}</Translated><strong><Translated>{status.lastEvent}</Translated></strong> · <Translated>{formatBangkok(status.lastEventAt)}</Translated><Translated>{status.lastBootReason?` · причина: ${status.lastBootReason}`:""}</Translated></p>}
   </section>;
 }

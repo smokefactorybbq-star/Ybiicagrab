@@ -1,5 +1,7 @@
 "use client";
 
+import {Translated,useLanguage} from "../../components/LanguageProvider";
+import {getLocale} from "../../lib/i18n/translate";
 import Link from "next/link";
 import ManagerPickupQr from "../../components/ManagerPickupQr";
 import ManagerPoints from "../../components/ManagerPoints";
@@ -103,11 +105,13 @@ function formatDate(value: string) {
   const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!match) return value;
   const [, year, month, day] = match;
-  return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })
+  return new Intl.DateTimeFormat(getLocale(), { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })
     .format(new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), 12)));
 }
 
 export default function ManagerPage() {
+  const {t,language}=useLanguage();
+
   const [username, setUsername] = useState("manager");
   const [password, setPassword] = useState("");
   const [subscriptions, setSubscriptions] = useState<ManagerSubscription[]>([]);
@@ -411,12 +415,12 @@ export default function ManagerPage() {
       <main className="page-shell manager-page">
         <form className="manager-login" onSubmit={(event) => void loadManagerData(event)}>
           <span className="eyebrow">MealPoint Manager</span>
-          <h1>Вход менеджера</h1>
+          <h1><Translated>{"Вход менеджера"}</Translated></h1>
           <p> </p>
-          <input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Логин" autoComplete="username" required />
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Пароль" required />
-          {error && <p className="form-error">{error}</p>}
-          <button type="submit" disabled={loading}>{loading ? "Проверяем…" : "Открыть кабинет"}</button>
+          <input value={username} onChange={(event) => setUsername(event.target.value)} placeholder={t("Логин")} autoComplete="username" required />
+          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={t("Пароль")} required />
+          {error && <p className="form-error"><Translated>{error}</Translated></p>}
+          <button type="submit" disabled={loading}><Translated>{loading ? "Проверяем…" : "Открыть кабинет"}</Translated></button>
         </form>
       </main>
     );
@@ -427,14 +431,14 @@ export default function ManagerPage() {
       <section className="manager-heading">
         <div>
           <span className="eyebrow">MealPoint Manager</span>
-          <h1>Управление</h1>
-          <p>Подписки и остатки в пунктах выдачи обновляются каждые 15 секунд.</p>
+          <h1><Translated>{"Управление"}</Translated></h1>
+          <p><Translated>{"Подписки и остатки в пунктах выдачи обновляются каждые 15 секунд."}</Translated></p>
         </div>
         <div className="manager-heading-actions">
-          <Link className="manager-scanner-link" href="/kitchen">Открыть кухню</Link>
-          <Link className="manager-scanner-link" href="/courier">Открыть курьера</Link>
-          <button type="button" onClick={() => void loadManagerData()} disabled={loading}>{loading ? "Обновляем…" : "Обновить"}</button>
-          <button type="button" className="kitchen-logout" onClick={() => void logout()}>Выйти</button>
+          <Link className="manager-scanner-link" href="/kitchen"><Translated>{"Открыть кухню"}</Translated></Link>
+          <Link className="manager-scanner-link" href="/courier"><Translated>{"Открыть курьера"}</Translated></Link>
+          <button type="button" onClick={() => void loadManagerData()} disabled={loading}><Translated>{loading ? "Обновляем…" : "Обновить"}</Translated></button>
+          <button type="button" className="kitchen-logout" onClick={() => void logout()}><Translated>{"Выйти"}</Translated></button>
         </div>
       </section>
 
@@ -442,28 +446,28 @@ export default function ManagerPage() {
       <ManagerPickupLocks />
       <ManagerPoints onChanged={()=>void loadManagerData()}/>
       <ManagerDiscounts/>
-      {error && <p className="form-error">{error}</p>}
+      {error && <p className="form-error"><Translated>{error}</Translated></p>}
 
       <section className={`test-clock-card ${testEnabled ? "is-enabled" : ""}`}>
-        <div className="test-clock-heading"><div><span className="eyebrow">Тестовый режим</span><h2>Подменить дату и время сайта</h2><p>Влияет на ЛК, паузы, автоматическое списание, ПВ, курьера и кухню.</p></div>{testClock?.isTestMode && <span className="test-clock-badge">TEST</span>}</div>
+        <div className="test-clock-heading"><div><span className="eyebrow"><Translated>{"Тестовый режим"}</Translated></span><h2><Translated>{"Подменить дату и время сайта"}</Translated></h2><p><Translated>{"Влияет на ЛК, паузы, автоматическое списание, ПВ, курьера и кухню."}</Translated></p></div>{testClock?.isTestMode && <span className="test-clock-badge">TEST</span>}</div>
         <div className="test-clock-controls">
-          <label className="test-clock-switch"><input type="checkbox" checked={testEnabled} onChange={(event) => { setTestEnabled(event.target.checked); setTestDirty(true); }} /><span>Включить тестовое время</span></label>
-          <label>Дата и время Пхукета<input type="datetime-local" value={testDateTime} onChange={(event) => { setTestDateTime(event.target.value); setTestDirty(true); }} disabled={!testEnabled} /></label>
-          <button type="button" onClick={() => void saveTestClock()} disabled={savingClock}>{savingClock ? "Сохраняем…" : "Применить"}</button>
+          <label className="test-clock-switch"><input type="checkbox" checked={testEnabled} onChange={(event) => { setTestEnabled(event.target.checked); setTestDirty(true); }} /><span><Translated>{"Включить тестовое время"}</Translated></span></label>
+          <label><Translated>{"Дата и время Пхукета"}</Translated><input type="datetime-local" value={testDateTime} onChange={(event) => { setTestDateTime(event.target.value); setTestDirty(true); }} disabled={!testEnabled} /></label>
+          <button type="button" onClick={() => void saveTestClock()} disabled={savingClock}><Translated>{savingClock ? "Сохраняем…" : "Применить"}</Translated></button>
         </div>
-        <p className="test-clock-current">Сейчас сайт считает: {testClock ? `${formatDate(testClock.date)}, ${String(testClock.hour).padStart(2,"0")}:${String(testClock.minute).padStart(2,"0")}` : "—"}</p>
+        <p className="test-clock-current"><Translated>{"Сейчас сайт считает: "}</Translated><Translated>{testClock ? `${formatDate(testClock.date)}, ${String(testClock.hour).padStart(2,"0")}:${String(testClock.minute).padStart(2,"0")}` : "—"}</Translated></p>
       </section>
 
       <section className="daily-fulfillment-card">
-        <div className="pickup-today-heading"><div><span className="eyebrow">Клиенты на день</span><h2>{fulfillmentDashboard ? formatDate(fulfillmentDashboard.serviceDate) : "Сегодня"}</h2><p>В 22:00 панель автоматически переключается на следующий день — индикаторы снова становятся пустыми.</p></div>{fulfillmentDashboard?.switchedToNextDay && <small>После 22:00 показан следующий день</small>}</div>
+        <div className="pickup-today-heading"><div><span className="eyebrow"><Translated>{"Клиенты на день"}</Translated></span><h2><Translated>{fulfillmentDashboard ? formatDate(fulfillmentDashboard.serviceDate) : "Сегодня"}</Translated></h2><p><Translated>{"В 22:00 панель автоматически переключается на следующий день — индикаторы снова становятся пустыми."}</Translated></p></div>{fulfillmentDashboard?.switchedToNextDay && <small><Translated>{"После 22:00 показан следующий день"}</Translated></small>}</div>
         <div className="fulfillment-columns">
-          <section className="fulfillment-column"><div className="fulfillment-column-title"><h3>Самовывоз</h3><span>{fulfillmentDashboard?.pickupClients.length || 0}</span></div><div className="fulfillment-client-list">
-            {fulfillmentDashboard?.pickupClients.map((client) => <article key={`pickup:${client.subscriptionId}`} className="fulfillment-client-row"><span className={`pickup-status-circle ${client.manuallyWrittenOff ? "is-written-off" : client.pickedUp ? "is-done" : "is-waiting"}`} /><div><strong>{client.fullName}</strong><small>{client.requestedTime || "—"} · {client.pickupPointName || "Точка не указана"}</small><small>{client.phone || "Телефон не указан"} · {client.code}</small>{client.manuallyWrittenOff&&<small className="manual-writeoff-label">Списан менеджером · клиент не забрал</small>}</div><div className="fulfillment-row-actions">{!client.pickedUp&&!client.manuallyWrittenOff&&!client.consumed&&<button type="button" className="pickup-writeoff-button" onClick={()=>setWriteoffTarget(client)}>Списать</button>}{client.pickedUp&&<span className="manager-done">Получен</span>}{client.manuallyWrittenOff&&<span className="manager-writeoff-done">Списан</span>}</div></article>)}
-            {!fulfillmentDashboard?.pickupClients.length && <p className="empty-table">Самовывоза на этот день нет.</p>}
+          <section className="fulfillment-column"><div className="fulfillment-column-title"><h3><Translated>{"Самовывоз"}</Translated></h3><span><Translated>{fulfillmentDashboard?.pickupClients.length || 0}</Translated></span></div><div className="fulfillment-client-list">
+            {fulfillmentDashboard?.pickupClients.map((client) => <article key={`pickup:${client.subscriptionId}`} className="fulfillment-client-row"><span className={`pickup-status-circle ${client.manuallyWrittenOff ? "is-written-off" : client.pickedUp ? "is-done" : "is-waiting"}`} /><div><strong>{client.fullName}</strong><small><Translated>{client.requestedTime || "—"}</Translated> · <Translated>{client.pickupPointName || "Точка не указана"}</Translated></small><small>{client.phone || "Телефон не указан"} · <Translated>{client.code}</Translated></small>{client.manuallyWrittenOff&&<small className="manual-writeoff-label"><Translated>{"Списан менеджером · клиент не забрал"}</Translated></small>}</div><div className="fulfillment-row-actions">{!client.pickedUp&&!client.manuallyWrittenOff&&!client.consumed&&<button type="button" className="pickup-writeoff-button" onClick={()=>setWriteoffTarget(client)}><Translated>{"Списать"}</Translated></button>}{client.pickedUp&&<span className="manager-done"><Translated>{"Получен"}</Translated></span>}{client.manuallyWrittenOff&&<span className="manager-writeoff-done"><Translated>{"Списан"}</Translated></span>}</div></article>)}
+            {!fulfillmentDashboard?.pickupClients.length && <p className="empty-table"><Translated>{"Самовывоза на этот день нет."}</Translated></p>}
           </div></section>
-          <section className="fulfillment-column"><div className="fulfillment-column-title"><h3>Доставка</h3><span>{fulfillmentDashboard?.deliveryClients.length || 0}</span></div><div className="fulfillment-client-list">
-            {fulfillmentDashboard?.deliveryClients.map((client) => <article key={`delivery:${client.subscriptionId}`} className="fulfillment-client-row"><button type="button" className={`delivery-status-box ${client.received ? "is-done" : ""}`} disabled={client.received} onClick={() => setDeliveryConfirm(client)}>{client.received ? "✓" : ""}</button><div><strong>{client.fullName}</strong><small>{client.requestedTime || "—"} · {client.phone || "Телефон не указан"}</small><small>{client.address || "Адрес не указан"}</small></div></article>)}
-            {!fulfillmentDashboard?.deliveryClients.length && <p className="empty-table">Доставок на этот день нет.</p>}
+          <section className="fulfillment-column"><div className="fulfillment-column-title"><h3><Translated>{"Доставка"}</Translated></h3><span><Translated>{fulfillmentDashboard?.deliveryClients.length || 0}</Translated></span></div><div className="fulfillment-client-list">
+            {fulfillmentDashboard?.deliveryClients.map((client) => <article key={`delivery:${client.subscriptionId}`} className="fulfillment-client-row"><button type="button" className={`delivery-status-box ${client.received ? "is-done" : ""}`} disabled={client.received} onClick={() => setDeliveryConfirm(client)}><Translated>{client.received ? "✓" : ""}</Translated></button><div><strong>{client.fullName}</strong><small><Translated>{client.requestedTime || "—"}</Translated> · {client.phone || "Телефон не указан"}</small><small>{client.address || "Адрес не указан"}</small></div></article>)}
+            {!fulfillmentDashboard?.deliveryClients.length && <p className="empty-table"><Translated>{"Доставок на этот день нет."}</Translated></p>}
           </div></section>
         </div>
       </section>
@@ -471,30 +475,30 @@ export default function ManagerPage() {
       <section className="pickup-today-card">
         <div className="pickup-today-heading">
           <div>
-            <span className="eyebrow">Пункты выдачи</span>
-            <h2>Остатки на {pickupDashboard ? formatDate(pickupDashboard.serviceDate) : "сегодня"}</h2>
-            <p>Самовывоз списывается после успешного QR. Если клиент не забрал обед до 21:00, день автоматически считается использованным. Красный индикатор — клиент ещё не забрал, зелёный — QR успешно отсканирован.</p>
+            <span className="eyebrow"><Translated>{"Пункты выдачи"}</Translated></span>
+            <h2><Translated>{"Остатки на "}</Translated><Translated>{pickupDashboard ? formatDate(pickupDashboard.serviceDate) : "сегодня"}</Translated></h2>
+            <p><Translated>{"Самовывоз списывается после успешного QR. Если клиент не забрал обед до 21:00, день автоматически считается использованным. Красный индикатор — клиент ещё не забрал, зелёный — QR успешно отсканирован."}</Translated></p>
           </div>
-          {pickupDashboard && <small>После 21:00 панель автоматически переключится на следующий день.</small>}
+          {pickupDashboard && <small><Translated>{"После 21:00 панель автоматически переключится на следующий день."}</Translated></small>}
         </div>
 
         <div className="manager-table-wrap pickup-table-wrap">
           <table className="manager-table pickup-today-table">
             <thead>
               <tr>
-                <th>Пункт выдачи</th>
-                <th>Доставлено</th>
-                <th>Списано</th>
-                <th>Осталось</th>
-                <th>Клиенты</th>
+                <th><Translated>{"Пункт выдачи"}</Translated></th>
+                <th><Translated>{"Доставлено"}</Translated></th>
+                <th><Translated>{"Списано"}</Translated></th>
+                <th><Translated>{"Осталось"}</Translated></th>
+                <th><Translated>{"Клиенты"}</Translated></th>
               </tr>
             </thead>
             <tbody>
               {pickupDashboard?.points.map((point) => (
                 <tr key={point.pickupPointName} className={point.remainingCount > 0 ? "pickup-has-leftovers" : ""}>
                   <td>
-                    <strong>{point.pickupPointName}</strong>
-                    <small>По активным подпискам: {point.plannedCount}</small>
+                    <strong><Translated>{point.pickupPointName}</Translated></strong>
+                    <small><Translated>{"По активным подпискам: "}</Translated><Translated>{point.plannedCount}</Translated></small>
                   </td>
                   <td>
                     <div className="delivered-editor">
@@ -507,30 +511,30 @@ export default function ManagerPage() {
                           ...current,
                           [point.pickupPointName]: event.target.value
                         }))}
-                        aria-label={`Доставлено в ${point.pickupPointName}`}
+                        aria-label={t(`Доставлено в ${point.pickupPointName}`)}
                       />
                       <button
                         type="button"
                         disabled={savingPoint === point.pickupPointName}
                         onClick={() => void saveDeliveredCount(point)}
                       >
-                        {savingPoint === point.pickupPointName ? "…" : "Сохранить"}
+                        <Translated>{savingPoint === point.pickupPointName ? "…" : "Сохранить"}</Translated>
                       </button>
                     </div>
                   </td>
-                  <td><b className="pickup-number pickup-picked">{point.pickedUpCount}</b></td>
-                  <td><b className={`pickup-number ${point.remainingCount > 0 ? "pickup-left" : "pickup-empty"}`}>{point.remainingCount}</b></td>
+                  <td><b className="pickup-number pickup-picked"><Translated>{point.pickedUpCount}</Translated></b></td>
+                  <td><b className={`pickup-number ${point.remainingCount > 0 ? "pickup-left" : "pickup-empty"}`}><Translated>{point.remainingCount}</Translated></b></td>
                   <td>
                     {point.remainingCount === 0 ? (
-                      <span className="manager-done">Все обеды забрали</span>
+                      <span className="manager-done"><Translated>{"Все обеды забрали"}</Translated></span>
                     ) : (
-                      <span className="pickup-waiting">См. клиентов выше</span>
+                      <span className="pickup-waiting"><Translated>{"См. клиентов выше"}</Translated></span>
                     )}
                   </td>
                 </tr>
               ))}
               {!pickupDashboard?.points.length && (
-                <tr><td colSpan={5} className="empty-table">На сегодня активных обедов в пунктах выдачи нет.</td></tr>
+                <tr><td colSpan={5} className="empty-table"><Translated>{"На сегодня активных обедов в пунктах выдачи нет."}</Translated></td></tr>
               )}
             </tbody>
           </table>
@@ -540,70 +544,69 @@ export default function ManagerPage() {
       <section className="manager-subscriptions-section">
         <div className="pickup-today-heading">
           <div>
-            <span className="eyebrow">Подписки</span>
-            <h2>Все покупки</h2>
+            <span className="eyebrow"><Translated>{"Подписки"}</Translated></span>
+            <h2><Translated>{"Все покупки"}</Translated></h2>
           </div>
         </div>
         <div className="manager-table-wrap">
           <table className="manager-table">
             <thead>
               <tr>
-                <th>Клиент</th>
-                <th>Пункт и оплата</th>
-                <th>Даты</th>
-                <th>Цена</th>
-                <th>Статус</th>
-                <th>Действие</th>
+                <th><Translated>{"Клиент"}</Translated></th>
+                <th><Translated>{"Пункт и оплата"}</Translated></th>
+                <th><Translated>{"Даты"}</Translated></th>
+                <th><Translated>{"Цена"}</Translated></th>
+                <th><Translated>{"Статус"}</Translated></th>
+                <th><Translated>{"Действие"}</Translated></th>
               </tr>
             </thead>
             <tbody>
               {subscriptions.map((item) => (
                 <tr key={item.id} className={item.status === "AWAITING_ACTIVATION" ? "needs-activation" : ""}>
-                  <td><strong>{item.full_name}</strong><small>{item.phone || "—"}</small>{item.status === "ACTIVE" && <small>Код: {item.code}</small>}</td>
-                  <td><strong>{item.fulfillment_type === "DELIVERY" ? "Доставка" : (item.pickup_point_name || "—")}</strong><small>{item.payment_method || "—"}</small></td>
+                  <td><strong>{item.full_name}</strong><small>{item.phone || "—"}</small>{item.status === "ACTIVE" && <small><Translated>{"Код: "}</Translated><Translated>{item.code}</Translated></small>}</td>
+                  <td><strong><Translated>{item.fulfillment_type === "DELIVERY" ? "Доставка" : (item.pickup_point_name || "—")}</Translated></strong><small><Translated>{item.payment_method || "—"}</Translated></small></td>
                   <td>
                     <details>
-                      <summary>{item.selected_days} дней подписки</summary>
+                      <summary><Translated>{item.selected_days}</Translated><Translated>{" дней подписки"}</Translated></summary>
                       <div className="manager-dates">
                         {item.dates.map((day) => {
                           const paused = ["PAUSED", "PAUSE_REQUESTED"].includes(day.status);
                           return (
-                            <span key={`${item.id}:${day.service_date}`} className={paused ? "manager-date-paused" : ""} title={statusLabels[day.status] || day.status}>
-                              {formatDate(day.service_date)}{paused ? " · ПАУЗА" : ""}
+                            <span key={`${item.id}:${day.service_date}`} className={paused ? "manager-date-paused" : ""} title={t(statusLabels[day.status] || day.status)}>
+                              <Translated>{formatDate(day.service_date)}</Translated><Translated>{paused ? " · ПАУЗА" : ""}</Translated>
                             </span>
                           );
                         })}
                       </div>
                     </details>
                   </td>
-                  <td><strong>{item.total_thb.toLocaleString("ru-RU")} ฿</strong><small>{item.rate_thb} ฿/день</small></td>
+                  <td><strong><Translated>{item.total_thb.toLocaleString(getLocale())}</Translated> ฿</strong><small><Translated>{item.rate_thb}</Translated><Translated>{" ฿/день"}</Translated></small></td>
                   <td>
                     {item.limen_state&&<div style={{marginBottom:8}}>
                       <strong style={{display:"block",color:item.limen_state==="paid"&&!item.limen_test?"#167047":undefined}}>
-                        {item.limen_test?"Тест LimenThai: ":"LimenThai: "}
-                        {item.limen_state==="paid"&&!item.limen_test?"Оплата получена":"Оплата не получена"}
+                        <Translated>{item.limen_test?"Тест LimenThai: ":"LimenThai: "}</Translated>
+                        <Translated>{item.limen_state==="paid"&&!item.limen_test?"Оплата получена":"Оплата не получена"}</Translated>
                       </strong>
-                      {item.limen_test&&item.limen_state==="paid"&&<small>Тестовый платёж подтверждён. Реальные деньги не получены.</small>}
-                      {item.limen_state==="expired"&&<small>Срок оплаты истёк.</small>}
-                      {item.limen_state==="declined"&&<small>Платёж отклонён.</small>}
-                      {item.limen_amount_rub&&<small>{item.limen_amount_rub} ₽ · {item.total_thb.toLocaleString("ru-RU")} ฿</small>}
-                      {item.limen_order_id&&<small>Заявка: {item.limen_order_id}</small>}
+                      {item.limen_test&&item.limen_state==="paid"&&<small><Translated>{"Тестовый платёж подтверждён. Реальные деньги не получены."}</Translated></small>}
+                      {item.limen_state==="expired"&&<small><Translated>{"Срок оплаты истёк."}</Translated></small>}
+                      {item.limen_state==="declined"&&<small><Translated>{"Платёж отклонён."}</Translated></small>}
+                      {item.limen_amount_rub&&<small><Translated>{item.limen_amount_rub}</Translated> ₽ · <Translated>{item.total_thb.toLocaleString(getLocale())}</Translated> ฿</small>}
+                      {item.limen_order_id&&<small><Translated>{"Заявка: "}</Translated><Translated>{item.limen_order_id}</Translated></small>}
                     </div>}
-                    <span className={`status-pill status-${item.status.toLowerCase()}`}>{item.limen_state&&item.status==="AWAITING_ACTIVATION"?"Ожидает активации менеджером":statusLabels[item.status] || item.status}</span><small>Пауз: {item.pauses_used}/{item.pause_limit}</small><small>Осталось: {item.remaining_portions}</small></td>
+                    <span className={`status-pill status-${item.status.toLowerCase()}`}><Translated>{item.limen_state&&item.status==="AWAITING_ACTIVATION"?"Ожидает активации менеджером":statusLabels[item.status] || item.status}</Translated></span><small><Translated>{"Пауз: "}</Translated><Translated>{item.pauses_used}</Translated>/<Translated>{item.pause_limit}</Translated></small><small><Translated>{"Осталось: "}</Translated><Translated>{item.remaining_portions}</Translated></small></td>
                   <td>
                     <div className="manager-action-stack">
                       {["ACTIVE","COMPLETED","AWAITING_ACTIVATION"].includes(item.status)&&<ManagerAddDays id={item.id} name={item.full_name} lastDate={item.dates.at(-1)?.service_date||""} onDone={()=>void loadManagerData()}/>}
                       {item.status === "AWAITING_ACTIVATION" ? (
                         <button className="activate-button" type="button" disabled={activating === item.id || (!!item.limen_state && (item.limen_state!=="paid" || item.limen_test!==false))} onClick={() => void activateSubscription(item.id)}>
-                          {activating === item.id ? "Активируем…" : "Активировать"}
+                          <Translated>{activating === item.id ? "Активируем…" : "Активировать"}</Translated>
                         </button>
                       ) : item.status === "PENDING_PAYMENT" ? (
-                        <span className="manager-payment-waiting">Не оплачено</span>
+                        <span className="manager-payment-waiting"><Translated>{"Не оплачено"}</Translated></span>
                       ) : (
-                        <span className="manager-done">Готово</span>
+                        <span className="manager-done"><Translated>{"Готово"}</Translated></span>
                       )}
-                      <button type="button" className="manager-message-button" onClick={() => void openManagerChat(item)}>
-                        Чат{item.manager_unread_count > 0 && <span className="message-alert">{Math.min(item.manager_unread_count,99)}</span>}
+                      <button type="button" className="manager-message-button" onClick={() => void openManagerChat(item)}><Translated>{" Чат"}</Translated>{item.manager_unread_count > 0 && <span className="message-alert"><Translated>{Math.min(item.manager_unread_count,99)}</Translated></span>}
                       </button>
                       <button
                         className="delete-subscription-button"
@@ -611,14 +614,14 @@ export default function ManagerPage() {
                         disabled={deleting === item.id}
                         onClick={() => { setDeleteTarget(item); setError(""); }}
                       >
-                        {deleting === item.id ? "Удаляем…" : "Удалить"}
+                        <Translated>{deleting === item.id ? "Удаляем…" : "Удалить"}</Translated>
                       </button>
                     </div>
                   </td>
                 </tr>
               ))}
               {!subscriptions.length && (
-                <tr><td colSpan={6} className="empty-table">Подписок пока нет.</td></tr>
+                <tr><td colSpan={6} className="empty-table"><Translated>{"Подписок пока нет."}</Translated></td></tr>
               )}
             </tbody>
           </table>
@@ -630,16 +633,16 @@ export default function ManagerPage() {
           if (event.currentTarget === event.target && !deleting) setDeleteTarget(null);
         }}>
           <section className="payment-modal delete-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="delete-subscription-title">
-            <button className="modal-close" type="button" aria-label="Закрыть" disabled={Boolean(deleting)} onClick={() => setDeleteTarget(null)}>×</button>
-            <span className="eyebrow">Удаление подписки</span>
-            <h2 id="delete-subscription-title">Подтвердите удаление</h2>
-            <p><b>{deleteTarget.full_name}</b> · {deleteTarget.code || "код ещё не присвоен"}</p>
-            <p className="delete-warning">Подписка, её даты и заявки доставки будут удалены без возможности восстановления.</p>
-            <p>Для подтверждения нажмите кнопку ниже. Действие необратимо.</p>
+            <button className="modal-close" type="button" aria-label={t("Закрыть")} disabled={Boolean(deleting)} onClick={() => setDeleteTarget(null)}>×</button>
+            <span className="eyebrow"><Translated>{"Удаление подписки"}</Translated></span>
+            <h2 id="delete-subscription-title"><Translated>{"Подтвердите удаление"}</Translated></h2>
+            <p><b>{deleteTarget.full_name}</b> · <Translated>{deleteTarget.code || "код ещё не присвоен"}</Translated></p>
+            <p className="delete-warning"><Translated>{"Подписка, её даты и заявки доставки будут удалены без возможности восстановления."}</Translated></p>
+            <p><Translated>{"Для подтверждения нажмите кнопку ниже. Действие необратимо."}</Translated></p>
             <div className="delete-confirm-actions">
-              <button type="button" className="delete-confirm-cancel" disabled={Boolean(deleting)} onClick={() => setDeleteTarget(null)}>Отмена</button>
+              <button type="button" className="delete-confirm-cancel" disabled={Boolean(deleting)} onClick={() => setDeleteTarget(null)}><Translated>{"Отмена"}</Translated></button>
               <button type="button" className="delete-confirm-submit" disabled={Boolean(deleting)} onClick={() => void deleteSubscription()}>
-                {deleting ? "Удаляем…" : "Удалить подписку"}
+                <Translated>{deleting ? "Удаляем…" : "Удалить подписку"}</Translated>
               </button>
             </div>
           </section>
@@ -651,36 +654,36 @@ export default function ManagerPage() {
           if (event.currentTarget === event.target) setContactPoint(null);
         }}>
           <section className="payment-modal uncollected-modal" role="dialog" aria-modal="true" aria-labelledby="uncollected-title">
-            <button className="modal-close" type="button" aria-label="Закрыть" onClick={() => setContactPoint(null)}>×</button>
-            <span className="eyebrow">Не забрали сегодня</span>
-            <h2 id="uncollected-title">{contactPoint.pickupPointName}</h2>
-            <p>Осталось обедов: <b>{contactPoint.remainingCount}</b>. Позвоните клиентам и уточните, когда они смогут забрать заказ.</p>
+            <button className="modal-close" type="button" aria-label={t("Закрыть")} onClick={() => setContactPoint(null)}>×</button>
+            <span className="eyebrow"><Translated>{"Не забрали сегодня"}</Translated></span>
+            <h2 id="uncollected-title"><Translated>{contactPoint.pickupPointName}</Translated></h2>
+            <p><Translated>{"Осталось обедов: "}</Translated><b><Translated>{contactPoint.remainingCount}</Translated></b><Translated>{". Позвоните клиентам и уточните, когда они смогут забрать заказ."}</Translated></p>
             <div className="uncollected-list">
               {!contactPoint.uncollectedClients.length && (
-                <p className="empty-table">Активных клиентов, которые не забрали обед, не найдено. Возможно, в ПВ были доставлены дополнительные порции.</p>
+                <p className="empty-table"><Translated>{"Активных клиентов, которые не забрали обед, не найдено. Возможно, в ПВ были доставлены дополнительные порции."}</Translated></p>
               )}
               {contactPoint.uncollectedClients.map((client) => (
                 <article key={`${client.phone || client.full_name}:${client.subscription_codes.join(",")}`}>
                   <div>
                     <strong>{client.full_name}</strong>
-                    <small>{client.portions > 1 ? `Не забрано обедов: ${client.portions}` : "Не забран 1 обед"}</small>
-                    <small>Подписки: {client.subscription_codes.join(", ")}</small>
+                    <small><Translated>{client.portions > 1 ? `Не забрано обедов: ${client.portions}` : "Не забран 1 обед"}</Translated></small>
+                    <small><Translated>{"Подписки: "}</Translated><Translated>{client.subscription_codes.join(", ")}</Translated></small>
                   </div>
                   {client.phone ? (
                     <a href={`tel:${client.phone.replace(/[^+\d]/g, "")}`}>{client.phone}</a>
                   ) : (
-                    <span>Телефон не указан</span>
+                    <span><Translated>{"Телефон не указан"}</Translated></span>
                   )}
                 </article>
               ))}
             </div>
-            <button type="button" onClick={() => setContactPoint(null)}>Закрыть список</button>
+            <button type="button" onClick={() => setContactPoint(null)}><Translated>{"Закрыть список"}</Translated></button>
           </section>
         </div>
       )}
-      {writeoffTarget && <div className="modal-backdrop" role="presentation" onMouseDown={event=>{if(event.currentTarget===event.target&&!writingOff)setWriteoffTarget(null)}}><section className="payment-modal writeoff-confirm-modal" role="dialog" aria-modal="true"><button className="modal-close" type="button" disabled={Boolean(writingOff)} onClick={()=>setWriteoffTarget(null)}>×</button><span className="eyebrow">Самовывоз</span><h2>Списать обед вручную?</h2><p><strong>{writeoffTarget.fullName}</strong><br/>{writeoffTarget.pickupPointName||"Точка не указана"} · {writeoffTarget.code}</p><p className="delete-warning">Используйте это, если обед доставили на точку, но клиент его не забрал. День подписки будет уменьшен на 1 и повторно получить этот обед будет нельзя.</p><div className="delivery-confirm-actions"><button type="button" className="confirm-yes" disabled={Boolean(writingOff)} onClick={()=>void manualPickupWriteoff()}>{writingOff?"Списываем…":"Списать обед"}</button><button type="button" className="confirm-no" disabled={Boolean(writingOff)} onClick={()=>setWriteoffTarget(null)}>Отмена</button></div></section></div>}
-      {chatTarget && <div className="modal-backdrop chat-backdrop" role="presentation" onMouseDown={event=>{if(event.currentTarget===event.target)setChatTarget(null)}}><section className="chat-window" role="dialog" aria-modal="true"><header className="chat-header"><div><span className="eyebrow">Чат с клиентом</span><h2>{chatTarget.full_name}</h2><small>{chatTarget.phone||chatTarget.code}</small></div><button type="button" className="chat-close" onClick={()=>setChatTarget(null)}>×</button></header><div className="chat-messages">{!chatMessages.length&&<p className="chat-empty">Сообщений пока нет.</p>}{chatMessages.map(message=><article key={message.id} className={`chat-bubble ${message.senderRole==="MANAGER"?"chat-own":"chat-other"}`}><strong>{message.senderRole==="MANAGER"?"Менеджер":(message.senderName||chatTarget.full_name)}</strong>{message.body&&<p>{message.body}</p>}{message.imageUrl&&message.attachmentType==="pdf"?<a className="chat-file-link" href={message.imageUrl} target="_blank" rel="noreferrer">📄 Открыть PDF</a>:message.imageUrl&&<a href={message.imageUrl} target="_blank" rel="noreferrer"><img className="chat-image" src={message.imageUrl} alt="Чек или изображение клиента" loading="lazy"/></a>}<time>{new Date(message.createdAt).toLocaleString("ru-RU",{timeZone:"Asia/Bangkok"})}</time></article>)}</div>{chatError&&<p className="form-error chat-error">{chatError}</p>}<div className="chat-composer"><textarea value={chatText} onChange={e=>setChatText(e.target.value)} maxLength={4000} placeholder="Ответ клиенту…" onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();void sendManagerChatMessage();}}}/><button type="button" disabled={chatLoading||!chatText.trim()} onClick={()=>void sendManagerChatMessage()}>{chatLoading?"Отправляем…":"Отправить"}</button></div></section></div>}
-      {deliveryConfirm && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && !confirmingDelivery) setDeliveryConfirm(null); }}><section className="payment-modal delivery-confirm-modal" role="dialog" aria-modal="true"><button className="modal-close" type="button" disabled={Boolean(confirmingDelivery)} onClick={() => setDeliveryConfirm(null)}>×</button><span className="eyebrow">Доставка</span><h2>Клиент получил еду?</h2><p><strong>{deliveryConfirm.fullName}</strong><br/>{deliveryConfirm.requestedTime || "—"} · {deliveryConfirm.address || "Адрес не указан"}</p><div className="delivery-confirm-actions"><button type="button" className="confirm-yes" disabled={Boolean(confirmingDelivery)} onClick={() => void confirmDeliveryReceived()}>{confirmingDelivery ? "Сохраняем…" : "Да"}</button><button type="button" className="confirm-no" disabled={Boolean(confirmingDelivery)} onClick={() => setDeliveryConfirm(null)}>Нет</button></div></section></div>}
+      {writeoffTarget && <div className="modal-backdrop" role="presentation" onMouseDown={event=>{if(event.currentTarget===event.target&&!writingOff)setWriteoffTarget(null)}}><section className="payment-modal writeoff-confirm-modal" role="dialog" aria-modal="true"><button className="modal-close" type="button" disabled={Boolean(writingOff)} onClick={()=>setWriteoffTarget(null)}>×</button><span className="eyebrow"><Translated>{"Самовывоз"}</Translated></span><h2><Translated>{"Списать обед вручную?"}</Translated></h2><p><strong>{writeoffTarget.fullName}</strong><br/><Translated>{writeoffTarget.pickupPointName||"Точка не указана"}</Translated> · <Translated>{writeoffTarget.code}</Translated></p><p className="delete-warning"><Translated>{"Используйте это, если обед доставили на точку, но клиент его не забрал. День подписки будет уменьшен на 1 и повторно получить этот обед будет нельзя."}</Translated></p><div className="delivery-confirm-actions"><button type="button" className="confirm-yes" disabled={Boolean(writingOff)} onClick={()=>void manualPickupWriteoff()}><Translated>{writingOff?"Списываем…":"Списать обед"}</Translated></button><button type="button" className="confirm-no" disabled={Boolean(writingOff)} onClick={()=>setWriteoffTarget(null)}><Translated>{"Отмена"}</Translated></button></div></section></div>}
+      {chatTarget && <div className="modal-backdrop chat-backdrop" role="presentation" onMouseDown={event=>{if(event.currentTarget===event.target)setChatTarget(null)}}><section className="chat-window" role="dialog" aria-modal="true"><header className="chat-header"><div><span className="eyebrow"><Translated>{"Чат с клиентом"}</Translated></span><h2>{chatTarget.full_name}</h2><small>{chatTarget.phone||chatTarget.code}</small></div><button type="button" className="chat-close" onClick={()=>setChatTarget(null)}>×</button></header><div className="chat-messages">{!chatMessages.length&&<p className="chat-empty"><Translated>{"Сообщений пока нет."}</Translated></p>}{chatMessages.map(message=><article key={message.id} className={`chat-bubble ${message.senderRole==="MANAGER"?"chat-own":"chat-other"}`}><strong>{message.senderRole==="MANAGER"?"Менеджер":(message.senderName||chatTarget.full_name)}</strong>{message.body&&<p>{message.body}</p>}{message.imageUrl&&message.attachmentType==="pdf"?<a className="chat-file-link" href={message.imageUrl} target="_blank" rel="noreferrer"><Translated>{"📄 Открыть PDF"}</Translated></a>:message.imageUrl&&<a href={message.imageUrl} target="_blank" rel="noreferrer"><img className="chat-image" src={message.imageUrl} alt={t("Чек или изображение клиента")} loading="lazy"/></a>}<time><Translated>{new Date(message.createdAt).toLocaleString(getLocale(),{timeZone:"Asia/Bangkok"})}</Translated></time></article>)}</div>{chatError&&<p className="form-error chat-error"><Translated>{chatError}</Translated></p>}<div className="chat-composer"><textarea value={chatText} onChange={e=>setChatText(e.target.value)} maxLength={4000} placeholder={t("Ответ клиенту…")} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();void sendManagerChatMessage();}}}/><button type="button" disabled={chatLoading||!chatText.trim()} onClick={()=>void sendManagerChatMessage()}><Translated>{chatLoading?"Отправляем…":"Отправить"}</Translated></button></div></section></div>}
+      {deliveryConfirm && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && !confirmingDelivery) setDeliveryConfirm(null); }}><section className="payment-modal delivery-confirm-modal" role="dialog" aria-modal="true"><button className="modal-close" type="button" disabled={Boolean(confirmingDelivery)} onClick={() => setDeliveryConfirm(null)}>×</button><span className="eyebrow"><Translated>{"Доставка"}</Translated></span><h2><Translated>{"Клиент получил еду?"}</Translated></h2><p><strong>{deliveryConfirm.fullName}</strong><br/><Translated>{deliveryConfirm.requestedTime || "—"}</Translated> · {deliveryConfirm.address || "Адрес не указан"}</p><div className="delivery-confirm-actions"><button type="button" className="confirm-yes" disabled={Boolean(confirmingDelivery)} onClick={() => void confirmDeliveryReceived()}><Translated>{confirmingDelivery ? "Сохраняем…" : "Да"}</Translated></button><button type="button" className="confirm-no" disabled={Boolean(confirmingDelivery)} onClick={() => setDeliveryConfirm(null)}><Translated>{"Нет"}</Translated></button></div></section></div>}
     </main>
   );
 }
