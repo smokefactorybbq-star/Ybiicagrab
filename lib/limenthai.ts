@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import QRCode from "qrcode";
 import { query, withTransaction } from "./db";
-import { createSubscriptionCode } from "./subscriptions";
 import { notifyManagerTelegram } from "./telegram";
 import { decimal, thbAmount, paymentUrl, paymentHost, validateOrder, validateQuote } from "./limenthai-contract";
 
@@ -67,24 +66,20 @@ export async function syncLimen(id: string, owner?: string, acceptedRub?: string
     if (linkError && order.status === "pending") console.error("LimenThai payment link rejected", {subscriptionId:id,code:linkError,host:paymentHost(order.payment_url)});
     // A bad navigation link must not discard a valid provider ID or amounts,
     // nor prevent confirming an already-paid order through authenticated API.
-    const activated = await withTransaction(async client => {
+    const received = await withTransaction(async client => {
       const s = await client.query(`SELECT status,payment_method,total_thb FROM subscriptions WHERE id=$1 FOR UPDATE`,[id]);
       const current = await client.query<Payment>(`SELECT * FROM limenthai_payments WHERE subscription_id=$1 FOR UPDATE`,[id]);
       const row = current.rows[0];
       if (!row || row.lease !== lease) return false;
       if (s.rows[0]?.payment_method !== "BANK_RU" || s.rows[0].total_thb !== row.total_thb) throw new Error("SUBSCRIPTION_MISMATCH");
       await client.query(`UPDATE limenthai_payments SET provider_id=$2,state=$3,provider_rate=$4,amount_rub=$5,payment_url=CASE WHEN $8::text IS NOT NULL THEN NULL ELSE COALESCE($6,payment_url) END,expires_at=COALESCE($7,expires_at),lease=NULL,lease_until=NULL,last_error=$8 WHERE subscription_id=$1`,[id,order.order_id,order.status,order.rate,order.amount_rub,url,expires,linkError]);
-      // Test payments never grant real meals, even with a paid test response.
-      if (order.status !== "paid" || row.test || row.activated) return false;
-      if (s.rows[0].status !== "AWAITING_ACTIVATION") throw new Error("SUBSCRIPTION_STATUS_MISMATCH");
-      const code = createSubscriptionCode();
-      await client.query(`UPDATE subscriptions SET status='ACTIVE',code=$2,activated_at=now(),paid_at=$3,updated_at=now() WHERE id=$1`,[id,code,order.paid_at]);
-      await client.query(`UPDATE subscription_days SET status='AVAILABLE' WHERE subscription_id=$1 AND status='PLANNED'`,[id]);
-      await client.query(`INSERT INTO manager_events(event_type,entity_id,payload) VALUES('SUBSCRIPTION_ACTIVATED',$1,$2::jsonb)`,[id,JSON.stringify({code,provider:"LimenThai",orderId:order.order_id,amountRub:order.amount_rub})]);
-      await client.query(`UPDATE limenthai_payments SET activated=true WHERE subscription_id=$1`,[id]);
+      // Record receipt only. Manager activation is a separate authenticated action.
+      if (order.status !== "paid" || row.test || row.state === "paid") return false;
+      await client.query(`UPDATE subscriptions SET paid_at=COALESCE(paid_at,$2::timestamptz),updated_at=now() WHERE id=$1`,[id,order.paid_at]);
+      await client.query(`INSERT INTO manager_events(event_type,entity_id,payload) VALUES('LIMENTHAI_PAYMENT_RECEIVED',$1,$2::jsonb)`,[id,JSON.stringify({provider:"LimenThai",orderId:order.order_id,amountRub:order.amount_rub,amountThb:order.amount_thb})]);
       return true;
     });
-    if (activated) void notifyManagerTelegram({text:`РћРїР»Р°С‚Р° LimenThai РїРѕРґС‚РІРµСЂР¶РґРµРЅР°. РџРѕРґРїРёСЃРєР° ${id}. РЎСѓРјРјР° ${p.total_thb} THB / ${order.amount_rub} RUB.`});
+    if (received) void notifyManagerTelegram({text:`Оплата получена — LimenThai. Подписка ${id}. Сумма ${p.total_thb} THB / ${order.amount_rub} RUB. Ожидает ручной активации менеджером.`});
   } catch (error) {
     const code = limenErrorCode(error);
     await query(`UPDATE limenthai_payments SET lease=NULL,lease_until=NULL,last_error=$3 WHERE subscription_id=$1 AND lease=$2`,[id,lease,code]);

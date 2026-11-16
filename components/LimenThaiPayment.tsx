@@ -77,7 +77,7 @@ export default function LimenThaiPayment({subscriptionId,onPaid}:{subscriptionId
       {payment.state==="pending"&&!expired&&<p>{payment.test?"По кнопке откроется тестовая страница LimenThai.":"По кнопке «Оплатить» откроется страница СБП с выбором банка."}</p>}
       {payment.state==="pending"&&!expired&&payment.qr&&<details style={{marginTop:12}}><summary>Показать QR для оплаты с другого устройства</summary><img className="bank-payment-qr" src={payment.qr} alt="QR для оплаты через СБП"/></details>}
       {payment.state==="creating"&&<p>Проверяем созданную заявку. Не создавайте повторный заказ.</p>}
-      {payment.state==="paid"&&<p>{payment.test?"Тестовая оплата подтверждена.":payment.activated?"Оплата подтверждена. Подписка активирована.":"Оплата получена. Обратитесь к менеджеру."}</p>}
+      {payment.state==="paid"&&<p>{payment.test?"Тестовая оплата подтверждена.":payment.activated?"Оплата подтверждена. Подписка активирована.":"Оплата получена. Подписка ожидает активации менеджером."}</p>}
       {["expired","declined"].includes(payment.state)&&<p>Платёж {payment.state==="expired"?"просрочен":"отклонён"}. Обратитесь к менеджеру.</p>}
       {expired&&payment.state==="pending"&&<p>Срок оплаты истёк. Проверяем окончательный статус.</p>}
       {quoteExpired&&<p>Курс обновился. Запросите сумму ещё раз.</p>}

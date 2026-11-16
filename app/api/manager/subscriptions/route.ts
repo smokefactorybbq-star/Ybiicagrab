@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query, withTransaction } from "../../../../lib/db";
 import { authorizeManager } from "../../../../lib/manager-auth";
+import { assertLimenManualActivation } from "../../../../lib/limenthai-contract";
 import { createSubscriptionCode } from "../../../../lib/subscriptions";
 import { isSameOriginMutation } from "../../../../lib/request-security";
 
@@ -18,6 +19,11 @@ type ManagerSubscriptionRow = {
   pickup_point_name: string | null;
   fulfillment_type: string;
   payment_method: string | null;
+  limen_state: string | null;
+  limen_test: boolean | null;
+  limen_order_id: string | null;
+  limen_amount_rub: string | null;
+
   selected_days: number;
   remaining_portions: number;
   pause_limit: number;
@@ -57,6 +63,10 @@ export async function GET(request: Request) {
          COALESCE(NULLIF(s.pickup_point_name, ''), day_info.pickup_point_name) AS pickup_point_name,
          s.fulfillment_type,
          s.payment_method,
+         lp.state AS limen_state,
+         lp.test AS limen_test,
+         lp.provider_id AS limen_order_id,
+         lp.amount_rub AS limen_amount_rub,
          s.selected_days,
          s.remaining_portions,
          s.pause_limit,
@@ -77,6 +87,7 @@ export async function GET(request: Request) {
          COALESCE(day_info.dates, '[]'::json) AS dates
        FROM subscriptions s
        JOIN users u ON u.id = s.user_id
+       LEFT JOIN limenthai_payments lp ON lp.subscription_id = s.id AND s.payment_method = 'BANK_RU' 
        LEFT JOIN customer_accounts ca ON ca.user_id = u.id
        LEFT JOIN LATERAL (
          SELECT
@@ -122,15 +133,16 @@ export async function PATCH(request: Request) {
     }
 
     const activated = await withTransaction(async (client) => {
-      const current = await client.query<{ id: string; status: string }>(
-        `SELECT id, status FROM subscriptions WHERE id = $1 FOR UPDATE`, [id]
+      const current = await client.query<{ id: string; status: string; total_thb:number }>(
+        `SELECT id, status, total_thb FROM subscriptions WHERE id = $1 FOR UPDATE`, [id]
       );
       const subscription = current.rows[0];
       if (!subscription) throw new Error("NOT_FOUND");
       if (subscription.status === "ACTIVE") return null;
       if (subscription.status !== "AWAITING_ACTIVATION") throw new Error("WRONG_STATUS");
 
-      if ((await client.query(`SELECT 1 FROM limenthai_payments WHERE subscription_id=$1`,[id])).rowCount) throw new Error("LIMENTHAI_AUTO_ONLY");
+      const payment = await client.query<{state:string;test:boolean;provider_id:string|null;contract_version:string;total_thb:number}>(`SELECT state,test,provider_id,contract_version,total_thb FROM limenthai_payments WHERE subscription_id=$1 FOR UPDATE`,[id]);
+      assertLimenManualActivation(payment.rows[0],subscription.total_thb);
       const code = createSubscriptionCode();
       await client.query(
         `UPDATE subscriptions
@@ -145,6 +157,7 @@ export async function PATCH(request: Request) {
         `INSERT INTO manager_events (event_type, entity_id, payload)
          VALUES ('SUBSCRIPTION_ACTIVATED', $1, $2::jsonb)`, [id, JSON.stringify({ code })]
       );
+      if (payment.rows[0]) await client.query(`UPDATE limenthai_payments SET activated=true WHERE subscription_id=$1`,[id]);
       return code;
     });
 
@@ -153,7 +166,7 @@ export async function PATCH(request: Request) {
     const code = error instanceof Error ? error.message : "";
     const message = code === "NOT_FOUND" ? "Подписка не найдена"
       : code === "WRONG_STATUS" ? "Эту подписку нельзя активировать"
-      : code === "LIMENTHAI_AUTO_ONLY" ? "LimenThai: активация только после подтверждения оплаты. Тестовые платежи не активируют подписку." : "Не удалось активировать подписку";
+      : code === "LIMENTHAI_PAYMENT_NOT_RECEIVED" ? "Оплата не получена: требуется подтверждённый реальный платёж LimenThai. Тестовая оплата не подходит." : "Не удалось активировать подписку";
     return NextResponse.json({ ok: false, error: message }, { status: 400 });
   }
 }

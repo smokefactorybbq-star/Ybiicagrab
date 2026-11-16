@@ -18,8 +18,8 @@ for(const patch of [{amount_rub:'1.00'},{amount_thb:'999.00'},{settlement_curren
 test('allow documented SBP host',()=>assert.equal(c.paymentUrl('https://qr.nspk.ru/abc'),'https://qr.nspk.ru/abc'));
 for(const url of ['javascript:alert(1)','https://evil.test','https://qr.nspk.ru.evil.test/','https://user:pass@qr.nspk.ru/'])test('reject unsafe URL '+url,()=>assert.throws(()=>c.paymentUrl(url)));
 // Exercise real sync module with an in-memory transaction adapter and provider stub.
-let payment,sub,calls,activations;
-function reset(test){payment={subscription_id:'id',partner_id:'SF-id',provider_id:null,amount_rub:null,total_thb:1000,contract_version:'THB_V1',payer_phone:'+79161234567',provider_rate:null,test,state:'creating',payment_url:null,expires_at:null,lease:null,activated:false};sub={id:'id',user_id:'owner',payment_method:'BANK_RU',status:'AWAITING_ACTIVATION',total_thb:1000};calls=[];activations=0;}
+let payment,sub,calls,activations,receipts,dayUpdates;
+function reset(test){payment={subscription_id:'id',partner_id:'SF-id',provider_id:null,amount_rub:null,total_thb:1000,contract_version:'THB_V1',payer_phone:'+79161234567',provider_rate:null,test,state:'creating',payment_url:null,expires_at:null,lease:null,activated:false};sub={id:'id',user_id:'owner',payment_method:'BANK_RU',status:'AWAITING_ACTIVATION',total_thb:1000};calls=[];activations=0;receipts=0;dayUpdates=0;}
 async function query(sql,args=[]){
  if(sql.startsWith('SELECT id,user_id')||sql.startsWith('SELECT status,payment_method'))return {rows:[sub]};
  if(sql.startsWith('SELECT * FROM limenthai_payments'))return {rows:[{...payment}]};
@@ -28,6 +28,8 @@ async function query(sql,args=[]){
  if(sql.includes("SET quoted_rate=$3,state='creating'")){payment.state='creating';return {rowCount:1};}
  if(sql.includes('SET provider_id=$2')){Object.assign(payment,{provider_id:args[1],state:args[2],amount_rub:args[4],provider_rate:args[3],payment_url:args[5],expires_at:args[6],last_error:args[7],lease:null});return {rowCount:1};}
  if(sql.includes("UPDATE subscriptions SET status='ACTIVE'")){sub.status='ACTIVE';activations++;return {rowCount:1};}
+ if(sql.includes("VALUES('LIMENTHAI_PAYMENT_RECEIVED'"))receipts++;
+ if(sql.includes("UPDATE subscription_days SET status='AVAILABLE'"))dayUpdates++;
  if(sql.includes('SET activated=true'))payment.activated=true;
  if(sql.includes('SET lease=NULL'))payment.lease=null;
  return {rowCount:1,rows:[]};
@@ -38,7 +40,7 @@ global.fetch=async(url,opts)=>{calls.push({url,opts});if(failHttp)return {ok:fal
 const l=load('lib/limenthai.ts',{'./db':{query,withTransaction:fn=>fn({query})},'./subscriptions':{createSubscriptionCode:()=> 'code'},'./telegram':{notifyManagerTelegram:async()=>true},'./limenthai-contract':c,qrcode:{toDataURL:async()=> 'data:image/png;base64,AA'}});
 (async()=>{
  reset(true);await l.syncLimen('id','owner');assert.equal(activations,0);assert.equal(payment.state,'paid');console.log('PASS test payment never activates');
- reset(false);process.env.LIMENTHAI_API_KEY='lt_live_example';process.env.LIMENTHAI_THB_PER_USDT='34';await l.syncLimen('id','owner');await l.syncLimen('id','owner');assert.equal(activations,1);assert.equal(calls.length,1);assert.equal(JSON.parse(calls[0].opts.body).amount_thb,'1000.00');assert.equal('amount_rub' in JSON.parse(calls[0].opts.body),false);assert.equal(JSON.parse(calls[0].opts.body).payer_phone,'+79161234567');assert.equal(calls[0].opts.headers['Idempotency-Key'],'SF-id');console.log('PASS paid retry activates exactly once with persisted amount and key');
+ reset(false);process.env.LIMENTHAI_API_KEY='lt_live_example';process.env.LIMENTHAI_THB_PER_USDT='34';await l.syncLimen('id','owner');await l.syncLimen('id','owner');assert.equal(activations,0);assert.equal(dayUpdates,0);assert.equal(sub.status,'AWAITING_ACTIVATION');assert.equal(receipts,1);assert.equal(calls.length,1);assert.equal(JSON.parse(calls[0].opts.body).amount_thb,'1000.00');assert.equal('amount_rub' in JSON.parse(calls[0].opts.body),false);assert.equal(JSON.parse(calls[0].opts.body).payer_phone,'+79161234567');assert.equal(calls[0].opts.headers['Idempotency-Key'],'SF-id');console.log('PASS paid retry records receipt once without activation or meal availability');
  reset(false);await assert.rejects(()=>l.syncLimen('id','intruder'));assert.equal(calls.length,0);console.log('PASS ownership checked before provider request');
  reset(true);await assert.rejects(()=>l.syncLimen('id','owner'));assert.equal(calls.length,0);console.log('PASS key mode mismatch blocks requests');
  reset(false);payment.contract_version='LEGACY_USDT';await assert.rejects(()=>l.syncLimen('id','owner'));assert.equal(calls.length,0);console.log('PASS old contract is never retried as THB');
@@ -66,5 +68,9 @@ const l=load('lib/limenthai.ts',{'./db':{query,withTransaction:fn=>fn({query})},
  reset(true);process.env.LIMENTHAI_API_KEY='lt_test_example';providerOverride={...order,order_id:'ord_1',partner_order_id:'SF-id',status:'pending',payment_url:'https://api.limenthai.com/partner-api/sandbox/ord_af80d11a8d8a',expires_at:'2099-01-01T00:00:00Z'};
  const sandboxPayment=await l.syncLimen('id','owner');assert.equal(sandboxPayment.paymentLinkIssue,false);assert.equal(sandboxPayment.paymentUrl,providerOverride.payment_url);assert.equal(sandboxPayment.amountRub,'2678.00');assert.equal(activations,0);console.log('PASS actual sandbox URL reaches frontend without configuration');
  providerOverride=null;
+ const paidRecord={state:'paid',test:false,provider_id:'ord_1',contract_version:'THB_V1',total_thb:1000};
+ test('manager can activate verified real paid order',()=>assert.doesNotThrow(()=>c.assertLimenManualActivation(paidRecord,1000)));
+ for(const patch of [{state:'pending'},{state:'expired'},{state:'declined'},{test:true},{provider_id:null},{contract_version:'LEGACY_USDT'},{total_thb:999}])test('manual activation rejected '+JSON.stringify(patch),()=>assert.throws(()=>c.assertLimenManualActivation({...paidRecord,...patch},1000),/LIMENTHAI_PAYMENT_NOT_RECEIVED/));
+ test('other manual payment methods unchanged',()=>assert.doesNotThrow(()=>c.assertLimenManualActivation(undefined,1000)));
  console.log(`${count+14} checks passed; transaction adapter is mocked, not real PostgreSQL.`);
 })().catch(e=>{console.error(e);process.exitCode=1});

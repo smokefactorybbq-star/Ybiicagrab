@@ -46,3 +46,8 @@ export function validateQuote(raw: unknown, amountThb: string) {
   if (!q || decimal(q.amount_thb,2) !== decimal(amountThb,2) || decimal(q.amount_rub,2) <= BigInt(0) || decimal(q.rate,8) <= BigInt(0) || q.unit !== "RUB за 1 THB" || typeof q.valid_until !== "string" || !Number.isFinite(Date.parse(q.valid_until)) || Date.parse(q.valid_until) <= Date.now()) throw new Error("INVALID_QUOTE");
   return q;
 }
+
+export function assertLimenManualActivation(payment: {state:string;test:boolean;provider_id:string|null;contract_version:string;total_thb:number}|undefined, totalThb:number) {
+  if (!payment) return; // Other payment methods and legacy manual BANK_RU.
+  if (payment.test || payment.state !== "paid" || !payment.provider_id || payment.contract_version !== "THB_V1" || payment.total_thb !== totalThb) throw new Error("LIMENTHAI_PAYMENT_NOT_RECEIVED");
+}

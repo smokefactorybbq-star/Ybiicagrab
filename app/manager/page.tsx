@@ -23,6 +23,11 @@ type ManagerSubscription = {
   pickup_point_name: string | null;
   fulfillment_type: "PICKUP" | "DELIVERY";
   payment_method: string | null;
+  limen_state: string | null;
+  limen_test: boolean | null;
+  limen_order_id: string | null;
+  limen_amount_rub: string | null;
+
   selected_days: number;
   remaining_portions: number;
   pause_limit: number;
@@ -572,12 +577,24 @@ export default function ManagerPage() {
                     </details>
                   </td>
                   <td><strong>{item.total_thb.toLocaleString("ru-RU")} ฿</strong><small>{item.rate_thb} ฿/день</small></td>
-                  <td><span className={`status-pill status-${item.status.toLowerCase()}`}>{statusLabels[item.status] || item.status}</span><small>Пауз: {item.pauses_used}/{item.pause_limit}</small><small>Осталось: {item.remaining_portions}</small></td>
+                  <td>
+                    {item.limen_state&&<div style={{marginBottom:8}}>
+                      <strong style={{display:"block",color:item.limen_state==="paid"&&!item.limen_test?"#167047":undefined}}>
+                        {item.limen_test?"Тест LimenThai: ":"LimenThai: "}
+                        {item.limen_state==="paid"&&!item.limen_test?"Оплата получена":"Оплата не получена"}
+                      </strong>
+                      {item.limen_test&&item.limen_state==="paid"&&<small>Тестовый платёж подтверждён. Реальные деньги не получены.</small>}
+                      {item.limen_state==="expired"&&<small>Срок оплаты истёк.</small>}
+                      {item.limen_state==="declined"&&<small>Платёж отклонён.</small>}
+                      {item.limen_amount_rub&&<small>{item.limen_amount_rub} ₽ · {item.total_thb.toLocaleString("ru-RU")} ฿</small>}
+                      {item.limen_order_id&&<small>Заявка: {item.limen_order_id}</small>}
+                    </div>}
+                    <span className={`status-pill status-${item.status.toLowerCase()}`}>{item.limen_state&&item.status==="AWAITING_ACTIVATION"?"Ожидает активации менеджером":statusLabels[item.status] || item.status}</span><small>Пауз: {item.pauses_used}/{item.pause_limit}</small><small>Осталось: {item.remaining_portions}</small></td>
                   <td>
                     <div className="manager-action-stack">
                       {["ACTIVE","COMPLETED","AWAITING_ACTIVATION"].includes(item.status)&&<ManagerAddDays id={item.id} name={item.full_name} lastDate={item.dates.at(-1)?.service_date||""} onDone={()=>void loadManagerData()}/>}
                       {item.status === "AWAITING_ACTIVATION" ? (
-                        <button className="activate-button" type="button" disabled={activating === item.id} onClick={() => void activateSubscription(item.id)}>
+                        <button className="activate-button" type="button" disabled={activating === item.id || (!!item.limen_state && (item.limen_state!=="paid" || item.limen_test!==false))} onClick={() => void activateSubscription(item.id)}>
                           {activating === item.id ? "Активируем…" : "Активировать"}
                         </button>
                       ) : item.status === "PENDING_PAYMENT" ? (
