@@ -429,3 +429,32 @@ FROM initial_subscription_days i
 WHERE s.id = i.id
   AND NOT EXISTS (SELECT 1 FROM app_migrations WHERE name='pause-policy-2026-10-27');
 INSERT INTO app_migrations(name) VALUES('pause-policy-2026-10-27') ON CONFLICT DO NOTHING;
+
+-- LimenThai: separate records preserve legacy BANK_RU subscriptions unchanged.
+CREATE TABLE IF NOT EXISTS limenthai_payments (
+ subscription_id UUID PRIMARY KEY REFERENCES subscriptions(id) ON DELETE RESTRICT,
+ partner_id TEXT UNIQUE NOT NULL,
+ provider_id TEXT UNIQUE,
+ total_thb INTEGER NOT NULL CHECK(total_thb>0),
+ thb_per_usdt TEXT NOT NULL,
+ test BOOLEAN NOT NULL,
+ state TEXT NOT NULL DEFAULT 'new' CHECK(state IN ('new','creating','pending','paid','expired','declined')),
+ amount_rub TEXT,
+ quoted_rate TEXT,
+ provider_rate TEXT,
+ amount_usdt TEXT,
+ payment_url TEXT,
+ expires_at TIMESTAMPTZ,
+ activated BOOLEAN NOT NULL DEFAULT false,
+ lease UUID,
+ lease_until TIMESTAMPTZ,
+ checked_at TIMESTAMPTZ,
+ last_error TEXT,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS limenthai_reconcile_idx ON limenthai_payments(checked_at) WHERE state IN ('new','creating','pending');
+
+-- Upgrade safe: previous USDT requests are retained but never retried as THB.
+ALTER TABLE limenthai_payments ALTER COLUMN thb_per_usdt DROP NOT NULL;
+ALTER TABLE limenthai_payments ADD COLUMN IF NOT EXISTS contract_version TEXT NOT NULL DEFAULT 'LEGACY_USDT';
+ALTER TABLE limenthai_payments ADD COLUMN IF NOT EXISTS payer_phone TEXT;

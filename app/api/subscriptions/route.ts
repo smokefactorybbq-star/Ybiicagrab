@@ -17,6 +17,7 @@ import {
 import { isSameOriginMutation } from "../../../lib/request-security";
 import { paymentMethods, paymentConfiguration } from "../../../lib/payments";
 import { validDeliveryTime } from "../../../lib/validation";
+import { limenAvailable, limenConfig } from "../../../lib/limenthai";
 import { consumeRateLimit } from "../../../lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -25,6 +26,7 @@ export const dynamic = "force-dynamic";
 type CreateSubscriptionBody = {
   dates?: unknown;
   paymentMethod?: unknown;
+  payerPhone?: unknown;
   fulfillmentType?: unknown;
   customerName?: unknown;
   phone?: unknown;
@@ -53,6 +55,8 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json() as CreateSubscriptionBody;
     const paymentMethod = typeof body.paymentMethod === "string" ? body.paymentMethod.trim() : "";
+    const payerPhone = typeof body.payerPhone === "string" ? body.payerPhone.replace(/[ ()-]/g, "") : "";
+    if (paymentMethod === "BANK_RU" && !/^\+[1-9]\d{7,14}$/.test(payerPhone)) return badRequest("Укажите телефон плательщика СБП с кодом страны, например +79161234567.");
     const dates = normalizeDates(body.dates);
     const fulfillmentType = body.fulfillmentType === "DELIVERY" ? "DELIVERY" : "PICKUP";
     const customerName = account.fullName.trim();
@@ -65,7 +69,7 @@ export async function POST(request: NextRequest) {
     if (!paymentMethods.includes(paymentMethod as typeof paymentMethods[number])) return badRequest("Выберите способ оплаты");
     const config = paymentConfiguration();
     if (paymentMethod === "PROMPTPAY" && !config.thaiQr) return badRequest("QR тайского банка ещё не настроен. Свяжитесь с менеджером.");
-    if (paymentMethod === "BANK_RU" && (!config.russianQr || !config.rubRate)) return badRequest("QR банка РФ или курс ещё не настроен. Свяжитесь с менеджером.");
+    if (paymentMethod === "BANK_RU" && !limenAvailable()) return badRequest("Оплата Банк РФ временно недоступна. Свяжитесь с менеджером.");
     const checkoutKey = typeof body.checkoutKey === "string" && /^[a-zA-Z0-9-]{16,80}$/.test(body.checkoutKey) ? body.checkoutKey : "";
     if (!checkoutKey) return badRequest("Обновите страницу оформления");
     const rateLimit = await consumeRateLimit(`checkout:${account.userId}`,20,3600);
@@ -105,9 +109,13 @@ export async function POST(request: NextRequest) {
         ) VALUES ($1,$2,'AWAITING_ACTIVATION',$3,$3,$4,0,$5,$6,$7,$8,$9,$9,$10,$11,NULL,$12,$13,$14,$15,$16,$17,$18,$19)
         RETURNING id::text`,
         [pendingCode,account.userId,dates.length,pauseLimit,rate,total,dates[0],dates[dates.length-1],accessHash,pickupPoint,paymentMethod,
-         fulfillmentType,customerName,phone,fulfillmentType === "DELIVERY" ? address : null,requestedTime,checkoutKey,paymentMethod === "BANK_RU" ? config.rubRate : null,resolvedPoint?.code||null]
+         fulfillmentType,customerName,phone,fulfillmentType === "DELIVERY" ? address : null,requestedTime,checkoutKey,null,resolvedPoint?.code||null]
       );
       const subscriptionId = subscription.rows[0].id;
+      if (paymentMethod === "BANK_RU") {
+        const exchange = limenConfig();
+        await client.query(`INSERT INTO limenthai_payments(subscription_id,partner_id,total_thb,test,contract_version,payer_phone) VALUES($1,$2,$3,$4,'THB_V1',$5)`,[subscriptionId,`SF-${subscriptionId}`,total,exchange.test,payerPhone]);
+      }
       for (const serviceDate of dates) {
         await client.query(
           `INSERT INTO subscription_days (
@@ -136,14 +144,14 @@ export async function POST(request: NextRequest) {
       requestedTime ? `Время доставки: ${requestedTime}` : "",
       `Оплата подписки: ${escapeHtml(paymentMethod)}`,
       `Сумма: ${total} ฿`,
-      "Статус: ожидает ручной активации менеджером"
+      paymentMethod === "BANK_RU" ? "Статус: ожидает оплаты через LimenThai" : "Статус: ожидает ручной активации менеджером"
     ].filter(Boolean).join("\n") });
 
     const savedResult=await query<{total_thb:number;rate_thb:number;payment_method:string;rub_rate:string|null}>(`SELECT total_thb,rate_thb,payment_method,rub_rate FROM subscriptions WHERE id=$1 AND user_id=$2`,[created,account.userId]);
     const saved=savedResult.rows[0];
     return NextResponse.json({
       ok:true,
-      subscription:{id:created,selectedDays:dates.length,remainingPortions:dates.length,pauseLimit,rate:saved.rate_thb,total:saved.total_thb,dates,pickupPoint,paymentMethod:saved.payment_method,status:"AWAITING_ACTIVATION",fulfillmentType,requestedTime,rubRate:saved.rub_rate?Number(saved.rub_rate):null}
+      subscription:{id:created,limenThai:saved.payment_method === "BANK_RU" && Boolean((await query(`SELECT 1 FROM limenthai_payments WHERE subscription_id=$1`,[created])).rowCount),selectedDays:dates.length,remainingPortions:dates.length,pauseLimit,rate:saved.rate_thb,total:saved.total_thb,dates,pickupPoint,paymentMethod:saved.payment_method,status:"AWAITING_ACTIVATION",fulfillmentType,requestedTime,rubRate:saved.rub_rate?Number(saved.rub_rate):null}
     }, {status:201});
   } catch (error) {
     if(error instanceof Error&&error.message==="PRICE_CHANGED")return NextResponse.json({ok:false,error:"Скидки изменились. Проверьте обновлённую сумму и нажмите оплатить ещё раз.",priceChanged:true},{status:409});

@@ -130,6 +130,7 @@ export async function PATCH(request: Request) {
       if (subscription.status === "ACTIVE") return null;
       if (subscription.status !== "AWAITING_ACTIVATION") throw new Error("WRONG_STATUS");
 
+      if ((await client.query(`SELECT 1 FROM limenthai_payments WHERE subscription_id=$1`,[id])).rowCount) throw new Error("LIMENTHAI_AUTO_ONLY");
       const code = createSubscriptionCode();
       await client.query(
         `UPDATE subscriptions
@@ -152,7 +153,7 @@ export async function PATCH(request: Request) {
     const code = error instanceof Error ? error.message : "";
     const message = code === "NOT_FOUND" ? "Подписка не найдена"
       : code === "WRONG_STATUS" ? "Эту подписку нельзя активировать"
-      : "Не удалось активировать подписку";
+      : code === "LIMENTHAI_AUTO_ONLY" ? "LimenThai: активация только после подтверждения оплаты. Тестовые платежи не активируют подписку." : "Не удалось активировать подписку";
     return NextResponse.json({ ok: false, error: message }, { status: 400 });
   }
 }
@@ -182,6 +183,7 @@ export async function DELETE(request: Request) {
       const subscription = current.rows[0];
       if (!subscription) throw new Error("NOT_FOUND");
 
+      if ((await client.query(`SELECT 1 FROM limenthai_payments WHERE subscription_id=$1`,[id])).rowCount) throw new Error("LIMENTHAI_KEEP_HISTORY");
       // У subscription_scans нет ON DELETE CASCADE, поэтому журнал сканирований
       // удаляется первым. Остальные связанные записи очищаются явно.
       await client.query(`DELETE FROM subscription_scans WHERE subscription_id = $1`, [id]);
@@ -196,7 +198,7 @@ export async function DELETE(request: Request) {
     const code = error instanceof Error ? error.message : "";
     const message = code === "NOT_FOUND"
       ? "Подписка не найдена"
-      : "Не удалось удалить подписку";
+      : code === "LIMENTHAI_KEEP_HISTORY" ? "Подписка связана с LimenThai. Удаление запрещено для сохранения истории платежа." : "Не удалось удалить подписку";
     const status = code === "NOT_FOUND" ? 404 : 400;
     return NextResponse.json({ ok: false, error: message }, { status });
   }
