@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { query, withTransaction } from "../../../../lib/db";
 import { authorizeManager } from "../../../../lib/manager-auth";
-import { assertLimenManualActivation } from "../../../../lib/limenthai-contract";
 import { createSubscriptionCode } from "../../../../lib/subscriptions";
 import { isSameOriginMutation } from "../../../../lib/request-security";
 
@@ -139,15 +138,15 @@ export async function PATCH(request: Request) {
       const subscription = current.rows[0];
       if (!subscription) throw new Error("NOT_FOUND");
       if (subscription.status === "ACTIVE") return null;
-      if (subscription.status !== "AWAITING_ACTIVATION") throw new Error("WRONG_STATUS");
+      if (!["AWAITING_ACTIVATION", "PENDING_PAYMENT"].includes(subscription.status)) throw new Error("WRONG_STATUS");
 
       const payment = await client.query<{state:string;test:boolean;provider_id:string|null;contract_version:string;total_thb:number}>(`SELECT state,test,provider_id,contract_version,total_thb FROM limenthai_payments WHERE subscription_id=$1 FOR UPDATE`,[id]);
-      assertLimenManualActivation(payment.rows[0],subscription.total_thb);
+      // Manager activation is independent of provider payment confirmation.
       const code = createSubscriptionCode();
       await client.query(
         `UPDATE subscriptions
-         SET status = 'ACTIVE', code = $1, activated_at = now(), paid_at = COALESCE(paid_at, now()), updated_at = now()
-         WHERE id = $2`, [code, id]
+         SET status = 'ACTIVE', code = $1, activated_at = now(), paid_at = CASE WHEN $3 THEN COALESCE(paid_at, now()) ELSE paid_at END, updated_at = now()
+         WHERE id = $2`, [code, id, !payment.rows[0]]
       );
       await client.query(
         `UPDATE subscription_days SET status = 'AVAILABLE'
@@ -155,7 +154,7 @@ export async function PATCH(request: Request) {
       );
       await client.query(
         `INSERT INTO manager_events (event_type, entity_id, payload)
-         VALUES ('SUBSCRIPTION_ACTIVATED', $1, $2::jsonb)`, [id, JSON.stringify({ code })]
+         VALUES ('SUBSCRIPTION_ACTIVATED', $1, $2::jsonb)`, [id, JSON.stringify({ code, manual: true, paymentState: payment.rows[0]?.state ?? null, paymentTest: payment.rows[0]?.test ?? null })]
       );
       if (payment.rows[0]) await client.query(`UPDATE limenthai_payments SET activated=true WHERE subscription_id=$1`,[id]);
       return code;
@@ -165,8 +164,7 @@ export async function PATCH(request: Request) {
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
     const message = code === "NOT_FOUND" ? "Подписка не найдена"
-      : code === "WRONG_STATUS" ? "Эту подписку нельзя активировать"
-      : code === "LIMENTHAI_PAYMENT_NOT_RECEIVED" ? "Оплата не получена: требуется подтверждённый реальный платёж LimenThai. Тестовая оплата не подходит." : "Не удалось активировать подписку";
+      : code === "WRONG_STATUS" ? "Эту подписку нельзя активировать" : "Не удалось активировать подписку";
     return NextResponse.json({ ok: false, error: message }, { status: 400 });
   }
 }

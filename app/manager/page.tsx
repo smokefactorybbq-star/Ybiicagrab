@@ -597,8 +597,8 @@ export default function ManagerPage() {
                   <td>
                     <div className="manager-action-stack">
                       {["ACTIVE","COMPLETED","AWAITING_ACTIVATION"].includes(item.status)&&<ManagerAddDays id={item.id} name={item.full_name} lastDate={item.dates.at(-1)?.service_date||""} onDone={()=>void loadManagerData()}/>}
-                      {item.status === "AWAITING_ACTIVATION" ? (
-                        <button className="activate-button" type="button" disabled={activating === item.id || (!!item.limen_state && (item.limen_state!=="paid" || item.limen_test!==false))} onClick={() => void activateSubscription(item.id)}>
+                      {["AWAITING_ACTIVATION", "PENDING_PAYMENT"].includes(item.status) ? (
+                        <button className="activate-button" type="button" disabled={activating === item.id} onClick={() => void activateSubscription(item.id)}>
                           <Translated>{activating === item.id ? "Активируем…" : "Активировать"}</Translated>
                         </button>
                       ) : item.status === "PENDING_PAYMENT" ? (
