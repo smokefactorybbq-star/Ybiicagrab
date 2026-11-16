@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS customer_accounts (
   user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   phone TEXT,
   password_hash TEXT NOT NULL DEFAULT '',
-  terms_version TEXT NOT NULL DEFAULT '2026-08-13',
+  terms_version TEXT NOT NULL DEFAULT '2026-10-27',
   terms_accepted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -113,6 +113,7 @@ CREATE TABLE IF NOT EXISTS phone_otp_codes (
 );
 CREATE INDEX IF NOT EXISTS phone_otp_codes_phone_idx ON phone_otp_codes(phone, created_at DESC);
 
+ALTER TABLE customer_accounts ALTER COLUMN terms_version SET DEFAULT '2026-10-27';
 CREATE TABLE IF NOT EXISTS customer_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -249,6 +250,14 @@ CREATE TABLE IF NOT EXISTS pickup_lock_states (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS pickup_lock_states_seen_idx ON pickup_lock_states(last_seen_at DESC);
+ALTER TABLE pickup_lock_states ADD COLUMN IF NOT EXISTS temperature_c NUMERIC(6,2);
+ALTER TABLE pickup_lock_states ADD COLUMN IF NOT EXISTS humidity_pct NUMERIC(6,2);
+ALTER TABLE pickup_lock_states ADD COLUMN IF NOT EXISTS last_telemetry_at TIMESTAMPTZ;
+ALTER TABLE pickup_lock_states ADD COLUMN IF NOT EXISTS rssi INTEGER;
+ALTER TABLE pickup_lock_states ADD COLUMN IF NOT EXISTS firmware_version TEXT;
+ALTER TABLE pickup_lock_states ADD COLUMN IF NOT EXISTS last_event TEXT;
+ALTER TABLE pickup_lock_states ADD COLUMN IF NOT EXISTS last_event_at TIMESTAMPTZ;
+ALTER TABLE pickup_lock_states ADD COLUMN IF NOT EXISTS last_boot_reason TEXT;
 
 CREATE TABLE IF NOT EXISTS pickup_point_daily_inventory (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -298,3 +307,154 @@ CREATE TABLE IF NOT EXISTS security_rate_limits (
   PRIMARY KEY (rate_key, window_start)
 );
 CREATE INDEX IF NOT EXISTS security_rate_limits_window_idx ON security_rate_limits(window_start);
+
+-- Permanent customer <-> manager chat.
+CREATE TABLE IF NOT EXISTS customer_conversations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE customer_conversations ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE customer_conversations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE customer_conversations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+CREATE INDEX IF NOT EXISTS customer_conversations_user_idx ON customer_conversations(user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS customer_conversations_updated_idx ON customer_conversations(updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS customer_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID REFERENCES customer_conversations(id) ON DELETE CASCADE,
+  sender_role TEXT,
+  sender_name TEXT,
+  body TEXT,
+  read_by_customer_at TIMESTAMPTZ,
+  read_by_manager_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE customer_messages ADD COLUMN IF NOT EXISTS conversation_id UUID REFERENCES customer_conversations(id) ON DELETE CASCADE;
+ALTER TABLE customer_messages ADD COLUMN IF NOT EXISTS sender_role TEXT;
+ALTER TABLE customer_messages ADD COLUMN IF NOT EXISTS sender_name TEXT;
+ALTER TABLE customer_messages ADD COLUMN IF NOT EXISTS body TEXT;
+ALTER TABLE customer_messages ADD COLUMN IF NOT EXISTS read_by_customer_at TIMESTAMPTZ;
+ALTER TABLE customer_messages ADD COLUMN IF NOT EXISTS read_by_manager_at TIMESTAMPTZ;
+ALTER TABLE customer_messages ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+-- Recover message text from older chat schemas, if one of the previous column
+-- names is still present in the existing Railway database.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='customer_messages' AND column_name='message_text') THEN
+    EXECUTE 'UPDATE customer_messages SET body=COALESCE(body,message_text::text) WHERE body IS NULL';
+  ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='customer_messages' AND column_name='message') THEN
+    EXECUTE 'UPDATE customer_messages SET body=COALESCE(body,message::text) WHERE body IS NULL';
+  ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='customer_messages' AND column_name='content') THEN
+    EXECUTE 'UPDATE customer_messages SET body=COALESCE(body,content::text) WHERE body IS NULL';
+  ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='customer_messages' AND column_name='text') THEN
+    EXECUTE 'UPDATE customer_messages SET body=COALESCE(body,text::text) WHERE body IS NULL';
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS customer_messages_conversation_created_idx ON customer_messages(conversation_id, created_at);
+CREATE INDEX IF NOT EXISTS customer_messages_manager_unread_idx ON customer_messages(conversation_id, created_at) WHERE sender_role='CUSTOMER' AND read_by_manager_at IS NULL;
+CREATE INDEX IF NOT EXISTS customer_messages_customer_unread_idx ON customer_messages(conversation_id, created_at) WHERE sender_role='MANAGER' AND read_by_customer_at IS NULL;
+
+-- Audit trail for a manager manually consuming an uncollected pickup meal.
+ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS manual_writeoff_at TIMESTAMPTZ;
+ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS manual_writeoff_by TEXT;
+ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS manual_writeoff_reason TEXT;
+
+-- 2026-09: private receipt images, idempotent checkout, pickup without time.
+ALTER TABLE customer_messages ADD COLUMN IF NOT EXISTS image_data BYTEA CHECK (octet_length(image_data) <= 5242880);
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS checkout_key TEXT;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS rub_rate NUMERIC(12,6);
+CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_checkout_idx ON subscriptions(user_id,checkout_key) WHERE checkout_key IS NOT NULL;
+UPDATE subscriptions SET default_time=NULL WHERE fulfillment_type='PICKUP' AND default_time IS NOT NULL;
+UPDATE subscription_days SET requested_time=NULL WHERE fulfillment_type='PICKUP' AND requested_time IS NOT NULL;
+
+-- Managed pickup directory and date-specific promotions.
+CREATE TABLE IF NOT EXISTS app_migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now());
+ALTER TABLE pickup_points ADD COLUMN IF NOT EXISTS code TEXT;
+ALTER TABLE pickup_points ADD COLUMN IF NOT EXISTS district TEXT NOT NULL DEFAULT '';
+ALTER TABLE pickup_points ADD COLUMN IF NOT EXISTS point_number TEXT NOT NULL DEFAULT '';
+ALTER TABLE pickup_points ADD COLUMN IF NOT EXISTS google_maps_url TEXT NOT NULL DEFAULT '';
+CREATE UNIQUE INDEX IF NOT EXISTS pickup_points_code_unique ON pickup_points(code);
+INSERT INTO pickup_points(code,name,district,point_number,address,latitude,longitude,google_maps_url)
+SELECT v.code,v.name,v.district,v.num,v.address,v.lat,v.lng,'https://www.google.com/maps/search/?api=1&query='||v.lat||','||v.lng
+FROM (VALUES
+ ('chalong','Chalong Meal Point','Chalong','1','Chalong, Mueang Phuket, Phuket',7.8471,98.3385),
+ ('rawai','Rawai Meal Point','Rawai','2','Rawai, Mueang Phuket, Phuket',7.7793,98.3258),
+ ('phuket-town','Phuket Town Meal Point','Phuket Town','3','Phuket Town, Mueang Phuket, Phuket',7.8804,98.3923),
+ ('patong','Patong Meal Point','Patong','4','Patong, Kathu, Phuket',7.8966,98.2964),
+ ('bang-tao','Bang Tao Meal Point','Bang Tao','5','Bang Tao, Thalang, Phuket',7.9943,98.3047)
+) AS v(code,name,district,num,address,lat,lng)
+WHERE NOT EXISTS(SELECT 1 FROM app_migrations WHERE name='managed-pickup-directory-v1')
+ON CONFLICT(code) DO NOTHING;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS pickup_point_code TEXT;
+UPDATE subscriptions s SET pickup_point_code=p.code FROM pickup_points p
+WHERE s.pickup_point_name=p.name AND s.pickup_point_code IS NULL AND p.code IS NOT NULL
+AND NOT EXISTS(SELECT 1 FROM app_migrations WHERE name='managed-pickup-directory-v1');
+INSERT INTO app_migrations(name) VALUES('managed-pickup-directory-v1') ON CONFLICT DO NOTHING;
+CREATE UNIQUE INDEX IF NOT EXISTS pickup_points_district_number_unique ON pickup_points(lower(district),point_number) WHERE code IS NOT NULL;
+CREATE TABLE IF NOT EXISTS meal_date_discounts (
+ service_date DATE PRIMARY KEY,
+ percent INTEGER NOT NULL CHECK (percent IN (20,30,50)),
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS price_thb INTEGER;
+ALTER TABLE subscription_days ADD COLUMN IF NOT EXISTS discount_percent INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS subscription_day_extensions (
+ request_key UUID PRIMARY KEY,
+ subscription_id UUID NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+ days INTEGER NOT NULL CHECK(days BETWEEN 1 AND 365),
+ first_date DATE NOT NULL,
+ last_date DATE NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 2026-10-27: pause allowance is based on the initially purchased duration:
+-- one pause for every five original subscription days. Manager-added days do
+-- not increase the allowance.
+WITH initial_subscription_days AS (
+  SELECT
+    s.id,
+    GREATEST(0, s.selected_days - COALESCE(SUM(e.days), 0)::int) AS initial_days
+  FROM subscriptions s
+  LEFT JOIN subscription_day_extensions e ON e.subscription_id = s.id
+  GROUP BY s.id, s.selected_days
+)
+UPDATE subscriptions s
+SET pause_limit = GREATEST(s.pauses_used, FLOOR(i.initial_days / 5.0)::int),
+    updated_at = now()
+FROM initial_subscription_days i
+WHERE s.id = i.id
+  AND NOT EXISTS (SELECT 1 FROM app_migrations WHERE name='pause-policy-2026-10-27');
+INSERT INTO app_migrations(name) VALUES('pause-policy-2026-10-27') ON CONFLICT DO NOTHING;
+
+-- LimenThai: separate records preserve legacy BANK_RU subscriptions unchanged.
+CREATE TABLE IF NOT EXISTS limenthai_payments (
+ subscription_id UUID PRIMARY KEY REFERENCES subscriptions(id) ON DELETE RESTRICT,
+ partner_id TEXT UNIQUE NOT NULL,
+ provider_id TEXT UNIQUE,
+ total_thb INTEGER NOT NULL CHECK(total_thb>0),
+ thb_per_usdt TEXT NOT NULL,
+ test BOOLEAN NOT NULL,
+ state TEXT NOT NULL DEFAULT 'new' CHECK(state IN ('new','creating','pending','paid','expired','declined')),
+ amount_rub TEXT,
+ quoted_rate TEXT,
+ provider_rate TEXT,
+ amount_usdt TEXT,
+ payment_url TEXT,
+ expires_at TIMESTAMPTZ,
+ activated BOOLEAN NOT NULL DEFAULT false,
+ lease UUID,
+ lease_until TIMESTAMPTZ,
+ checked_at TIMESTAMPTZ,
+ last_error TEXT,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS limenthai_reconcile_idx ON limenthai_payments(checked_at) WHERE state IN ('new','creating','pending');
+
+-- Upgrade safe: previous USDT requests are retained but never retried as THB.
+ALTER TABLE limenthai_payments ALTER COLUMN thb_per_usdt DROP NOT NULL;
+ALTER TABLE limenthai_payments ADD COLUMN IF NOT EXISTS contract_version TEXT NOT NULL DEFAULT 'LEGACY_USDT';
+ALTER TABLE limenthai_payments ADD COLUMN IF NOT EXISTS payer_phone TEXT;

@@ -27,6 +27,7 @@ type ManagerSubscriptionRow = {
   paid_at: string | null;
   activated_at: string | null;
   created_at: string;
+  manager_unread_count: number;
   dates: Array<{ service_date: string; status: string }>;
 };
 
@@ -42,9 +43,18 @@ export async function GET(request: Request) {
          u.id AS user_id,
          s.code,
          s.status,
-         u.full_name,
-         u.phone,
-         s.pickup_point_name,
+         COALESCE(
+           NULLIF(s.customer_name, ''),
+           NULLIF(u.profile_name, ''),
+           NULLIF(u.full_name, ''),
+           'Клиент MealPoint'
+         ) AS full_name,
+         COALESCE(
+           NULLIF(s.customer_phone, ''),
+           NULLIF(ca.phone, ''),
+           NULLIF(u.phone, '')
+         ) AS phone,
+         COALESCE(NULLIF(s.pickup_point_name, ''), day_info.pickup_point_name) AS pickup_point_name,
          s.fulfillment_type,
          s.payment_method,
          s.selected_days,
@@ -56,19 +66,34 @@ export async function GET(request: Request) {
          s.paid_at,
          s.activated_at,
          s.created_at,
-         COALESCE(
-           json_agg(
-             json_build_object(
-               'service_date', sd.service_date::text,
-               'status', sd.status::text
-             ) ORDER BY sd.service_date
-           ) FILTER (WHERE sd.id IS NOT NULL),
-           '[]'::json
-         ) AS dates
+         COALESCE((
+           SELECT COUNT(*)::int
+           FROM customer_conversations cc
+           JOIN customer_messages cm ON cm.conversation_id = cc.id
+           WHERE cc.user_id = u.id
+             AND cm.sender_role = 'CUSTOMER'
+             AND cm.read_by_manager_at IS NULL
+         ), 0)::int AS manager_unread_count,
+         COALESCE(day_info.dates, '[]'::json) AS dates
        FROM subscriptions s
        JOIN users u ON u.id = s.user_id
-       LEFT JOIN subscription_days sd ON sd.subscription_id = s.id
-       GROUP BY s.id, u.id, u.full_name, u.phone
+       LEFT JOIN customer_accounts ca ON ca.user_id = u.id
+       LEFT JOIN LATERAL (
+         SELECT
+           COALESCE(
+             json_agg(
+               json_build_object(
+                 'service_date', sd.service_date::text,
+                 'status', sd.status::text
+               ) ORDER BY sd.service_date
+             ) FILTER (WHERE sd.id IS NOT NULL),
+             '[]'::json
+           ) AS dates,
+           MIN(pp.name) FILTER (WHERE pp.name IS NOT NULL) AS pickup_point_name
+         FROM subscription_days sd
+         LEFT JOIN pickup_points pp ON pp.id = sd.pickup_point_id
+         WHERE sd.subscription_id = s.id
+       ) day_info ON TRUE
        ORDER BY CASE WHEN s.status = 'AWAITING_ACTIVATION' THEN 0 ELSE 1 END, s.created_at DESC
        LIMIT 300`
     );
@@ -105,10 +130,11 @@ export async function PATCH(request: Request) {
       if (subscription.status === "ACTIVE") return null;
       if (subscription.status !== "AWAITING_ACTIVATION") throw new Error("WRONG_STATUS");
 
+      if ((await client.query(`SELECT 1 FROM limenthai_payments WHERE subscription_id=$1`,[id])).rowCount) throw new Error("LIMENTHAI_AUTO_ONLY");
       const code = createSubscriptionCode();
       await client.query(
         `UPDATE subscriptions
-         SET status = 'ACTIVE', code = $1, activated_at = now(), updated_at = now()
+         SET status = 'ACTIVE', code = $1, activated_at = now(), paid_at = COALESCE(paid_at, now()), updated_at = now()
          WHERE id = $2`, [code, id]
       );
       await client.query(
@@ -127,7 +153,7 @@ export async function PATCH(request: Request) {
     const code = error instanceof Error ? error.message : "";
     const message = code === "NOT_FOUND" ? "Подписка не найдена"
       : code === "WRONG_STATUS" ? "Эту подписку нельзя активировать"
-      : "Не удалось активировать подписку";
+      : code === "LIMENTHAI_AUTO_ONLY" ? "LimenThai: активация только после подтверждения оплаты. Тестовые платежи не активируют подписку." : "Не удалось активировать подписку";
     return NextResponse.json({ ok: false, error: message }, { status: 400 });
   }
 }
@@ -157,6 +183,7 @@ export async function DELETE(request: Request) {
       const subscription = current.rows[0];
       if (!subscription) throw new Error("NOT_FOUND");
 
+      if ((await client.query(`SELECT 1 FROM limenthai_payments WHERE subscription_id=$1`,[id])).rowCount) throw new Error("LIMENTHAI_KEEP_HISTORY");
       // У subscription_scans нет ON DELETE CASCADE, поэтому журнал сканирований
       // удаляется первым. Остальные связанные записи очищаются явно.
       await client.query(`DELETE FROM subscription_scans WHERE subscription_id = $1`, [id]);
@@ -171,7 +198,7 @@ export async function DELETE(request: Request) {
     const code = error instanceof Error ? error.message : "";
     const message = code === "NOT_FOUND"
       ? "Подписка не найдена"
-      : "Не удалось удалить подписку";
+      : code === "LIMENTHAI_KEEP_HISTORY" ? "Подписка связана с LimenThai. Удаление запрещено для сохранения истории платежа." : "Не удалось удалить подписку";
     const status = code === "NOT_FOUND" ? 404 : 400;
     return NextResponse.json({ ok: false, error: message }, { status });
   }

@@ -18,13 +18,19 @@ export async function GET(request: NextRequest) {
     const account = await getAuthenticatedAccount(request);
     if (!account) return NextResponse.json({ok:false,error:"Требуется вход"},{status:401});
     const subscriptionsResult = await query<any>(
-      `SELECT s.*, u.full_name, u.phone FROM subscriptions s JOIN users u ON u.id=s.user_id
+      `SELECT s.id,EXISTS(SELECT 1 FROM limenthai_payments lp WHERE lp.subscription_id=s.id) AS limenthai,s.code,s.status,s.selected_days,s.remaining_portions,s.pause_limit,s.pauses_used,s.rate_thb,s.total_thb,s.starts_on::text,s.ends_on::text,s.payment_method,s.rub_rate,s.fulfillment_type,s.pickup_point_code,s.pickup_point_name,s.customer_name,s.customer_phone,s.delivery_address,s.default_time,u.full_name,u.phone FROM subscriptions s JOIN users u ON u.id=s.user_id
        WHERE s.user_id=$1 ORDER BY s.created_at DESC LIMIT 300`, [account.userId]
     );
     const ids = subscriptionsResult.rows.map((x:any)=>x.id);
     const daysResult = ids.length ? await query<any>(
-      `SELECT subscription_id::text,service_date::text,status,fulfillment_type,requested_time,customer_name,customer_phone,delivery_address,redeemed_at,consumed_at,delivery_received_at,pickup_redeemed_point_name
-       FROM subscription_days WHERE subscription_id=ANY($1::uuid[]) ORDER BY service_date ASC`, [ids]
+      `SELECT sd.subscription_id::text,sd.service_date::text,sd.status,sd.fulfillment_type,sd.requested_time,sd.customer_name,sd.customer_phone,sd.delivery_address,
+              sd.redeemed_at,sd.consumed_at,sd.delivery_received_at,sd.pickup_redeemed_point_name,sd.price_thb,sd.discount_percent,
+              COALESCE(pp.code,s.pickup_point_code) AS pickup_point_code,
+              COALESCE(pp.name,s.pickup_point_name) AS pickup_point_name
+       FROM subscription_days sd
+       JOIN subscriptions s ON s.id=sd.subscription_id
+       LEFT JOIN pickup_points pp ON pp.id=sd.pickup_point_id
+       WHERE sd.subscription_id=ANY($1::uuid[]) ORDER BY sd.service_date ASC`, [ids]
     ) : {rows:[]};
     const daysBy = new Map<string,any[]>();
     for (const day of daysResult.rows) {
