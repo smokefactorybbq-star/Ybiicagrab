@@ -2,8 +2,11 @@ const fs=require('fs'),vm=require('vm'),path=require('path'),assert=require('nod
 const root=path.resolve(__dirname,'..');
 const ts=require(path.join(root,'node_modules/typescript'));
 function load(name,mocks={}){const code=ts.transpileModule(fs.readFileSync(path.join(root,name),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText;const m={exports:{}};vm.runInNewContext(code,{module:m,exports:m.exports,require:n=>{if(n in mocks)return mocks[n];return require(n)},process,URL,Buffer,AbortSignal,console,fetch:global.fetch,setTimeout,clearTimeout},{filename:name});return m.exports;}
-const c=load('lib/limenthai-contract.ts');let count=0;
+const c=load('lib/limenthai-contract.ts');
+const quote={amount_thb:'1000.00',amount_rub:'2678.00',rate:'2.6775',unit:'RUB за 1 THB',valid_until:'2099-01-01T00:00:00Z'};let count=0;
 function test(name,fn){fn();count++;console.log('PASS '+name);}
+test('valid quote preserves provider rounding',()=>assert.equal(c.validateQuote(quote,'1000.00').amount_rub,'2678.00'));
+for(const patch of [{amount_thb:'99.00'},{amount_rub:'0.00'},{valid_until:'2000-01-01T00:00:00Z'},{unit:'RUB за 1 USDT'}])test('reject bad quote '+JSON.stringify(patch),()=>assert.throws(()=>c.validateQuote({...quote,...patch},'1000.00')));
 test('THB amount string',()=>assert.equal(c.thbAmount(1000),'1000.00'));
 test('reject fractional site total',()=>assert.throws(()=>c.thbAmount(1.001)));
 test('reject negative site total',()=>assert.throws(()=>c.thbAmount(-1)));
@@ -22,6 +25,7 @@ async function query(sql,args=[]){
  if(sql.startsWith('SELECT * FROM limenthai_payments'))return {rows:[{...payment}]};
  if(sql.includes('SELECT p.*'))return {rows:(!args[1]||args[1]===sub.user_id)?[{...payment}]:[]};
  if(sql.includes('SET lease=$2')){payment.lease=args[1];return {rowCount:1,rows:[]};}
+ if(sql.includes("SET quoted_rate=$3,state='creating'")){payment.state='creating';return {rowCount:1};}
  if(sql.includes('SET provider_id=$2')){Object.assign(payment,{provider_id:args[1],state:args[2],amount_rub:args[4],provider_rate:args[3],lease:null});return {rowCount:1};}
  if(sql.includes("UPDATE subscriptions SET status='ACTIVE'")){sub.status='ACTIVE';activations++;return {rowCount:1};}
  if(sql.includes('SET activated=true'))payment.activated=true;
@@ -29,7 +33,8 @@ async function query(sql,args=[]){
  return {rowCount:1,rows:[]};
 }
 process.env.LIMENTHAI_ENABLED='true';process.env.LIMENTHAI_API_KEY='lt_test_example';delete process.env.LIMENTHAI_THB_PER_USDT;
-global.fetch=async(url,opts)=>{calls.push({url,opts});return {ok:true,json:async()=>url.endsWith('/rate')?{pair:'THB/RUB',settlement_currency:'THB',rate:'2.6775',valid_until:'2099-01-01T00:00:00Z',min_thb:'100.00',max_thb:'20000.00',daily_used_thb:'3500.00',daily_limit_thb:'100000.00'}:({...order,order_id:'ord_1',partner_order_id:'SF-id'})};};
+let failHttp=false;
+global.fetch=async(url,opts)=>{calls.push({url,opts});if(failHttp)return {ok:false,status:401,json:async()=>({error:{code:'invalid_api_key',message:'lt_live_SECRET_SHOULD_NOT_LEAK'}})};return {ok:true,json:async()=>url.includes('/quote?')?quote:({...order,order_id:'ord_1',partner_order_id:'SF-id'})};};
 const l=load('lib/limenthai.ts',{'./db':{query,withTransaction:fn=>fn({query})},'./subscriptions':{createSubscriptionCode:()=> 'code'},'./telegram':{notifyManagerTelegram:async()=>true},'./limenthai-contract':c,qrcode:{toDataURL:async()=> 'data:image/png;base64,AA'}});
 (async()=>{
  reset(true);await l.syncLimen('id','owner');assert.equal(activations,0);assert.equal(payment.state,'paid');console.log('PASS test payment never activates');
@@ -37,6 +42,11 @@ const l=load('lib/limenthai.ts',{'./db':{query,withTransaction:fn=>fn({query})},
  reset(false);await assert.rejects(()=>l.syncLimen('id','intruder'));assert.equal(calls.length,0);console.log('PASS ownership checked before provider request');
  reset(true);await assert.rejects(()=>l.syncLimen('id','owner'));assert.equal(calls.length,0);console.log('PASS key mode mismatch blocks requests');
  reset(false);payment.contract_version='LEGACY_USDT';await assert.rejects(()=>l.syncLimen('id','owner'));assert.equal(calls.length,0);console.log('PASS old contract is never retried as THB');
- reset(false);payment.state='new';await l.syncLimen('id','owner');assert.equal(calls.length,2);assert.ok(calls[0].url.endsWith('/rate'));assert.equal(JSON.parse(calls[1].opts.body).amount_thb,'1000.00');assert.equal(payment.amount_rub,'2678.00');console.log('PASS THB rate limits and provider rounding accepted');
- console.log(`${count+6} checks passed; transaction adapter is mocked, not real PostgreSQL.`);
+ reset(false);payment.state='new';await l.syncLimen('id','owner','2678.00');assert.equal(calls.length,2);assert.ok(calls[0].url.includes('/quote?'));assert.equal(JSON.parse(calls[1].opts.body).amount_thb,'1000.00');assert.equal(payment.amount_rub,'2678.00');console.log('PASS payment click validates quote and uses provider rounding');
+ reset(false);payment.state='new';await l.syncLimen('id','owner');assert.equal(calls.length,0);assert.equal(payment.state,'new');console.log('PASS status does not create payment');
+ reset(false);payment.state='new';const preview=await l.quoteLimen('id','owner');assert.equal(preview.amountRub,'2678.00');assert.equal(calls.length,1);assert.ok(calls[0].url.includes('/quote?'));assert.equal(payment.state,'new');console.log('PASS modal quote never creates order');
+ reset(false);payment.state='new';await assert.rejects(()=>l.syncLimen('id','owner','2500.00'));assert.equal(payment.state,'new');assert.equal(calls.length,1);console.log('PASS changed price never creates order');
+ reset(false);payment.state='new';await assert.rejects(()=>l.quoteLimen('id','intruder'));assert.equal(calls.length,0);console.log('PASS quote ownership');
+ reset(false);payment.state='new';failHttp=true;let diagnostic;try{await l.quoteLimen('id','owner');}catch(e){diagnostic=l.limenErrorCode(e);}failHttp=false;assert.equal(diagnostic,'LIMENTHAI_HTTP_401_INVALID_API_KEY');assert.ok(!diagnostic.includes('SECRET'));assert.equal(l.limenErrorCode(new Error('lt_live_SECRET')),'PROVIDER_UNAVAILABLE');console.log('PASS useful diagnostics exclude raw provider messages and keys');
+ console.log(`${count+11} checks passed; transaction adapter is mocked, not real PostgreSQL.`);
 })().catch(e=>{console.error(e);process.exitCode=1});

@@ -8,7 +8,7 @@ export default function PaymentDetails({payment,config,onClose,onChat,onPaid}:{p
   const rate=payment.rubRate??config.rubRate;
   const money=(n:number)=>n.toLocaleString("ru-RU",{maximumFractionDigits:2});
   return <div className="modal-backdrop"><section className="payment-modal payment-details" role="dialog" aria-modal="true" aria-labelledby="payment-title"><button type="button" className="modal-close" aria-label="Закрыть" onClick={onClose}>×</button><span className="eyebrow">Оплата подписки</span><h2 id="payment-title">{title}</h2>
-    {payment.method==="BANK_RU"&&payment.limenThai&&payment.subscriptionId?<><LimenThaiPayment subscriptionId={payment.subscriptionId} onPaid={onPaid}/><button type="button" onClick={onChat}>Открыть чат с менеджером</button></>:<>
+    {payment.method==="BANK_RU"&&payment.limenThai&&payment.subscriptionId?<><LimenThaiPayment key={payment.subscriptionId} subscriptionId={payment.subscriptionId} onPaid={onPaid}/><button type="button" onClick={onChat}>Открыть чат с менеджером</button></>:<>
     {qr&&<a href={qr} target="_blank" rel="noreferrer" aria-label="Открыть QR в полном размере"><img className="bank-payment-qr" src={qr} alt={`QR для оплаты — ${title}`}/></a>}
     {["PROMPTPAY","BANK_RU"].includes(payment.method)&&!qr&&<p className="form-error">Реквизиты ещё не настроены. Напишите менеджеру.</p>}
     <p className="payment-amount">{money(payment.total)} ฿</p>

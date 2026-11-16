@@ -23,3 +23,9 @@ export function validateOrder(raw: unknown, expected: {partner_id:string;amount_
   if (o.status === "paid" && (typeof o.paid_at !== "string" || !Number.isFinite(Date.parse(o.paid_at)))) throw new Error("INVALID_PAID_AT");
   return o;
 }
+
+export function validateQuote(raw: unknown, amountThb: string) {
+  const q = raw as {amount_thb:string;amount_rub:string;rate:string;unit:string;valid_until:string};
+  if (!q || decimal(q.amount_thb,2) !== decimal(amountThb,2) || decimal(q.amount_rub,2) <= BigInt(0) || decimal(q.rate,8) <= BigInt(0) || q.unit !== "RUB за 1 THB" || typeof q.valid_until !== "string" || !Number.isFinite(Date.parse(q.valid_until)) || Date.parse(q.valid_until) <= Date.now()) throw new Error("INVALID_QUOTE");
+  return q;
+}
