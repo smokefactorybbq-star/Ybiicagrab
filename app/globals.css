@@ -1752,3 +1752,44 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:3px solid #bc
     scroll-snap-align: start;
   }
 }
+
+/* Keep both photos mounted for a continuous upward crossfade. */
+.subscription-section .meal-image-frame > img.meal-slide {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  animation: none;
+}
+.subscription-section .meal-image-frame > img.meal-slide.is-active {
+  opacity: 1;
+  transform: translateY(0);
+}
+.subscription-section .meal-image-frame > img.meal-slide.is-outgoing {
+  opacity: 0;
+  transform: translateY(-14px);
+}
+.subscription-section .meal-image-frame[data-rotating="true"] > img.meal-slide.is-active {
+  animation: meal-photo-enter 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+}
+.subscription-section .meal-image-frame[data-rotating="true"] > img.meal-slide.is-outgoing {
+  animation: meal-photo-leave 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+}
+.subscription-section .meal-image-frame > .meal-course-badge,
+.subscription-section .meal-image-frame > .meal-open-overlay {
+  z-index: 2;
+}
+@keyframes meal-photo-enter {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes meal-photo-leave {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-14px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .subscription-section .meal-image-frame[data-rotating="true"] > img.meal-slide {
+    animation: none;
+  }
+}

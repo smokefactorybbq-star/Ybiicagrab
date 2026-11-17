@@ -83,6 +83,7 @@ export default function SubscriptionCalendar() {
   const [chosenPickupPoint, setChosenPickupPoint] = useState("");
   const [duplicateConfirmed, setDuplicateConfirmed] = useState(false);
   const [showFirstCourse, setShowFirstCourse] = useState(true);
+  const [imagesRotating, setImagesRotating] = useState(false);
   const [scrollPosition, setScrollPosition] = useState(0);
   const [detailsIndex, setDetailsIndex] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -107,7 +108,10 @@ export default function SubscriptionCalendar() {
   }, []);
 
   useEffect(() => {
-    const rotation = window.setInterval(() => setShowFirstCourse((current) => !current), 5000);
+    const rotation = window.setInterval(() => {
+      setImagesRotating(true);
+      setShowFirstCourse((current) => !current);
+    }, 7000);
     return () => window.clearInterval(rotation);
   }, []);
 
@@ -241,9 +245,22 @@ export default function SubscriptionCalendar() {
                   <span>{item.monthLabel} · {item.weekday}</span>
                   {isSelected && <b>✓</b>}
                 </span>
-                <span className="meal-image-frame">
+                <span className="meal-image-frame" data-rotating={imagesRotating}>
                   <DiscountBadge percent={discounts[item.id]}/>
-                  <img key={`${item.id}-${showFirstCourse ? "first" : "second"}`} src={visibleCourse.image} alt={visibleCourse.title} loading="lazy" />
+                  <img
+                    className={`meal-slide ${showFirstCourse ? "is-active" : "is-outgoing"}`}
+                    src={item.meal.firstCourse.image}
+                    alt={showFirstCourse ? item.meal.firstCourse.title : ""}
+                    aria-hidden={!showFirstCourse}
+                    loading="lazy"
+                  />
+                  <img
+                    className={`meal-slide ${!showFirstCourse ? "is-active" : "is-outgoing"}`}
+                    src={item.meal.secondCourse.image}
+                    alt={!showFirstCourse ? item.meal.secondCourse.title : ""}
+                    aria-hidden={showFirstCourse}
+                    loading="lazy"
+                  />
                   <span className="meal-course-badge">{showFirstCourse ? "Первое блюдо" : "Второе блюдо"}</span>
                   <span className="meal-open-overlay">Открыть меню и КБЖУ</span>
                 </span>
