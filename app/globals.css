@@ -39,7 +39,7 @@ img { display: block; max-width: 100%; }
 .hero-copy > p { max-width: 650px; margin: 25px 0 0; color: rgba(255,255,255,.76); font-size: 20px; line-height: 1.55; }
 .hero-facts { display: flex; gap: 35px; margin-top: 43px; }
 .hero-facts div { display: flex; flex-direction: column; }
-.hero-facts strong { font-size: 20px; }
+.hero-facts strong { font-size: 20px; line-height: 24px; }
 .hero-facts span { margin-top: 4px; color: rgba(255,255,255,.58); font-size: 12px; }
 .hero-visual { position: relative; height: 620px; }
 .hero-card { position: absolute; width: min(360px, 70%); padding: 14px; border-radius: 30px; background: #fff; box-shadow: 0 30px 80px rgba(0,0,0,.3); }
