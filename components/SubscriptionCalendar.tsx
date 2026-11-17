@@ -1,7 +1,5 @@
 "use client";
 
-import {Translated,useLanguage} from "./LanguageProvider";
-import {getLocale} from "../lib/i18n/translate";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getCourseDetails, getMealNutrition, getMealTemplateForDate, type MealTemplate } from "../data/meals";
@@ -71,8 +69,6 @@ function formatLongDate(item: CalendarDay) {
 }
 
 export default function SubscriptionCalendar() {
-  const {t,language}=useLanguage();
-
   const router = useRouter();
   const {points:pickupPoints,discounts,ready:catalogReady,error:catalogError}=useCatalog();
   const [todayIso, setTodayIso] = useState(bangkokTodayIso());
@@ -214,18 +210,18 @@ export default function SubscriptionCalendar() {
     <section id="subscription" className="subscription-section">
       <div className="section-heading split-heading">
         <div>
-          <span className="eyebrow"><Translated>{"Меню подписки"}</Translated></span>
-          <h2><Translated>{"Выбирайте обеды "}</Translated><em><Translated>{"на любые дни"}</Translated></em></h2>
-          <p><Translated>{"Выбирайте любые удобные даты начиная с завтрашнего дня: подряд или с пропусками. Нажмите на центр карточки, чтобы посмотреть состав, описание, калории и КБЖУ."}</Translated></p>
+          <span className="eyebrow">Меню подписки</span>
+          <h2>Выбирайте обеды <em>на любые дни</em></h2>
+          <p>Выбирайте любые удобные даты начиная с завтрашнего дня: подряд или с пропусками. Нажмите на центр карточки, чтобы посмотреть состав, описание, калории и КБЖУ.</p>
         </div>
         <QuestionLink />
       </div>
 
-      {testMode && <p className="test-mode-banner"><Translated>{"Тестовый режим включён: календарь построен относительно "}</Translated><Translated>{todayIso}</Translated>.</p>}
+      {testMode && <p className="test-mode-banner">Тестовый режим включён: календарь построен относительно {todayIso}.</p>}
 
       <div className="calendar-actions consecutive-actions">
-        <button type="button" className="text-button muted" onClick={() => setSelected([])} disabled={!selected.length}><Translated>{"Сбросить выбранные дни"}</Translated></button>
-        <span className="calendar-action-note"><Translated>{"Можно выбрать любые дни с пропусками — ограничений по последовательности нет."}</Translated></span>
+        <button type="button" className="text-button muted" onClick={() => setSelected([])} disabled={!selected.length}>Сбросить выбранные дни</button>
+        <span className="calendar-action-note">Можно выбрать любые дни с пропусками — ограничений по последовательности нет.</span>
       </div>
 
       <div className="calendar-scroll" ref={scrollRef} onScroll={syncCalendarSlider}>
@@ -238,23 +234,23 @@ export default function SubscriptionCalendar() {
                 type="button"
                 className="meal-day-open-area"
                 onClick={() => setDetailsIndex(index)}
-                aria-label={t(`Открыть подробное меню на ${formatLongDate(item)}`)}
+                aria-label={`Открыть подробное меню на ${formatLongDate(item)}`}
               >
                 <span className="date-row">
-                  <strong><Translated>{item.day}</Translated></strong>
-                  <span><Translated>{item.monthLabel}</Translated> · <Translated>{item.weekday}</Translated></span>
+                  <strong>{item.day}</strong>
+                  <span>{item.monthLabel} · {item.weekday}</span>
                   {isSelected && <b>✓</b>}
                 </span>
                 <span className="meal-image-frame">
                   <DiscountBadge percent={discounts[item.id]}/>
-                  <img key={`${item.id}-${showFirstCourse ? "first" : "second"}`} src={visibleCourse.image} alt={t(visibleCourse.title)} loading="lazy" />
-                  <span className="meal-course-badge"><Translated>{showFirstCourse ? "Первое блюдо" : "Второе блюдо"}</Translated></span>
-                  <span className="meal-open-overlay"><Translated>{"Открыть меню и КБЖУ"}</Translated></span>
+                  <img key={`${item.id}-${showFirstCourse ? "first" : "second"}`} src={visibleCourse.image} alt={visibleCourse.title} loading="lazy" />
+                  <span className="meal-course-badge">{showFirstCourse ? "Первое блюдо" : "Второе блюдо"}</span>
+                  <span className="meal-open-overlay">Открыть меню и КБЖУ</span>
                 </span>
-                <span className="meal-tag"><Translated>{item.id === days[0].id ? "Можно начать завтра" : item.meal.tag}</Translated></span>
-                <span className="meal-title"><Translated>{visibleCourse.title}</Translated></span>
-                <span className="day-price">{(discounts[item.id]||isSelected&&loyaltyPercent>0)&&<del>350 ฿</del>} <Translated>{priceForDay(item.id,discounts,isSelected?loyaltyPercent:0).price}</Translated> ฿</span>
-                <span className="meal-details-hint"><Translated>{"Нажмите на дату или блюдо — откроется подробное меню на весь экран"}</Translated></span>
+                <span className="meal-tag">{item.id === days[0].id ? "Можно начать завтра" : item.meal.tag}</span>
+                <span className="meal-title">{visibleCourse.title}</span>
+                <span className="day-price">{(discounts[item.id]||isSelected&&loyaltyPercent>0)&&<del>350 ฿</del>} {priceForDay(item.id,discounts,isSelected?loyaltyPercent:0).price} ฿</span>
+                <span className="meal-details-hint">Нажмите на дату или блюдо — откроется подробное меню на весь экран</span>
               </button>
 
               <div className="meal-day-button-zone">
@@ -263,7 +259,7 @@ export default function SubscriptionCalendar() {
                   className={`add-next-day-button ${isSelected ? "is-selected" : ""}`}
                   onClick={() => toggleDay(item.id)}
                 >
-                  <Translated>{isSelected ? "Сбросить день" : "+ Добавить день"}</Translated>
+                  {isSelected ? "Сбросить день" : "+ Добавить день"}
                 </button>
               </div>
             </article>
@@ -272,16 +268,16 @@ export default function SubscriptionCalendar() {
       </div>
 
       <div className="calendar-drag-control">
-        <input type="range" min="0" max="1000" value={scrollPosition} onChange={(event) => moveCalendar(Number(event.target.value))} aria-label={t("Горизонтальная прокрутка календаря")} />
+        <input type="range" min="0" max="1000" value={scrollPosition} onChange={(event) => moveCalendar(Number(event.target.value))} aria-label="Горизонтальная прокрутка календаря" />
       </div>
 
-      {catalogError&&<p className="form-error"><Translated>{catalogError}</Translated></p>}
-      {checkoutError && <p className="form-error calendar-checkout-error"><Translated>{checkoutError}</Translated></p>}
+      {catalogError&&<p className="form-error">{catalogError}</p>}
+      {checkoutError && <p className="form-error calendar-checkout-error">{checkoutError}</p>}
       <div className="subscription-summary" aria-live="polite">
-        <div><small><Translated>{"Выбрано дней"}</Translated></small><strong><Translated>{selected.length}</Translated></strong></div>
-        <div><small><Translated>{loyaltyPercent ? `Скидка лояльности ${loyaltyPercent}%` : "Базовая цена за день"}</Translated></small><strong><Translated>{loyaltyPercent ? `−${savings.toLocaleString(getLocale())} ฿` : rate ? `${rate} ฿` : "—"}</Translated></strong></div>
-        <div className="summary-total"><small><Translated>{"Итого"}</Translated></small><strong><Translated>{total.toLocaleString(getLocale())}</Translated> ฿</strong></div>
-        <button type="button" disabled={!selected.length || checkingDuplicate || !catalogReady} onClick={goToCheckout}><Translated>{checkingDuplicate ? "Проверяем…" : "Оформить подписку"}</Translated></button>
+        <div><small>Выбрано дней</small><strong>{selected.length}</strong></div>
+        <div><small>{loyaltyPercent ? `Скидка лояльности ${loyaltyPercent}%` : "Базовая цена за день"}</small><strong>{loyaltyPercent ? `−${savings.toLocaleString("ru-RU")} ฿` : rate ? `${rate} ฿` : "—"}</strong></div>
+        <div className="summary-total"><small>Итого</small><strong>{total.toLocaleString("ru-RU")} ฿</strong></div>
+        <button type="button" disabled={!selected.length || checkingDuplicate || !catalogReady} onClick={goToCheckout}>{checkingDuplicate ? "Проверяем…" : "Оформить подписку"}</button>
       </div>
 
       {detailsDay && detailsIndex !== null && (() => {
@@ -289,33 +285,30 @@ export default function SubscriptionCalendar() {
         const second = getCourseDetails(detailsDay.meal.secondCourse, "second");
         const totalNutrition = getMealNutrition(detailsDay.meal);
         return (
-          <div className="meal-details-backdrop" role="dialog" aria-modal="true" aria-label={t(`Меню на ${formatLongDate(detailsDay)}`)}>
+          <div className="meal-details-backdrop" role="dialog" aria-modal="true" aria-label={`Меню на ${formatLongDate(detailsDay)}`}>
             <div className="meal-details-modal">
-              <button className="meal-details-close" type="button" onClick={() => setDetailsIndex(null)} aria-label={t("Закрыть")}>×</button>
-              <button className="meal-details-arrow left" type="button" disabled={detailsIndex === 0} onClick={() => setDetailsIndex((current) => current === null ? current : Math.max(0, current - 1))} aria-label={t("Предыдущий день")}>←</button>
-              <button className="meal-details-arrow right" type="button" disabled={detailsIndex === days.length - 1} onClick={() => setDetailsIndex((current) => current === null ? current : Math.min(days.length - 1, current + 1))} aria-label={t("Следующий день")}>→</button>
+              <button className="meal-details-close" type="button" onClick={() => setDetailsIndex(null)} aria-label="Закрыть">×</button>
+              <button className="meal-details-arrow left" type="button" disabled={detailsIndex === 0} onClick={() => setDetailsIndex((current) => current === null ? current : Math.max(0, current - 1))} aria-label="Предыдущий день">←</button>
+              <button className="meal-details-arrow right" type="button" disabled={detailsIndex === days.length - 1} onClick={() => setDetailsIndex((current) => current === null ? current : Math.min(days.length - 1, current + 1))} aria-label="Следующий день">→</button>
 
               <div className="meal-details-content">
                 <div className="meal-details-heading">
-                  <span className="eyebrow"><Translated>{"Меню дня"}</Translated></span>
-                  <h2><Translated>{formatLongDate(detailsDay)}</Translated></h2>
-                  <p><Translated>{detailsDay.meal.title}</Translated></p>
+                  <span className="eyebrow">Меню дня</span>
+                  <h2>{formatLongDate(detailsDay)}</h2>
+                  <p>{detailsDay.meal.title}</p>
                 </div>
 
                 <div className="meal-details-courses">
                   {[{label:"Первое блюдо",data:first},{label:"Второе блюдо",data:second}].map((course) => (
                     <article className="meal-details-course" key={course.label}>
-                      <div className="course-image-wrap"><img src={course.data.image} alt={t(course.data.title)} /><DiscountBadge percent={discounts[detailsDay.id]}/></div>
+                      <div className="course-image-wrap"><img src={course.data.image} alt={course.data.title} /><DiscountBadge percent={discounts[detailsDay.id]}/></div>
                       <div>
-                        <span><Translated>{course.label}</Translated></span>
-                        <h3><Translated>{course.data.title}</Translated></h3>
-                        <p><Translated>{course.data.description}</Translated></p>
+                        <h3>{course.data.title}</h3>
                         <div className="course-nutrition">
-                          <b><Translated>{course.data.nutrition.calories}</Translated><Translated>{" ккал"}</Translated></b>
-                          <small><Translated>{"Б "}</Translated><Translated>{course.data.nutrition.protein}</Translated><Translated>{" г"}</Translated></small>
-                          <small><Translated>{"Ж "}</Translated><Translated>{course.data.nutrition.fat}</Translated><Translated>{" г"}</Translated></small>
-                          <small><Translated>{"У "}</Translated><Translated>{course.data.nutrition.carbs}</Translated><Translated>{" г"}</Translated></small>
-                          <small><Translated>{course.data.nutrition.weight}</Translated><Translated>{" г"}</Translated></small>
+                          <b>{course.data.nutrition.calories} ккал</b>
+                          <small>Б {course.data.nutrition.protein} г</small>
+                          <small>Ж {course.data.nutrition.fat} г</small>
+                          <small>У {course.data.nutrition.carbs} г</small>
                         </div>
                       </div>
                     </article>
@@ -323,23 +316,23 @@ export default function SubscriptionCalendar() {
                 </div>
 
                 <section className="meal-total-nutrition">
-                  <div><span><Translated>{"Весь обед"}</Translated></span><strong><Translated>{totalNutrition.weight}</Translated><Translated>{" г"}</Translated></strong></div>
-                  <div><span><Translated>{"Калории"}</Translated></span><strong><Translated>{totalNutrition.calories}</Translated><Translated>{" ккал"}</Translated></strong></div>
-                  <div><span><Translated>{"Белки"}</Translated></span><strong><Translated>{totalNutrition.protein}</Translated><Translated>{" г"}</Translated></strong></div>
-                  <div><span><Translated>{"Жиры"}</Translated></span><strong><Translated>{totalNutrition.fat}</Translated><Translated>{" г"}</Translated></strong></div>
-                  <div><span><Translated>{"Углеводы"}</Translated></span><strong><Translated>{totalNutrition.carbs}</Translated><Translated>{" г"}</Translated></strong></div>
+                  <div><span>Весь обед</span><strong>{totalNutrition.weight} г</strong></div>
+                  <div><span>Калории</span><strong>{totalNutrition.calories} ккал</strong></div>
+                  <div><span>Белки</span><strong>{totalNutrition.protein} г</strong></div>
+                  <div><span>Жиры</span><strong>{totalNutrition.fat} г</strong></div>
+                  <div><span>Углеводы</span><strong>{totalNutrition.carbs} г</strong></div>
                 </section>
-                <p className="nutrition-disclaimer"><Translated>{"Пищевая ценность указана ориентировочно. Состав и вес готового блюда могут немного отличаться."}</Translated></p>
+                <p className="nutrition-disclaimer">Пищевая ценность указана ориентировочно. Состав и вес готового блюда могут немного отличаться.</p>
               </div>
 
               <div className="meal-details-footer">
                 <div>
-                  <small><Translated>{"В подписке выбрано"}</Translated></small>
-                  <strong><Translated>{selected.length}</Translated><Translated>{" дней"}</Translated></strong>
-                  <span><Translated>{selectedSet.has(detailsDay.id) ? "Этот день выбран" : "Этот день пока не выбран"}</Translated></span>
+                  <small>В подписке выбрано</small>
+                  <strong>{selected.length} дней</strong>
+                  <span>{selectedSet.has(detailsDay.id) ? "Этот день выбран" : "Этот день пока не выбран"}</span>
                 </div>
                 <button type="button" onClick={() => toggleDay(detailsDay.id)}>
-                  <Translated>{selectedSet.has(detailsDay.id) ? "Сбросить день" : `+ Добавить день — ${detailsDay.day} ${detailsDay.monthLabel}`}</Translated>
+                  {selectedSet.has(detailsDay.id) ? "Сбросить день" : `+ Добавить день — ${detailsDay.day} ${detailsDay.monthLabel}`}
                 </button>
               </div>
             </div>
@@ -351,21 +344,21 @@ export default function SubscriptionCalendar() {
         <div className="modal-backdrop" role="dialog" aria-modal="true">
           <div className="payment-modal fulfillment-choice-modal">
             <button className="modal-close" type="button" onClick={() => setFulfillmentOpen(false)}>×</button>
-            <span className="eyebrow"><Translated>{"Получение подписки"}</Translated></span>
-            <h2><Translated>{"Как вы хотите получать еду?"}</Translated></h2>
+            <span className="eyebrow">Получение подписки</span>
+            <h2>Как вы хотите получать еду?</h2>
             <div className="fulfillment-switch">
-              <button type="button" className={fulfillmentChoice === "PICKUP" ? "selected" : ""} onClick={() => setFulfillmentChoice("PICKUP")}><Translated>{"Самовывоз"}</Translated></button>
-              <button type="button" className={fulfillmentChoice === "DELIVERY" ? "selected" : ""} onClick={() => setFulfillmentChoice("DELIVERY")}><Translated>{"Доставка"}</Translated></button>
+              <button type="button" className={fulfillmentChoice === "PICKUP" ? "selected" : ""} onClick={() => setFulfillmentChoice("PICKUP")}>Самовывоз</button>
+              <button type="button" className={fulfillmentChoice === "DELIVERY" ? "selected" : ""} onClick={() => setFulfillmentChoice("DELIVERY")}>Доставка</button>
             </div>
-            <label><Translated>{"Пункт выдачи "}</Translated><Translated>{fulfillmentChoice === "DELIVERY" ? "(откуда будет доставка)" : "(где забирать)"}</Translated>
+            <label>Пункт выдачи {fulfillmentChoice === "DELIVERY" ? "(откуда будет доставка)" : "(где забирать)"}
               <select value={chosenPickupPoint} onChange={(event) => setChosenPickupPoint(event.target.value)}>
-                {pickupPoints.map((point) => <option key={point.code} value={point.code}>{t(String(point.shortName))} — {point.address}</option>)}
+                {pickupPoints.map((point) => <option key={point.code} value={point.code}>{point.shortName} — {point.address}</option>)}
               </select>
             </label>
             <div className="package-preview">
-              <span><Translated>{selected.length}</Translated><Translated>{" дней"}</Translated></span><b>·</b><span><Translated>{fulfillmentChoice === "PICKUP" ? "Самовывоз" : "Доставка"}</Translated></span><strong><Translated>{total.toLocaleString(getLocale())}</Translated> ฿</strong>
+              <span>{selected.length} дней</span><b>·</b><span>{fulfillmentChoice === "PICKUP" ? "Самовывоз" : "Доставка"}</span><strong>{total.toLocaleString("ru-RU")} ฿</strong>
             </div>
-            <button type="button" disabled={!catalogReady||!chosenPickupPoint} onClick={saveDraftAndOpenAccount}><Translated>{"Оформить подписку"}</Translated></button>
+            <button type="button" disabled={!catalogReady||!chosenPickupPoint} onClick={saveDraftAndOpenAccount}>Оформить подписку</button>
           </div>
         </div>
       )}
@@ -373,11 +366,11 @@ export default function SubscriptionCalendar() {
       {duplicateOpen && (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
           <div className="payment-modal duplicate-confirm-modal">
-            <span className="eyebrow"><Translated>{"Повторная подписка"}</Translated></span><h2><Translated>{"Оформить ещё одну?"}</Translated></h2>
-            <p><Translated>{"У вас уже есть активная подписка на те же даты. Вы уверены, что хотите оформить ещё одну подписку на этот период?"}</Translated></p>
+            <span className="eyebrow">Повторная подписка</span><h2>Оформить ещё одну?</h2>
+            <p>У вас уже есть активная подписка на те же даты. Вы уверены, что хотите оформить ещё одну подписку на этот период?</p>
             <div className="duplicate-confirm-actions">
-              <button type="button" className="confirm-yes" onClick={() => openFulfillmentChoice(true)}><Translated>{"Да, продолжить"}</Translated></button>
-              <button type="button" className="confirm-no" onClick={() => setDuplicateOpen(false)}><Translated>{"Нет, выбрать другие даты"}</Translated></button>
+              <button type="button" className="confirm-yes" onClick={() => openFulfillmentChoice(true)}>Да, продолжить</button>
+              <button type="button" className="confirm-no" onClick={() => setDuplicateOpen(false)}>Нет, выбрать другие даты</button>
             </div>
           </div>
         </div>
