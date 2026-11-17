@@ -39,7 +39,7 @@ img { display: block; max-width: 100%; }
 .hero-copy > p { max-width: 650px; margin: 25px 0 0; color: rgba(255,255,255,.76); font-size: 20px; line-height: 1.55; }
 .hero-facts { display: flex; gap: 35px; margin-top: 43px; }
 .hero-facts div { display: flex; flex-direction: column; }
-.hero-facts strong { font-size: 20px; line-height: 24px; }
+.hero-facts strong { font-size: 20px; }
 .hero-facts span { margin-top: 4px; color: rgba(255,255,255,.58); font-size: 12px; }
 .hero-visual { position: relative; height: 620px; }
 .hero-card { position: absolute; width: min(360px, 70%); padding: 14px; border-radius: 30px; background: #fff; box-shadow: 0 30px 80px rgba(0,0,0,.3); }
@@ -1702,9 +1702,20 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:3px solid #bc
   .account-chat-unavailable::before { right: auto; left: 17px; }
 }
 
-/* Language control stays immediately to the left of the account link. */
-.header-account-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
-.language-switch{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;flex-shrink:0;padding:7px;border:1px solid #d5d9d4;border-radius:50%;background:#fff;cursor:pointer}
-.language-switch svg{border:1px solid #ddd;border-radius:2px;overflow:hidden}
-.language-switch:focus-visible{outline:3px solid #af3828;outline-offset:3px}
-html[lang="en"] .site-header{gap:14px}
+
+/* Equal spacing above the dish image and before its title. */
+.meal-details-course {
+  --image-gap: 26px;
+}
+
+.meal-details-course > .course-image-wrap {
+  margin-top: var(--image-gap);
+}
+
+.meal-details-course > .course-image-wrap + div {
+  padding-top: var(--image-gap);
+}
+
+.meal-details-course > div > h3 {
+  margin-top: 0;
+}
